@@ -1,0 +1,14 @@
+cin
+cout
+cerr
+clog
+wcin
+wcout
+wcerr
+wclog
+
+static_assert
+static_cast
+reinterpret_cast
+dynamic_cast
+sizeof
