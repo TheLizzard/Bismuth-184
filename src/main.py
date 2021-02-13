@@ -20,9 +20,8 @@ STARTING_TEXT = """
 
 using namespace std;
 
-int main()
-{
-    cout << "Hello World!";
+int main(){
+    cout << "Hello World!\\n";
     return 0;
 }
 """
@@ -44,19 +43,20 @@ def get_os() -> int:
         raise OSError("Can't recognise the OS type.")
 
 OS = get_os()
-PATH = os.path.dirname(os.path.realpath(__file__))+"\\"
+PATH = os.path.dirname(os.path.realpath(__file__))
 if OS == "windows":
-    COMPILE_COMMAND = ["g++", "-w", None, "-o", "__pycache__/ccarotmodule.exe"]
-    BASIC_RUN_COMMAND = PATH+"__pycache__\ccarotmodule.exe"
+    BASIC_RUN_COMMAND = PATH+"\\__pycache__\\ccarotmodule.exe"
+    COMPILE_COMMAND = ["g++", "-O3", "-w", None, "-o", BASIC_RUN_COMMAND]
     RUN_COMMAND = "\""+BASIC_RUN_COMMAND+"\""
-    RUN_COMMAND_WITHARGS = BASIC_RUN_COMMAND#+" %s"
+    RUN_COMMAND_WITHARGS = BASIC_RUN_COMMAND
     CLEAR_SCREEN = partial(os.system, "cls")
 
 if OS == "linux":
-    COMPILE_COMMAND = ["g++", "-w", None, "-o", None]
     BASIC_RUN_COMMAND = PATH+"/__pycache__/./ccarotmodule"
+    # Add "-m32" flag for 32 bit
+    COMPILE_COMMAND = ["g++", "-O3", "-w", None, "-o", BASIC_RUN_COMMAND.replace("./", "")]
     RUN_COMMAND = "\""+BASIC_RUN_COMMAND+"\""
-    RUN_COMMAND_WITHARGS = BASIC_RUN_COMMAND+" %s"
+    RUN_COMMAND_WITHARGS = BASIC_RUN_COMMAND
     CLEAR_SCREEN = partial(os.system, "clear")
 
 
@@ -114,7 +114,7 @@ class GUI:
 
         # Create the compile instuction
         command = list(COMPILE_COMMAND)
-        command[2] = self.file_name
+        command[command.index(None)] = self.file_name
 
         out.write(self.add_padding("Compiling the program")+"\n")
 
@@ -129,7 +129,7 @@ class GUI:
                 else:
                     command = [RUN_COMMAND_WITHARGS]
                     command.extend(args)
-                self._run(command)
+                self._run(command, shell=True)
 
                 out.write(self.add_padding("Done")+"\n")
 
@@ -138,8 +138,9 @@ class GUI:
             self.process.kill()
             raise error
 
-    def _run(self, command):
-        self.process = subprocess.Popen(command, shell=True)
+    def _run(self, command, shell=False):
+        print(command)
+        self.process = subprocess.Popen(command, shell=shell)
         while self.process.poll() is None:
             time.sleep(0.2)
 
@@ -174,8 +175,6 @@ class GUI:
             self.text.delete("0.0", "end")
             self.text.insert("end", text)
             self.text.see("end")
-            #while self.text.get("end-1c", "end") == "\n":
-            #    self.text.delete("end-1c", "end")
         self.root.title(os.path.basename(filename))
 
     def saveas(self, event=None):
