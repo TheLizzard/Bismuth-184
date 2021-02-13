@@ -43,13 +43,22 @@ class Text(BindedText):
         self.bind("<Control-V>", self.paste)
         self.bind("<Control-c>", self.copy)
         self.bind("<Control-C>", self.copy)
+
         self.bind("<Control-f>", self.find)
         self.bind("<Control-F>", self.find)
         self.bind("<Control-r>", self.replace)
         self.bind("<Control-R>", self.replace)
+
+        self.bind("<Control-y>", self._break)
+        self.bind("<Control-Y>", self._break)
+        self.bind("<Control-z>", self.undo)
+        self.bind("<Control-Z>", self.undo)
         self.bind("<Control-Shift-Z>", self.redo)
+        self.bind("<Control-Shift-z>", self.redo)
         self.bind("<Up>", self.up)
         self.bind("<Down>", self.down)
+        self.bind("<Left>", self.left)
+        self.bind("<Right>", self.right)
 
         text_meths = vars(self).keys()
         methods = vars(tk.Pack).keys() | vars(tk.Grid).keys() |\
@@ -61,6 +70,18 @@ class Text(BindedText):
         for m in methods:
             if m[0] != "_" and m != "config" and m != "configure":
                 setattr(self, m, getattr(self.frame, m))
+
+    def left(self, event):
+        ranges = self.tag_ranges("sel")
+        if len(ranges) != 0:
+            start, end = ranges
+            self.mark_set("insert", start)
+
+    def right(self, event):
+        ranges = self.tag_ranges("sel")
+        if len(ranges) != 0:
+            start, end = ranges
+            self.mark_set("insert", end)
 
     def up(self, event):
         currentline = int(self.index("insert").split(".")[0])
@@ -74,8 +95,15 @@ class Text(BindedText):
         if currentline == endline:
             self.mark_set("insert", "end")
 
+    def _break(self, event=None):
+        return "break"
+
     def redo(self, event):
-        self.event_generate("<Control-y>", when="tail")
+        self.edit_redo()
+        return "break"
+
+    def undo(self, event):
+        self.edit_undo()
         return "break"
 
     def find(self, event):
@@ -90,8 +118,11 @@ class Text(BindedText):
         if len(self.tag_ranges("sel")) != 0:
             start, finish = self.tag_ranges("sel")
             self.delete(start, finish)
-        text = self.clipboard_get()
-        self.insert("insert", text)
+        try:
+            text = self.clipboard_get()
+            self.insert("insert", text)
+        except:
+            pass
         return "break"
 
     def copy(self, event):
@@ -112,7 +143,7 @@ class Text(BindedText):
         return "break"
 
     def set_word_boundaries(self):
-        word_chars = "a-zA-Z0-9_\n"
+        word_chars = "a-zA-Z0-9_"
         self.tk.call("tcl_wordBreakAfter", "", 0)
         self.tk.call("set", "tcl_wordchars", "[%s]"%word_chars)
         self.tk.call("set", "tcl_nonwordchars", "[^%s]"%word_chars)
