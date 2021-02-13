@@ -2,12 +2,13 @@ from cidle.text import Text as RawText
 import string
 
 
-WORD_CHARS = string.ascii_lowercase+string.ascii_uppercase+"_0123456789"
+WORD_CHARS = string.ascii_lowercase+string.ascii_uppercase+"_0123456789\n"
 
 
 class Text(RawText):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self._autoseparators = kwargs.pop("autoseparators", True)
         self.focus()
         self.brackets = ("()", "<>", "{}", "[]", "\"\"", "''")
         self.set_select_colour()
@@ -16,6 +17,8 @@ class Text(RawText):
         self.bind("<KP_Enter>", self.new_line)
         self.bind("<space>", self.space_bar)
         self.bind("<BackSpace>", self.backspace)
+
+        self.bind(".", self.add_sep)
 
         self.bind("{", self.close_bracket)
         self.bind("(", self.close_bracket)
@@ -27,8 +30,9 @@ class Text(RawText):
         self.bind("<Alt-parenleft>", self.open_bracket)
         self.bind("<Alt-bracketleft>", self.open_bracket)
         self.bind("<Alt-\">", self.open_bracket)
+        self.bind("<Alt-\'>", self.open_bracket)
 
-        self.bind("<Control-/>", self.toggle_comment_lines)
+        self.bind("<Control-slash>", self.toggle_comment_lines)
         self.bind("<Control-Left>", self.skip_left)
         self.bind("<Control-Right>", self.skip_right)
         self.bind("<Control-bracketright>", self.indent_lines)
@@ -139,7 +143,10 @@ class Text(RawText):
         if add_sep:
             self.add_sep()
 
-    def add_sep(self):
+    def add_sep(self, event=None):
+        self.after(10, self._add_sep)
+
+    def _add_sep(self):
         self.edit_separator()
 
     def indent(self, event):
@@ -206,7 +213,6 @@ class Text(RawText):
         self.add_sep()
 
     def new_line(self, event):
-        self.add_sep()
         idx = self.index("insert")
         has_end = self.get(idx, idx+"+1c") == "}"
         #get the text
@@ -242,9 +248,22 @@ class Text(RawText):
                 self.insert(pos, "\n"+indent)
                 #reset the cursor position back in between the "{" and "}"
                 self.mark_set("insert", pos)
-        self.add_sep()
         self.see("insert")
+        # delete selected if something is selected
+        ranges = self.tag_ranges("sel")
+        if len(ranges) != 0:
+            self.stop_undo()
+            self.delete(*ranges)
+            self.start_undo()
+        self.add_sep()
         return "break"
+
+    def stop_undo(self):
+        self._autoseparators = self["autoseparators"]
+        self["autoseparators"] = False
+
+    def start_undo(self):
+        self["autoseparators"] = self._autoseparators
 
     def close_bracket(self, event):
         self.add_sep()
