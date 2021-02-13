@@ -14,11 +14,9 @@ class BindedText(tk.Text):
         try:
             result = self.tk.call(cmd)
         except:
-            raise
             return None
 
-        changed = False
-        changed |= args[0] in ("insert", "replace", "delete")
+        changed = args[0] in ("insert", "replace", "delete")
         changed |= args[0:3] == ("mark", "set", "insert")
         changed |= args[0:2] == ("xview", "moveto")
         changed |= args[0:2] == ("xview", "scroll")
