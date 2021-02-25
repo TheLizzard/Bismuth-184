@@ -39,7 +39,7 @@ editor:
     bg = "black"
     fg = "white"
     titlebar_colour = "light grey"
-    titlebar_size = 1
+    titlebar_size = 0
 
 terminal:
     font = ("DejaVu Sans Mono", 11)
@@ -52,7 +52,7 @@ terminal:
 
 compiler:
     win_path_executable = "{path}\..\compiled\ccarotmodule.exe"
-    win_compile = "g++ -O3 -w {_in} -o {out}"
+    win_compile = "g++ -O3 -w "{_in}" -o "{out}""
     win_run_command = ""{file}""
 """
 
@@ -296,6 +296,7 @@ class ChangeSettings:
         settings.
         """
         self.root = tk.Toplevel(master)
+        self.root.resizable(False, False)
         self.root.title("Settings changer")
         self.notebook = ttk.Notebook(self.root)
         self.notebook.grid(row=2, column=1, columnspan=2)
@@ -350,7 +351,7 @@ class ChangeSettings:
         dtype_name = self.stringify(type(value).__name__)
         label = tk.Label(frame, text=key)
         dtype = tk.Label(frame, text=dtype_name)
-        entry = tk.Entry(frame)
+        entry = tk.Entry(frame, width=40)
         entry.insert(0, str(value).replace("'", "\""))
         label.grid(row=row, column=1, sticky="nws")
         dtype.grid(row=row, column=2, sticky="nws")
