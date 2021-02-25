@@ -1,34 +1,16 @@
 from tkinter import filedialog
 from functools import partial
-from text import Text
 import tkinter as tk
 import subprocess
-import traceback
 import platform
 import time
 import sys
 import os
 
+from .terminal import TkTerminal
 
 
-FILE_TYPES = (("C++ file", "*.cpp"),
-              ("Text file", "*.txt"),
-              ("All types", "*"))
-
-STARTING_TEXT = """
-#include <iostream>
-
-using namespace std;
-
-int main(){
-    cout << "Hello World!\\n";
-    return 0;
-}
-"""
-STARTING_TEXT = STARTING_TEXT[1:-1]
 DEFAULT_ARGS = ()
-
-WIDTH = 120
 
 
 def get_os_bits() -> int:
@@ -45,36 +27,26 @@ def get_os() -> int:
 OS = get_os()
 PATH = os.path.dirname(os.path.realpath(__file__))
 if OS == "windows":
-    BASIC_RUN_COMMAND = PATH+"\\__pycache__\\ccarotmodule.exe"
-    COMPILE_COMMAND = ["g++", "-O3", "-w", None, "-o", BASIC_RUN_COMMAND]
-    RUN_COMMAND = "\""+BASIC_RUN_COMMAND+"\""
-    RUN_COMMAND_WITHARGS = BASIC_RUN_COMMAND
-    CLEAR_SCREEN = partial(os.system, "cls")
-
-if OS == "linux":
-    BASIC_RUN_COMMAND = PATH+"/__pycache__/./ccarotmodule"
-    # Add "-m32" flag for 32 bit
-    COMPILE_COMMAND = ["g++", "-O3", "-w", None, "-o", BASIC_RUN_COMMAND.replace("./", "")]
-    RUN_COMMAND = "\""+BASIC_RUN_COMMAND+"\""
-    RUN_COMMAND_WITHARGS = BASIC_RUN_COMMAND
-    CLEAR_SCREEN = partial(os.system, "clear")
+    PATH_EXE = PATH+"\\compiled\\ccarotmodule.exe"
+    COMPILE_COMMAND = "g++ -O3 -w %s -o %s" % ("%s", PATH_EXE)
+    RUN_COMMAND = "\"" + PATH_EXE + "\""
+    RUN_COMMAND_WITHARGS = RUN_COMMAND
 
 
-class GUI:
-    def __init__(self, **kwargs):
-        self.root = tk.Tk()
-        self.root.resizable(False, False)
+FILE_TYPES = (("C++ file", "*.cpp"),
+              ("Text file", "*.txt"),
+              ("All types", "*"))
 
-        self.set_up_input(**kwargs)
 
-        self.saved_text = "Unsaved_work"
+class RunnableText:
+    def __init__(self, text_widget):
+        self.terminal = None
+        self.text = text_widget
+        self.saved_text = None
         self.file_name = None
+        self.set_up_bindings()
 
-    def set_up_input(self, **kwargs):
-        font = ("DejaVu Sans Mono", 10)
-        self.text = Text(self.root, font=font, **kwargs)
-        self.text.grid(row=1, column=1, sticky="news")
-
+    def set_up_bindings(self):
         self.text.bind("<Control-s>", self.save)
         self.text.bind("<Control-S>", self.save)
         self.text.bind("<Control-Shift-s>", self.saveas)
@@ -84,8 +56,6 @@ class GUI:
 
         self.text.bind("<F5>", self.run)
         self.text.bind("<Shift-F5>", self.run_with_command)
-
-        self.text.insert("end", STARTING_TEXT)
 
     def run_with_command(self, event=None):
         global DEFAULT_ARGS
@@ -100,61 +70,43 @@ class GUI:
         self.run(event, inputs)
 
     def run(self, event=None, args=None):
-        CLEAR_SCREEN()
-        out = sys.stdout
-        err = sys.stderr
+        if (self.terminal is None) or self.terminal.closed:
+            self.terminal = TkTerminal()
+        elif self.terminal.process.poll() is None:
+            self.terminal.text.focus_force()
+            return None
+
+        self.terminal.clear()
 
         # Check if the file is saved
-        if self.saved_text != self.text.get("0.0", "end").rstrip():
-            err.write("You need to first save the file.\n")
-            return None
-        if self.file_name is None:
-            err.write("You need to first save the file.\n")
+        work_saved = self.saved_text == self.text.get("0.0", "end").rstrip()
+        if (not work_saved) or (self.file_name is None):
+            msg = "You need to first save the file."
+            self.terminal.stderr_write(msg, add_padding=True)
             return None
 
         # Create the compile instuction
-        command = list(COMPILE_COMMAND)
-        command[command.index(None)] = self.file_name
+        command = COMPILE_COMMAND % self.file_name
 
-        out.write(self.add_padding("Compiling the program")+"\n")
+        msg = "Compiling the program"
+        self.terminal.stdout_write(msg, add_padding=True)
 
-        try:
-            error = self._run(command)
-
-            if error == 0:
-                out.write(self.add_padding("Running the program")+"\n")
-                # Run the program if compiled
-                if args is None:
-                    command = RUN_COMMAND
-                else:
-                    command = [RUN_COMMAND_WITHARGS]
-                    command.extend(args)
-                self._run(command, shell=True)
-
-                out.write(self.add_padding("Done")+"\n")
-
-            self.process.kill()
-        except Exception as error:
-            self.process.kill()
-            raise error
-
-    def _run(self, command, shell=False):
-        print(command)
-        self.process = subprocess.Popen(command, shell=shell)
-        while self.process.poll() is None:
-            time.sleep(0.2)
-
-        errorcode = self.process.returncode
-        msg = "The process finished with exit code: %d"%errorcode
-        sys.stdout.write(self.add_padding(msg)+"\n")
-        return errorcode
-
-    def add_padding(self, text):
-        text = " %s "%text
-        length = len(text)
-        p1 = "="*int((WIDTH-length)/2+0.5)
-        p2 = "="*int((WIDTH-length)/2)
-        return p1+text+p2
+        error = self.terminal.run(command, callback=self.text.update)
+        msg = "Process exit code: %s" % str(error)
+        self.terminal.stdout_write(msg, add_padding=True)
+        if isinstance(error, Exception):
+            return None
+        if error == 0:
+            # Run the program if compiled
+            msg = "Running the program"
+            self.terminal.stdout_write(msg, add_padding=True)
+            if args is None:
+                command = RUN_COMMAND
+            else:
+                command = RUN_COMMAND_WITHARGS + " ".join(args)
+            error = self.terminal.run(command, callback=self.text.update)
+            msg = "Process exit code: %s" % str(error)
+            self.terminal.stdout_write(msg, add_padding=True)
 
     def save(self, event=None):
         if self.file_name is None:
@@ -175,7 +127,7 @@ class GUI:
             self.text.delete("0.0", "end")
             self.text.insert("end", text)
             self.text.see("end")
-        self.root.title(os.path.basename(filename))
+        #self.root.title(os.path.basename(filename))
 
     def saveas(self, event=None):
         file = filedialog.asksaveasfilename(filetypes=FILE_TYPES,
@@ -189,10 +141,7 @@ class GUI:
         with open(filename, "w") as file:
             file.write(text)
             self.saved_text = text.rstrip()
-        self.root.title(os.path.basename(filename))
-
-    def mainloop(self):
-        self.root.mainloop()
+        #self.root.title(os.path.basename(filename))
 
 
 class Question:
@@ -286,8 +235,3 @@ class Question:
     def destroy(self):
         if not self.force_quit:
             self.root.destroy()
-
-
-if __name__ == "__main__":
-    gui = GUI(height=40, width=80)
-    gui.mainloop()

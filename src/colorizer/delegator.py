@@ -1,5 +1,4 @@
 class Delegator:
-
     def __init__(self, delegate=None):
         self.delegate = delegate
         self.__cache = set()
@@ -27,7 +26,3 @@ class Delegator:
         "Reset attributes and change delegate."
         self.resetcache()
         self.delegate = delegate
-
-if __name__ == '__main__':
-    from unittest import main
-    main('idlelib.idle_test.test_delegator', verbosity=2)
