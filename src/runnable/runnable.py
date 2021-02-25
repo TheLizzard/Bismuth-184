@@ -8,6 +8,7 @@ import sys
 import os
 
 from .terminal import TkTerminal
+from constants.settings import settings
 
 
 DEFAULT_ARGS = ()
@@ -27,10 +28,14 @@ def get_os() -> int:
 OS = get_os()
 PATH = os.path.dirname(os.path.realpath(__file__))
 if OS == "windows":
-    PATH_EXE = PATH+"\\compiled\\ccarotmodule.exe"
-    COMPILE_COMMAND = "g++ -O3 -w %s -o %s" % ("%s", PATH_EXE)
-    RUN_COMMAND = "\"" + PATH_EXE + "\""
-    RUN_COMMAND_WITHARGS = RUN_COMMAND
+    PATH_EXECUTABLE = settings.compiler.win_path_executable.format(path=PATH)
+    COMPILE_COMMAND = settings.compiler.win_compile.format(out=PATH_EXECUTABLE,
+                                                           _in="{_in}")
+    RUN_COMMAND = settings.compiler.win_run_command.format(file=PATH_EXECUTABLE)
+if OS == "linux":
+    PATH_EXECUTABLE = settings.compiler.lin_path_executable.format(PATH)
+    COMPILE_COMMAND = settings.compiler.lin_compile.format(out=PATH_EXECUTABLE)
+    RUN_COMMAND = settings.compiler.win_lin_command.format(file=PATH_EXECUTABLE)
 
 
 FILE_TYPES = (("C++ file", "*.cpp"),
@@ -72,11 +77,9 @@ class RunnableText:
     def run(self, event=None, args=None):
         if (self.terminal is None) or self.terminal.closed:
             self.terminal = TkTerminal()
-        elif self.terminal.process.poll() is None:
-            self.terminal.text.focus_force()
-            return None
 
         self.terminal.clear()
+        self.terminal.text.focus_force()
 
         # Check if the file is saved
         work_saved = self.saved_text == self.text.get("0.0", "end").rstrip()
@@ -86,7 +89,7 @@ class RunnableText:
             return None
 
         # Create the compile instuction
-        command = COMPILE_COMMAND % self.file_name
+        command = COMPILE_COMMAND.format(_in=self.file_name)
 
         msg = "Compiling the program"
         self.terminal.stdout_write(msg, add_padding=True)
@@ -103,7 +106,7 @@ class RunnableText:
             if args is None:
                 command = RUN_COMMAND
             else:
-                command = RUN_COMMAND_WITHARGS + " ".join(args)
+                command = RUN_COMMAND + " " + " ".join(args)
             error = self.terminal.run(command, callback=self.text.update)
             msg = "Process exit code: %s" % str(error)
             self.terminal.stdout_write(msg, add_padding=True)

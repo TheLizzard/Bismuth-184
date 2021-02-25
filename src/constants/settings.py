@@ -1,9 +1,7 @@
+#https://stackoverflow.com/questions/1405913/how-do-i-determine-if-my-python-shell-is-executing-in-32bit-or-64bit-mode-on-os
 from tkinter import ttk
 import tkinter as tk
 import threading
-
-
-#https://stackoverflow.com/questions/1405913/how-do-i-determine-if-my-python-shell-is-executing-in-32bit-or-64bit-mode-on-os
 import platform
 import struct
 import copy
@@ -46,16 +44,18 @@ editor:
 terminal:
     font = ("DejaVu Sans Mono", 11)
     height = 20
-    width = 120
+    width = 80
     bg = "black"
     fg = "white"
     titlebar_colour = "light grey"
     titlebar_size = 1
 
 compiler:
-    no_settings = True
-    
+    win_path_executable = "{path}\..\compiled\ccarotmodule.exe"
+    win_compile = "g++ -O3 -w {_in} -o {out}"
+    win_run_command = ""{file}""
 """
+
 DEFAULT_SETTINGS = SETTINGS_HEADER+DEFAULT_SETTINGS.strip()+"\n"
 
 
