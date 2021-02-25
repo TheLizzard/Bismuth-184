@@ -184,6 +184,10 @@ class TkTerminal(Terminal):
         disallow_backspace = "readonly" in self.text.tag_names("insert-1c")
 
         char = event.char
+        state = self.text.get_state(event)
+        if "Control" in state:
+            return None
+
         # If the key isn't printable make it a word like:
         #     "Left"/"Right"/"BackSpace"
         if (not char.isprintable()) or (char == ""):

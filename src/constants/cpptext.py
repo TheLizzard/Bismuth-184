@@ -20,6 +20,62 @@ class CPPText(ColouredScrolledBarredText):
         for open, close, tcl in BRACKETS:
             super().bind(open, partial(self.close_bracket, open, close))
             super().bind(f"<Alt-{tcl}>", partial(self.open_bracket, open))
+        super().bind("<Control-bracketleft>", self.unindent_lines)
+        super().bind("<Control-bracketright>", self.indent_lines)
+        super().bind("<Control-/>", self.toggle_comment_lines)
+
+    def indent_lines(self, event):
+        with self.separatorblocker:
+            sel = super().get_sel()
+            if sel is None:
+                start = int(float(super().index("insert")))
+                end = start
+            else:
+                start = int(float(sel[0]))
+                end = int(float(sel[1]))
+            for line in range(start, end+1):
+                super().insert(str(line)+".0", " "*4)
+
+    def unindent_lines(self, event):
+        with self.separatorblocker:
+            sel = super().get_sel()
+            if sel is None:
+                start = int(float(super().index("insert")))
+                end = start
+            else:
+                start = int(float(sel[0]))
+                end = int(float(sel[1]))
+            for line in range(start, end+1):
+                line = str(line)+".0"
+                for i in range(4):
+                    if super().get(line, line+"+1c") == " ":
+                        super().delete(line, line+"+1c")
+                    else:
+                        break
+
+    def toggle_comment_lines(self, event):
+        with self.separatorblocker:
+            sel = super().get_sel()
+            if sel is None:
+                start = int(float(super().index("insert")))
+                end = start
+            else:
+                start = int(float(sel[0]))
+                end = int(float(sel[1]))
+            for line in range(start, end+1):
+                line = str(line)+".0"
+                self.toggle_comment_line(line)
+        return "break"
+
+    def toggle_comment_line(self, line):
+        start_of_line = super().get(line, line+"+3c")
+        if start_of_line[:2] == "//":
+            if start_of_line == "// ":
+                super().delete(line, line+"+3c")
+            else:
+                super().delete(line, line+"+2c")
+        else:
+            super().insert(line, "// ")
 
     def close_bracket(self, opening_bracket, closing_bracket, event):
         sel = super().get_sel()

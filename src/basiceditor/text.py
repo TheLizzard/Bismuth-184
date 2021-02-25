@@ -12,26 +12,6 @@ IGNORE_KEYS = ("Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L",
                "Clear", "Next", "Prior")
 
 
-def get_state(event):
-    # Checks if any other keys/events are happening
-    # Returns a list like this:
-    #    ["Shift", "Control", "Mod1", "Button1", "Button3"]
-    mods = ("Shift", "Lock", "Control",
-            "Mod1", "Mod2", "Mod3", "Mod4", "Mod5",
-            "Button1", "Button2", "Button3", "Button4", "Button5")
-    state = []
-    for i, name in enumerate(mods):
-        if event.state & (1 << i):
-            state.append(name)
-    return state
-
-def ctrl_arrows(sel_range, insert_before, insert_after):
-    sel_range = list(sel_range)
-    idx = sel_range.index(insert_before)
-    sel_range[idx] = insert_after
-    return tuple(sel_range)
-
-
 class PauseSeparators:
     def __init__(self, text_widget):
         self.text_widget = text_widget
@@ -55,6 +35,7 @@ class BasicText(tk.Text):
             insertbackground = kwargs["fg"]
         super().__init__(master, wrap=wrap, undo=undo,
                          insertbackground=insertbackground, **kwargs)
+        self.separatorblocker = PauseSeparators(self)
 
     def init(self):
         # There is a class that takes over some of the functions (Colorizer)
@@ -79,7 +60,7 @@ class BasicText(tk.Text):
 
     def add_text(self, event):
         insert = super().index("insert")
-        state = get_state(event)
+        state = self.get_state(event)
         char = event.char
 
         # If the key isn't printable make it a word like:
@@ -112,13 +93,13 @@ class BasicText(tk.Text):
                     else:
                         self.undo()
             else:
-                with PauseSeparators(self):
+                with self.separatorblocker:
                     self.delete_selected()
                     super().insert("insert", char)
 
         # Tab pressed
         elif char == "Tab":
-            with PauseSeparators(self):
+            with self.separatorblocker:
                 self.delete_selected()
                 super().insert("insert", " "*4)
 
@@ -196,7 +177,7 @@ class BasicText(tk.Text):
             if sel is None:
                 indices = (current_insert, insert)
             else:
-                indices = ctrl_arrows(sel, insert, current_insert)
+                indices = self.ctrl_arrows(sel, insert, current_insert)
             super().tag_remove("sel", "0.0", "end")
             super().tag_add("sel", *self.sort_idxs(*indices))
 
@@ -325,7 +306,7 @@ class BasicText(tk.Text):
                 self.mark_set("insert", sel[1])
                 return True
 
-        with PauseSeparators(self):
+        with self.separatorblocker:
             self.delete_selected()
             self.insert("insert", text_copied)
         return True
@@ -351,6 +332,27 @@ class BasicText(tk.Text):
     def set_select_colour(self, bg="orange", fg="black"):
         super().tag_config("sel", background=bg, foreground=fg)
         super().config(inactiveselectbackground=bg)
+
+    @classmethod
+    def get_state(self, event):
+        # Checks if any other keys/events are happening
+        # Returns a list like this:
+        #    ["Shift", "Control", "Mod1", "Button1", "Button3"]
+        mods = ("Shift", "Lock", "Control",
+                "Mod1", "Mod2", "Mod3", "Mod4", "Mod5",
+                "Button1", "Button2", "Button3", "Button4", "Button5")
+        state = []
+        for i, name in enumerate(mods):
+            if event.state & (1 << i):
+                state.append(name)
+        return state
+
+    @classmethod
+    def ctrl_arrows(sel_range, insert_before, insert_after):
+        sel_range = list(sel_range)
+        idx = sel_range.index(insert_before)
+        sel_range[idx] = insert_after
+        return tuple(sel_range)
 
 
 class ScrolledText(BasicText):
