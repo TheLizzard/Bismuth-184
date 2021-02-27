@@ -1,6 +1,5 @@
 from threading import Thread, Lock
 from time import sleep
-import tkinter as tk
 import subprocess
 import sys
 import os
@@ -8,6 +7,7 @@ import os
 from constants.bettertk import BetterTk
 from basiceditor.text import ScrolledText, KEY_REPLACE_DICT
 from constants.settings import settings
+from constants.tag_negator import Range
 
 
 FONT = settings.terminal.font
@@ -18,16 +18,9 @@ FG_COLOUR = settings.terminal.fg
 TITLEBAR_COLOUR = settings.terminal.titlebar_colour
 TITLEBAR_SIZE = settings.terminal.titlebar_size
 
+WAIT_NEXT_LOOP = settings.terminal.wait_next_loop_ms
 
 KILL_PROCESS = "taskkill /f /pid %i /t"
-
-
-def add_padding_to_text(text):
-    text = " %s " % text
-    length = len(text)
-    p1 = "="*int((WIDTH-length)/2+0.5)
-    p2 = "="*int((WIDTH-length)/2)
-    return p1 + text + p2
 
 
 class FinishedProcess:
@@ -55,12 +48,10 @@ class FileDestriptor:
     def fileno(self):
         return self.fd
 
-    def write(self, text, add_padding=False, end="\n"):
+    def write(self, text):
         if isinstance(text, str):
             text = text.encode()
-        if add_padding:
-            text = add_padding_to_text(text)
-        os.write(self.fd, text+end.encode())
+        os.write(self.fd, text)
 
     def read(self, number_characters):
         return os.read(self.fd, number_characters)
@@ -172,8 +163,8 @@ class TkTerminal(Terminal):
                                  undo=False)
         self.text.pack(fill="both", expand=True)
         self.text.tag_config("error", foreground="red")
-        self.text.bind("<Return>", self.tk_send_input)
         self.text.bind("<Key>", self.tk_check_read_ony)
+        self.text.bind("<Return>", self.tk_send_to_stdin)
         self.text.focus()
 
         self.tk_mainloop()
@@ -225,26 +216,32 @@ class TkTerminal(Terminal):
                 self.text.insert("end", text)
                 self.text.tag_add("readonly", insert, "insert")
 
-        self.root.after(100, self.tk_mainloop)
+        self.root.after(WAIT_NEXT_LOOP, self.tk_mainloop)
 
-    def tk_send_input(self, event):
-        # Get the text and ranges
-        text = self.text.get("0.0", "end")
+    def tk_get_input(self):
+        text = ""
+        # Get the ranges
         ranges = self.text.tag_ranges("readonly")
+        # Subtract them from the whole thing:
+        _range = Range(self.text)
         for i in range(0, len(ranges), 2):
-            start, end = str(ranges[i]), str(ranges[i+1])
-            # For each range: remove it from text
-            sub_text = self.text.get(start, end)
-            try:
-                idx = text.index(sub_text)
-                text = text[:idx] + text[idx+len(sub_text):]
-            except ValueError:
-                pass
-        self.ptrs["stdin"].write(text.lstrip("\n").encode())
-        self.text.mark_set("insert", "end")
-        self.text.tag_add("readonly", "0.0", "end-1c")
-        self.text.insert("insert", "\n")
-        return "break"
+            _range.subtract_range(ranges[i], ranges[i+1])
+
+        for start, end in _range.tolist():
+            text += self.text.get(start, end)
+            if "\n" in text:
+                chars = text.index("\n")+1
+                self.text.tag_add("readonly", "0.0", start+"+%ic" % chars)
+                text = text[:chars]
+
+                #text = text[:-1]+"\b"+"a\n"
+
+                self.ptrs["stdin"].write(text) # Might need `+"\n"`
+                break
+
+    def tk_send_to_stdin(self, event):
+        # First handle the "\n" comming in
+        self.text.after(0, self.tk_get_input)
 
     def tk_stdout_read(self):
         while not self.closed:

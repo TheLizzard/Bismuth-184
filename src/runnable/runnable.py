@@ -7,7 +7,7 @@ import time
 import sys
 import os
 
-from .terminal import TkTerminal
+from terminal import TkTerminal, WIDTH
 from constants.settings import settings
 
 
@@ -85,31 +85,31 @@ class RunnableText:
         work_saved = self.saved_text == self.text.get("0.0", "end").rstrip()
         if (not work_saved) or (self.file_name is None):
             msg = "You need to first save the file."
-            self.terminal.stderr_write(msg, add_padding=True)
+            self.terminal.stderr_write(self.add_padding_to_text(msg))
             return None
 
         # Create the compile instuction
         command = COMPILE_COMMAND.format(_in=self.file_name)
 
         msg = "Compiling the program"
-        self.terminal.stdout_write(msg, add_padding=True)
+        self.terminal.stdout_write(self.add_padding_to_text(msg)+"\n")
 
         error = self.terminal.run(command, callback=self.text.update)
         msg = "Process exit code: %s" % str(error)
-        self.terminal.stdout_write(msg, add_padding=True)
+        self.terminal.stdout_write(self.add_padding_to_text(msg)+"\n")
         if isinstance(error, Exception):
             return None
         if error == 0:
             # Run the program if compiled
             msg = "Running the program"
-            self.terminal.stdout_write(msg, add_padding=True)
+            self.terminal.stdout_write(self.add_padding_to_text(msg)+"\n")
             if args is None:
                 command = RUN_COMMAND
             else:
                 command = RUN_COMMAND + " " + " ".join(args)
             error = self.terminal.run(command, callback=self.text.update)
             msg = "Process exit code: %s" % str(error)
-            self.terminal.stdout_write(msg, add_padding=True)
+            self.terminal.stdout_write(self.add_padding_to_text(msg)+"\n")
 
     def save(self, event=None):
         if self.file_name is None:
@@ -145,6 +145,15 @@ class RunnableText:
             file.write(text)
             self.saved_text = text.rstrip()
         #self.root.title(os.path.basename(filename))
+
+    @staticmethod
+    def add_padding_to_text(text):
+        #return text
+        text = " %s " % text
+        length = len(text)
+        p1 = "="*int((WIDTH-length)/2+0.5)
+        p2 = "="*int((WIDTH-length)/2)
+        return p1 + text + p2
 
 
 class Question:

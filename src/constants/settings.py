@@ -49,6 +49,7 @@ terminal:
     fg = "white"
     titlebar_colour = "light grey"
     titlebar_size = 1
+    wait_next_loop_ms = 10
 
 compiler:
     win_path_executable = "{path}\..\compiled\ccarotmodule.exe"

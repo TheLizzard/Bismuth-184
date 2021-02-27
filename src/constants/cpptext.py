@@ -68,14 +68,24 @@ class CPPText(ColouredScrolledBarredText):
         return "break"
 
     def toggle_comment_line(self, line):
-        start_of_line = super().get(line, line+"+3c")
-        if start_of_line[:2] == "//":
-            if start_of_line == "// ":
+        line_text = self.get_line_text(line)
+        if line_text[:2] == "//":
+            # Get the number of spaces after "//"
+            line_text = line_text[2:]
+            spaces = len(line_text) - len(line_text.lstrip(" "))
+            if ((spaces-1) % 4) == 0:
+                # If the number of " "s % 4 != 0
                 super().delete(line, line+"+3c")
             else:
+                # If we have the perfect amount of " ". Don't remove any.
                 super().delete(line, line+"+2c")
         else:
-            super().insert(line, "// ")
+            if line_text == "":
+                # Blank lines don't add " " at the end
+                super().insert(line, "//")
+            else:
+                # Full lines add " " at the end of the "//"
+                super().insert(line, "// ")
 
     def close_bracket(self, opening_bracket, closing_bracket, event):
         sel = super().get_sel()
@@ -147,6 +157,10 @@ class CPPText(ColouredScrolledBarredText):
         skip = 0
         while "comment" in super().tag_names(line+"-%ic" % skip):
             skip += 1
+            char_left = super().index(line+"-%ic" % (skip+1))
+            char_right = super().index(line+"-%ic" % skip)
+            if char_left == char_right:
+                break
         line = self.get_line_text(line)
         if skip == 0:
             return line
@@ -154,10 +168,3 @@ class CPPText(ColouredScrolledBarredText):
 
     def get_line_text(self, line):
         return super().get(line+" linestart", line+" lineend")
-
-
-if __name__ == "__main__":
-    import tkinter as tk
-    root = tk.Tk()
-    text = CPPText(root)
-    text.pack()
