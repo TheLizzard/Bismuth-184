@@ -16,13 +16,13 @@ int main(){
 """[1:-1]
 
 
-FONT = settings.editor.font
-HEIGHT = settings.editor.height
-WIDTH = settings.editor.width
-BG_COLOUR = settings.editor.bg
-FG_COLOUR = settings.editor.fg
-TITLEBAR_COLOUR = settings.editor.titlebar_colour
-TITLEBAR_SIZE = settings.editor.titlebar_size
+FONT = settings.editor.font.get()
+HEIGHT = settings.editor.height.get()
+WIDTH = settings.editor.width.get()
+BG_COLOUR = settings.editor.bg.get()
+FG_COLOUR = settings.editor.fg.get()
+TITLEBAR_COLOUR = settings.editor.titlebar_colour.get()
+TITLEBAR_SIZE = settings.editor.titlebar_size.get()
 
 
 class App:

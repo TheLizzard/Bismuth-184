@@ -1,5 +1,13 @@
 from .scrollbar import AutoScrollbar
+from .linenumbers import LineNumbers
 import tkinter as tk
+
+from constants.settings import settings
+
+
+LINENUMBERS_WIDTH = settings.editor.linenumbers_width.get()
+LINENUMBERS_BG = settings.editor.linenumbers_bg.get()
+
 
 ALPHABET = "abcdefghijklmnopqrstuvwxyz"
 ALPHABET += ALPHABET.upper()
@@ -418,11 +426,30 @@ class ScrolledBarredText(ScrolledText):
         self.barredframe.place(**kwargs)
 
 
-text = "a"*80 + "\n"*23 + "a"*80
+class LinedScrolledBarredText(ScrolledBarredText):
+    def __init__(self, master, **kwargs):
+        self.linedframe = tk.Frame(master, bd=0)
+        super().__init__(self.linedframe, **kwargs)
+        self.linenumbers = LineNumbers(self.linedframe, width=LINENUMBERS_WIDTH,
+                                       bg=LINENUMBERS_BG, bd=0)
+        self.linenumbers.pack(side="left", fill="y")
+        super().pack(side="right", fill="both", expand=True)
+
+    def pack(self, **kwargs):
+        self.linedframe.pack(**kwargs)
+
+    def grid(self, **kwargs):
+        self.linedframe.grid(**kwargs)
+
+    def place(self, **kwargs):
+        self.linedframe.place(**kwargs)
+
+
 
 if __name__ == "__main__":
     root = tk.Tk()
     text_widget = ScrolledBarredText(root, bg="black", fg="white")
     text_widget.pack(fill="both", expand=True)
+    text = "a"*80 + "\n"*23 + "a"*80
     text_widget.insert("end", text)
     root.mainloop()

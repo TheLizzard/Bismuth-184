@@ -1,281 +1,438 @@
 #https://stackoverflow.com/questions/1405913/how-do-i-determine-if-my-python-shell-is-executing-in-32bit-or-64bit-mode-on-os
+from functools import partial
 from tkinter import ttk
 import tkinter as tk
 import threading
 import platform
 import struct
 import copy
+import ast
 import os
 import re
 
-BLOCK_REGEX = "([^:\n]+):( *#[^\n]*){0,1}(\n[ \t]+[^\n]*)+"
-LINE_REGEX = "(.*?) *= *(.+)"
+class PyObject: pass
+
+#BLOCK_REGEX = "([^:\n]+):( *#[^\n]*){0,1}(\n[ \t]+[^\n]*)+"
+#LINE_REGEX = "(.*?) *= *(.+)"
 TUPLE_REGEX = "\((([\w. \"]+),* *)+\)"
+
+LINE_REGEX = " *([^\n \(\)]+)\(([^\n\(\)]+)\) *= *([^\n]+)"
+BLOCK_REGEX = "([^\n \(\)]+)\(block\):\n( +("+LINE_REGEX+"\n)+)"
+
+NAMED_COLOURS = ("alice blue", "AliceBlue", "antique white", "AntiqueWhite",
+                 "AntiqueWhite1", "AntiqueWhite2", "AntiqueWhite3",
+                 "AntiqueWhite4", "agua", "aquamarine", "aquamarine1",
+                 "aquamarine2", "aquamarine3", "aquamarine4", "azure","azure1",
+                 "azure2", "azure3", "azure4", "beige", "bisque", "bisque1",
+                 "bisque2", "bisque3", "bisque4", "black", "blanched almond",
+                 "BlanchedAlmond", "blue", "blue violet", "blue1", "blue2",
+                 "blue3", "blue4", "BlueViolet", "brown", "brown1", "brown2",
+                 "brown3", "brown4", "burlywood", "burlywood1", "burlywood2",
+                 "burlywood3", "burlywood4", "cadet blue", "CadetBlue",
+                 "CadetBlue1", "CadetBlue2", "CadetBlue3", "CadetBlue4",
+                 "chartreuse", "chartreuse1", "chartreuse2", "chartreuse3",
+                 "chartreuse4", "chocolate", "chocolate1", "chocolate2",
+                 "chocolate3", "chocolate4", "coral", "coral1", "coral2",
+                 "coral3", "coral4", "cornflower blue", "CornflowerBlue",
+                 "cornsilk", "cornsilk1", "cornsilk2", "cornsilk3",
+                 "cornsilk4", "crymson", "cyan", "cyan1", "cyan2", "cyan3",
+                 "cyan4", "dark blue", "dark cyan", "dark goldenrod",
+                 "dark gray", "dark green", "dark grey", "dark khaki",
+                 "dark magenta", "dark olive green", "dark orange",
+                 "dark orchid", "dark red", "dark salmon", "dark sea green",
+                 "dark slate blue", "dark slate gray", "dark slate grey",
+                 "dark turquoise", "dark violet", "DarkBlue", "DarkCyan",
+                 "DarkGoldenrod", "DarkGoldenrod1", "DarkGoldenrod2",
+                 "DarkGoldenrod3", "DarkGoldenrod4", "DarkGray", "DarkGreen",
+                 "DarkGrey", "DarkKhaki", "DarkMagenta", "DarkOliveGreen",
+                 "DarkOliveGreen1", "DarkOliveGreen2", "DarkOliveGreen3",
+                 "DarkOliveGreen4", "DarkOrange", "DarkOrange1", "DarkOrange2",
+                 "DarkOrange3", "DarkOrange4", "DarkOrchid", "DarkOrchid1",
+                 "DarkOrchid2", "DarkOrchid3", "DarkOrchid4", "DarkRed",
+                 "DarkSalmon", "DarkSeaGreen", "DarkSeaGreen1", "DarkSeaGreen2",
+                 "DarkSeaGreen3", "DarkSeaGreen4", "DarkSlateBlue",
+                 "DarkSlateGray", "DarkSlateGray1", "DarkSlateGray2",
+                 "DarkSlateGray3", "DarkSlateGray4", "DarkSlateGrey",
+                 "DarkTurquoise", "DarkViolet", "deep pink", "deep sky blue",
+                 "DeepPink", "DeepPink1", "DeepPink2", "DeepPink3", "DeepPink4",
+                 "DeepSkyBlue", "DeepSkyBlue1", "DeepSkyBlue2", "DeepSkyBlue3",
+                 "DeepSkyBlue4", "dim gray", "dim grey", "DimGray", "DimGrey",
+                 "dodger blue", "DodgerBlue", "DodgerBlue1", "DodgerBlue2",
+                 "DodgerBlue3", "DodgerBlue4", "firebrick", "firebrick1",
+                 "firebrick2", "firebrick3", "firebrick4", "floral white",
+                 "FloralWhite", "forest green", "ForestGreen", "fuchsia",
+                 "gainsboro", "ghost white", "GhostWhite", "gold", "gold1",
+                 "gold2", "gold3", "gold4", "goldenrod", "goldenrod1",
+                 "goldenrod2", "goldenrod3", "goldenrod4", "gray", "green",
+                 "green yellow", "green1", "green2", "green3", "green4",
+                 "GreenYellow", "grey", "honeydew", "honeydew1", "honeydew2",
+                 "honeydew3", "honeydew4", "hot pink", "HotPink", "HotPink1",
+                 "HotPink2", "HotPink3", "HotPink4", "indian red", "IndianRed",
+                 "IndianRed1", "IndianRed2", "IndianRed3", "IndianRed4",
+                 "indigo", "ivory", "ivory1", "ivory2", "ivory3", "ivory4",
+                 "khaki", "khaki1", "khaki2", "khaki3", "khaki4", "lavender",
+                 "lavender blush", "LavenderBlush", "LavenderBlush1",
+                 "LavenderBlush2", "LavenderBlush3", "LavenderBlush4",
+                 "lawn green", "LawnGreen", "lemon chiffon", "LemonChiffon",
+                 "LemonChiffon1", "LemonChiffon2", "LemonChiffon3",
+                 "LemonChiffon4", "light blue", "light coral", "light cyan",
+                 "light goldenrod", "light goldenrod yellow", "light gray",
+                 "light green", "light grey", "light pink", "light salmon",
+                 "light sea green", "light sky blue", "light slate blue",
+                 "light slate gray", "light slate grey", "light steel blue",
+                 "light yellow", "LightBlue", "LightBlue1", "LightBlue2",
+                 "LightBlue3", "LightBlue4", "LightCoral", "LightCyan",
+                 "LightCyan1", "LightCyan2", "LightCyan3", "LightCyan4",
+                 "LightGoldenrod", "LightGoldenrod1", "LightGoldenrod2",
+                 "LightGoldenrod3", "LightGoldenrod4", "LightGoldenrodYellow",
+                 "LightGray", "LightGreen", "LightGrey", "LightPink",
+                 "LightPink1", "LightPink2", "LightPink3", "LightPink4",
+                 "LightSalmon", "LightSalmon1", "LightSalmon2", "LightSalmon3",
+                 "LightSalmon4", "LightSeaGreen", "LightSkyBlue",
+                 "LightSkyBlue1", "LightSkyBlue2", "LightSkyBlue3",
+                 "LightSkyBlue4", "LightSlateBlue", "LightSlateGray",
+                 "LightSlateGrey", "LightSteelBlue", "LightSteelBlue1",
+                 "LightSteelBlue2", "LightSteelBlue3", "LightSteelBlue4",
+                 "LightYellow", "LightYellow1", "LightYellow2", "LightYellow3",
+                 "LightYellow4", "lime", "lime green", "LimeGreen", "linen",
+                 "magenta", "magenta1", "magenta2", "magenta3", "magenta4",
+                 "maroon", "maroon1", "maroon2", "maroon3", "maroon4",
+                 "medium aquamarine", "medium blue", "medium orchid",
+                 "medium purple", "medium sea green", "medium slate blue",
+                 "medium spring green", "medium turquoise", "medium violet red",
+                 "MediumAquamarine", "MediumBlue", "MediumOrchid",
+                 "MediumOrchid1", "MediumOrchid2", "MediumOrchid3",
+                 "MediumOrchid4", "MediumPurple", "MediumPurple1",
+                 "MediumPurple2", "MediumPurple3", "MediumPurple4",
+                 "MediumSeaGreen", "MediumSlateBlue", "MediumSpringGreen",
+                 "MediumTurquoise", "MediumVioletRed", "midnight blue",
+                 "MidnightBlue", "mint cream", "MintCream", "misty rose",
+                 "MistyRose", "MistyRose1", "MistyRose2", "MistyRose3",
+                 "MistyRose4", "moccasin", "navajo white", "NavajoWhite",
+                 "NavajoWhite1", "NavajoWhite2", "NavajoWhite3", "NavajoWhite4",
+                 "navy", "navy blue", "NavyBlue", "old lace", "OldLace",
+                 "olive", "olive drab", "OliveDrab", "OliveDrab1",
+                 "OliveDrab2", "OliveDrab3", "OliveDrab4", "orange",
+                 "orange red", "orange1", "orange2", "orange3", "orange4",
+                 "OrangeRed", "OrangeRed1", "OrangeRed2", "OrangeRed3",
+                 "OrangeRed4", "orchid", "orchid1", "orchid2", "orchid3",
+                 "orchid4", "pale goldenrod", "pale green", "pale turquoise",
+                 "pale violet red", "PaleGoldenrod", "PaleGreen", "PaleGreen1",
+                 "PaleGreen2", "PaleGreen3", "PaleGreen4", "PaleTurquoise",
+                 "PaleTurquoise1", "PaleTurquoise2", "PaleTurquoise3",
+                 "PaleTurquoise4", "PaleVioletRed", "PaleVioletRed1",
+                 "PaleVioletRed2", "PaleVioletRed3", "PaleVioletRed4",
+                 "papaya whip", "PapayaWhip", "peach puff", "PeachPuff",
+                 "PeachPuff1", "PeachPuff2", "PeachPuff3", "PeachPuff4",
+                 "peru", "pink", "pink1", "pink2", "pink3", "pink4", "plum",
+                 "plum1", "plum2", "plum3", "plum4", "powder blue",
+                 "PowderBlue", "purple", "purple1", "purple2", "purple3",
+                 "purple4", "red", "red1", "red2", "red3", "red4",
+                 "rosy brown", "RosyBrown", "RosyBrown1", "RosyBrown2",
+                 "RosyBrown3", "RosyBrown4", "royal blue", "RoyalBlue",
+                 "RoyalBlue1", "RoyalBlue2", "RoyalBlue3", "RoyalBlue4",
+                 "saddle brown", "SaddleBrown", "salmon", "salmon1",
+                 "salmon2", "salmon3", "salmon4", "sandy brown",
+                 "SandyBrown", "sea green", "SeaGreen", "SeaGreen1",
+                 "SeaGreen2", "SeaGreen3", "SeaGreen4", "seashell",
+                 "seashell1", "seashell2", "seashell3", "seashell4",
+                 "sienna", "sienna1", "sienna2", "sienna3", "sienna4", "silver",
+                 "sky blue", "SkyBlue", "SkyBlue1", "SkyBlue2", "SkyBlue3",
+                 "SkyBlue4", "slate blue", "slate gray", "slate grey",
+                 "SlateBlue", "SlateBlue1", "SlateBlue2", "SlateBlue3",
+                 "SlateBlue4", "SlateGray", "SlateGray1", "SlateGray2",
+                 "SlateGray3", "SlateGray4", "SlateGrey", "snow", "snow1",
+                 "snow2", "snow3", "snow4", "spring green", "SpringGreen",
+                 "SpringGreen1", "SpringGreen2", "SpringGreen3", "SpringGreen4",
+                 "steel blue", "SteelBlue", "SteelBlue1", "SteelBlue2",
+                 "SteelBlue3", "SteelBlue4", "tan", "tan1", "tan2", "tan3",
+                 "tan4", "teal", "thistle", "thistle1", "thistle2", "thistle3",
+                 "thistle4", "tomato", "tomato1", "tomato2", "tomato3",
+                 "tomato4", "turquoise", "turquoise1", "turquoise2",
+                 "turquoise3", "turquoise4", "violet", "violet red",
+                 "VioletRed", "VioletRed1", "VioletRed2", "VioletRed3",
+                 "VioletRed4", "wheat", "wheat1", "wheat2", "wheat3", "wheat4",
+                 "white", "white smoke", "WhiteSmoke", "yellow",
+                 "yellow green", "yellow1", "yellow2", "yellow3", "yellow4",
+                 "YellowGreen")
+# Also "grey0", "grey1", "grey2", ..., "grey100"
+NAMED_COLOURS += tuple("gray%i"%i for i in range(101))
 
 
 SETTINGS_HEADER = """
 # This is a file that contains all of the settings
-# There 6 types allowed:
+# There 7 types allowed:
 #
-#      --------- ---------------------------- -----------------
-#     | Type    | Example value 1            | Example value 2 |
-#      --------- ---------------------------- -----------------
-#     | boolean | True                       | False           |
-#     | string  | "Hello world"              | "this is a str" |
-#     | integer | 1                          | 5               |
-#     | None    | None                       | None            |
-#     | float   | 1.02                       | 3.14159         |
-#     | tuple   | ("values", 1, True, False) | (0.0, None)     |
-#      --------- ---------------------------- -----------------
+#      -------- ---------------------------- -----------------
+#     | Type   | Example value 1            | Example value 2 |
+#      -------- ---------------------------- -----------------
+#     | bool   | True                       | False           |
+#     | str    | Hello world                | this is a str   |
+#     | colour | black                      | #00FF00         |
+#     | int    | 1                          | 5               |
+#     | None   | None                       | None            |
+#     | float  | 1.02                       | 3.14159         |
+#     | tuple  | ("values", 1, True, False) | [0.0, None]     |
+#      -------- ---------------------------- -----------------
+#
+# Note: tuples must be in python's format of a tuple/list
+# Note:
+#
+# The way that the settings are written:
+# class_name(block):
+#     setting_name(type) = setting_value
+#     setting_name(type) = setting_value
 #
 """
 SETTINGS_HEADER = SETTINGS_HEADER.strip()+"\n\n\n"
 
 DEFAULT_SETTINGS = """
-editor:
-    font = ("DejaVu Sans Mono", 11)
-    height = 35
-    width = 80
-    bg = "black"
-    fg = "white"
-    titlebar_colour = "light grey"
-    titlebar_size = 0
+editor(block):
+    font(tuple) = ("DejaVu Sans Mono", 11)
+    height(int) = 35
+    width(int) = 80
+    bg(colour) = black
+    fg(colour) = white
+    titlebar_colour(colour) = light grey
+    titlebar_size(int) = 0
+    linenumbers_width(int) = 35
+    linenumbers_bg(colour) = black
 
-terminal:
-    font = ("DejaVu Sans Mono", 11)
-    height = 20
-    width = 80
-    bg = "black"
-    fg = "white"
-    titlebar_colour = "light grey"
-    titlebar_size = 1
-    wait_next_loop_ms = 10
+terminal(block):
+    font(tuple) = ("DejaVu Sans Mono", 11)
+    height(int) = 20
+    width(int) = 80
+    bg(colour) = black
+    fg(colour) = white
+    titlebar_colour(colour) = light grey
+    titlebar_size(int) = 1
+    wait_next_loop_ms(int) = 30
+    wait_stdin_read_ms(int) = 100
 
-compiler:
-    win_path_executable = "{path}\..\compiled\ccarotmodule.exe"
-    win_compile = "g++ -O3 -w "{_in}" -o "{out}""
-    win_run_command = ""{file}""
+compiler(block):
+    win_path_executable(str) = {path}\..\compiled\ccarotmodule.exe
+    win_compile(str) = g++ -O3 -w "{_in}" -o "{out}"
+    win_run_command(str) = "{file}"
 """
 
 DEFAULT_SETTINGS = SETTINGS_HEADER+DEFAULT_SETTINGS.strip()+"\n"
 
 
-class Setting: pass
-class Settings: pass
-
-
 class Setting:
-    def __init__(self, *args, **kwargs):
-        if (args == [None]) and (len(kwargs.keys()) == 0):
-            pass
-        else:
-            for key, value in kwargs.items():
-                if isinstance(value, dict):
-                    value = Setting(**value)
-                self.__dict__.update({key: value})
+    def __init__(self, type, value):
+        self.update(type, value)
 
-    def __str__(self) -> str:
-        return str(self.__dict__)
+    def get(self):
+        return self.value
 
-    def __getitem__(self, key: str):
-        return self.__dict__[key]
+    def __repr__(self):
+        return f"Setting(type={self.type}, value={self.value})"
 
-    def __setitem__(self, key: str, value) -> None:
-        self.__dict__.update({key: value})
+    def __str__(self):
+        return "<Setting object at %s>" % (hex(id(self))[2:])
 
-    def items(self):
-        return self.__dict__.items()
-
-    def pop(self, idx=None):
-        return self.__dict__.pop(idx)
-
-    def items(self):
-        return self.__dict__.items()
-
-    def set(self, key, value):
-        self[key] = value
-
-    def update(self, dictionary: dict) -> None:
-        self.__dict__.update(dictionary)
-
-    def deepcopy(self):
-        return copy.deepcopy(self)
-
-    def dict(self) -> dict:
-        return self.__dict__
+    def update(self, type, value):
+        self.type = type
+        self.value = value
 
 
 class Settings:
     def __init__(self, file="settings.ini"):
+        self.settings = {}
         if file is not None:
-            self.update(file)
-
-    def pop(self, *args):
-        return self.__dict__.pop(*args)
-
-    def __getitem__(self, key: str):
-        return self.__dict__[key]
-
-    def __setitem__(self, key: str, value) -> None:
-        self.__dict__.update({key: value})
+            self.update_from_file(file)
 
     def items(self):
-        return self.__dict__.items()
+        return self.settings.items()
 
-    def parse(self, data: str) -> dict:
-        return parse(data)
+    def __repr__(self):
+        output = "Settings("
+        temp = ["%s=%s"%(str(key), str(value)) for key, value in
+                                                         self.settings.items()]
+        output += ", ".join(temp)
+        return output + ")"
 
-    def set_settings(self, settings: dict) -> None:
-        settings = self.lower_case_key(settings)
+    def __str__(self):
+        return "<Settings object at %s>" % hex(id(self)).upper()
+
+    def __getitem__(self, key: str):
+        return self.settings[key]
+
+    def __setitem__(self, key: str, value: PyObject):
+        self.settings[key] = value
+
+    def __getattr__(self, key: str):
+        try:
+            settings = self.__dict__["settings"]
+            if key in settings:
+                return settings[key]
+        except:
+            return self.__dict__[key]
+
+    def __setattr__(self, key: str, value: PyObject):
+        try:
+            settings = self.__dict__["settings"]
+            if key in settings:
+                self.__dict__["settings"][key] = value
+        except:
+            self.__dict__[key] = value
+
+    def update_from_file(self, filename: str):
+        with open(filename, "r") as file:
+            self.update_from_string(file.read())
+
+    def update_from_string(self, text: str):
+        # Make sure we have all of the settings:
+        #self.update(parse(DEFAULT_SETTINGS))
+        self.update(parse(text))
+
+    def update(self, settings: dict):
         for key, value in settings.items():
+            if key in self.settings:
+                self.__dict__[key].update(value)
+                continue
             if isinstance(value, dict):
-                value = Setting(**value)
-            self.__dict__.update({key: value})
-
-    def lower_case_key(self, setting: dict) -> dict:
-        if isinstance(setting, dict):
-            output = {}
-            for key, value in setting.items():
-                output.update({key.lower(): self.lower_case_key(value)})
-            return output
-        else:
-            return setting
-
-    def reset(self, file="settings.ini") -> None:
-        """
-        Resets to the default settings.
-        """
-        with open(file, "w") as file:
-            file.write(DEFAULT_SETTINGS)
-
-    def update(self, file="settings.ini") -> None:
-        """
-        Reads the settings from the file if it exists.
-        """
-        if os.path.exists(file):
-            with open(file, "r") as file:
-                # Adding default settings just for backup.
-                data = DEFAULT_SETTINGS+"\n"+file.read()
-            settings = self.parse(data)
-        else:
-            print("Couldn't read the settings file so using the default ones.")
-            settings = self.parse(DEFAULT_SETTINGS)
-        self.set_settings(settings)
-
-    def save(self):
-        contents = self.get_all("", self)
-        contents = SETTINGS_HEADER+contents.strip()
-        with open("settings.ini", "w") as file:
-            file.write(contents)
-
-    def get_all(self, contents, settings_subtree, indent=0):
-        for key, value in settings_subtree.items():
-            if type(value) == Setting:
-                contents += key.lower()+":\n"
-                contents = self.get_all(contents, value, indent+1)
-                contents += "\n"
+                new_value = Settings(None)
+                new_value.update(value)
             else:
-                if not isinstance(value, str):
-                    value = str(value)
-                contents += " "*4*indent + key + " = "
-                contents += value.replace("'", "\"") + "\n"
-        return contents
+                new_value = Setting(*value)
+            self.settings.update({key: new_value})
+
+    def save_to_str(self, spaces=0):
+        text = ""
+        for key, value in self.settings.items():
+            if isinstance(value, Settings):
+                text += "%s(block):\n"%key
+                text += value.save_to_str(spaces+4)
+                text += "\n"
+            else:
+                type, value = value.type, value.value
+                if isinstance(value, tuple):
+                    value = str(value).replace("'", "\"")
+                text += " "*spaces + f"{key}({str(type)}) = {value}\n"
+        return text
+
+    def save(self, filename="settings.ini"):
+        with open(filename, "w") as file:
+            data = self.save_to_str()
+            data = SETTINGS_HEADER + data.rstrip("\n")
+            file.write(data + "\n")
+
+    def reset(self, file="settings.ini"):
+        self.update(parse(DEFAULT_SETTINGS))
+        self.save(file)
 
 
-def parse(data: str) -> dict:
+def parse(text: str) -> dict:
+    """
+    Finds all blocks and sends all of them to `parse_block`. All individual
+    settings are also returned as part of the output dictionary.
+    It returns this:
+        {
+         "block_name1": {<block parsed by `parse_block`>},
+         "block_name2": {<block parsed by `parse_block`>},
+         ###<setting parsed by `parse_block` (same as `parse_line`)>,
+        }
+    """
+    #text = remove_comments(text)
     output = {}
-    result = re.finditer(BLOCK_REGEX, data)
-
-    if result is not None:
-        for block in result:
-            block = block.group()
-            for key, value in parse_block(block).items():
-                if key in output.keys():
-                    output[key].update(value)
-                    value = output[key]
-                output.update({key: value})
-            data = data.replace(block, "", 1)
-
-    for line in data.split("\n"):
-        output.update(parse_line(line))
-
+    result = re.findall(BLOCK_REGEX, text)
+    for block_name, block, *_ in result:
+        output.update({block_name: parse_block(block)})
     return output
 
-def parse_line(line: str) -> dict:
-    """Returns a dict of the parsed line or None"""
-
-    line = line.lstrip()
-    # check if the line is empty or a comment
-    if (line == "") or (line[0] == "#"):
-        return {}
-
-    result = re.search(LINE_REGEX, line)
-    if result is not None:
-        result = result.groups()
-        if len(result) == 2:
-            key, value = result
-            return {key: parse_value(value)}
-    raise ValueError("Can't parse this line: "+line)
-
-def parse_value(value: str):
-    if value == "None": # check if the value is None
-        return None
-
-    if value.isdigit():  #check if the value is int
-        return int(value)
-
-    if check_if_float(value):  #check if the value is float
-        return float(value)
-
-    if string_to_bool(value) is not None:  #check if the value is bool
-        return string_to_bool(value)
-
-    if check_if_tuple(value) is not None:  #check if the value is tuple
-        return check_if_tuple(value)
-
-    if value[0] == value[-1] == "\"":  #check if the value is str
-        return value[1:][:-1]
-
-    if value[0] == "(":
-        raise ValueError("Open braket without a closing one.")
-    return "\""+value+"\""
-
-    raise ValueError("The value is not a valid type: "+value)
-
-
-def check_if_float(string: str) -> bool:
-    has_max_one_dot = string.replace(".", "", 1).isdigit()
-    dot_not_at_end = string[-1] != "."
-    return has_max_one_dot and dot_not_at_end
-
-def check_if_tuple(string: str):
-    if (string[0] == "(") and (string[-1] == ")"):
-        result = string[1:][:-1].split(", ")
-        output = []
-        for substring in result:
-            output.extend(substring.split(","))
-        output = tuple(map(parse_value, output))
-        return output
-    return None
-
-def string_to_bool(string: str) -> bool:
-    if string.lower() in ("y", "yes", "t", "true", "on"):
-        return True
-    if string.lower() in ("n", "no", "f", "false", "off"):
-        return False
-    return None
+#def remove_comments(text):
+#    lines_to_remove = []
+#    for line in text.split("\n"):
+#        if line.lstrip(" ").startswith("#"):
+#            lines_to_remove.append(line)
+#    for line in lines_to_remove:
+#        idx_start = text.index(line)
+#        idx_end = idx_start + len(line) + 1 # +1 for the "\n" at the end
+#        text = text[:idx_start]+text[idx_end:]
+#    return text.strip()
 
 def parse_block(block: str) -> dict:
-    result = re.search(BLOCK_REGEX, block)
-    if result is not None:
-        name = result.group(1)
-        block = block.split("\n", 1)[1]
-        result = {}
-        for line in block.split("\n"):
-            parsed_line = parse_line(line)
-            result.update(parsed_line)
-        return {name.replace(" ", ""): result}
-    raise ValueError("Can't parse this block: "+block)
+    output = {}
+    result = re.findall(LINE_REGEX, block)
+    for setting_name, type, setting_value in result:
+        value = (type, parse_value(setting_value, type))
+        output.update({setting_name: value})
+    return output
+
+def parse_value(value: str, type: str) -> PyObject:
+    if type == "int":
+        return to_int(value)
+    if type == "float":
+        return to_float(value)
+    if type == "str":
+        # DO NOT tread as safe input
+        return value
+    if type == "bool":
+        return to_bool(value)
+    if type == "None":
+        return None
+    if (type == "colour") or (type == "color"):
+        return to_colour(value)
+    if type == "tuple":
+        return to_tuple(value)
+    raise ValueError(f"Unknow type {type} for setting value {value}.")
+
+def to_colour(value: str) -> str:
+    if (value.lower() == "default") or (value == ""):
+        return "#f0f0ed"
+    if value in NAMED_COLOURS:
+        return value
+    if value[0] == "#":
+        if len(value) == 7:
+            try:
+                int(value[1:], 16)
+                return value
+            except ValueError:
+                pass
+    raise ValueError(f"\"{value}\" can't be interpreted as a colour")
+
+def to_tuple(value: str) -> tuple:
+    if len(value) != 0:
+        is_tuple = (value[0] == "(") and (value[-1] == ")")
+        is_list = (value[0] == "[") and (value[-1] == "]")
+        if is_tuple or is_list:
+            try:
+                return parse_tuple(value[1:-1])
+            except SyntaxError:
+                pass
+    raise ValueError(f"\"{value}\" can't be interpreted as a tuple")
+
+def parse_tuple(value: str) -> tuple:
+    """
+    value is in the form: "element1, element2, element3"
+    """
+    return tuple(ast.literal_eval("[%s]" % value))
+
+def to_bool(value: str) -> bool:
+    value = value.lower()
+    if value not in ("true", "false"):
+        raise ValueError(f"Setting \"({value})\" can't be"+\
+                         "interpreted as a bool")
+    return value == "true"
+
+def to_int(value: str) -> int:
+    try:
+        value = int(value)
+    except ValueError:
+        raise ValueError(f"\"{value}\" can't be interpreted as an int")
+    return value
+
+def to_float(value: str) -> float:
+    try:
+        value = float(value)
+    except ValueError:
+        raise ValueError(f"\"{value}\" can't be interpreted as an int")
+    return value
+
+
+settings = Settings()
+
 
 def get_os_bits() -> int:
     return 8 * struct.calcsize("P")
@@ -295,12 +452,16 @@ class ChangeSettings:
         """
         Creates a window that allowes the user to change the
         settings.
+
+        It also setts:
+            notebook.blocks    empty list
         """
         self.root = tk.Toplevel(master)
         self.root.resizable(False, False)
         self.root.title("Settings changer")
         self.notebook = ttk.Notebook(self.root)
         self.notebook.grid(row=2, column=1, columnspan=2)
+        self.notebook.blocks = []
         self.all_settings = Settings()
         self.add_entries(self.notebook, self.all_settings)
         self.button_save = tk.Button(self.root, text="Save",
@@ -323,9 +484,14 @@ class ChangeSettings:
         """
         Adds a block of settings (as a tab) to the notebook
         by iterating over all settings and adding them 1 by 1.
+
+        It also setts:
+            frame.settings    empty list
         """
         row = 1
         frame = tk.Frame(notebook)
+        frame.settings = []
+        self.notebook.blocks.append(frame)
         frame.name = name
         notebook.add(frame, text=name)
         label1 = tk.Label(frame, text="Setting name")
@@ -349,14 +515,30 @@ class ChangeSettings:
         It is in the format:
             Name of setting     Date type     tkinter Entry for input
         """
-        dtype_name = self.stringify(type(value).__name__)
-        label = tk.Label(frame, text=key)
-        dtype = tk.Label(frame, text=dtype_name)
-        entry = tk.Entry(frame, width=40)
-        entry.insert(0, str(value).replace("'", "\""))
-        label.grid(row=row, column=1, sticky="nws")
-        dtype.grid(row=row, column=2, sticky="nws")
-        entry.grid(row=row, column=3, sticky="news")
+        dtype = value.type
+        name_label = tk.Label(frame, text=key)
+        dtype_label = tk.Label(frame, text=dtype)
+        name_label.grid(row=row, column=1, sticky="nws")
+        dtype_label.grid(row=row, column=2, sticky="nws")
+        if dtype == "bool":
+            button = tk.Button(frame, text=str(value.value))
+            command = partial(self.toggle_button, button)
+            button.config(command=command)
+            getter = partial(button.cget, "text")
+            wronger = partial(button.config, bg="red")
+            righter = partial(button.config, bg="white")
+        else:
+            entry = tk.Entry(frame, width=40)
+            entry.grid(row=row, column=3, sticky="news")
+            entry.insert(0, str(value.value).replace("'", "\""))
+            getter = partial(entry.get)
+            wronger = partial(entry.config, bg="red")
+            righter = partial(entry.config, bg="white")
+        frame.settings.append((value, getter, (wronger, righter)))
+
+    def toggle_button(self, button):
+        text = button.cget("text")
+        button.config(text=str(not bool(text)))
 
     def add_entries(self, notebook, settings):
         """
@@ -371,9 +553,8 @@ class ChangeSettings:
         It also closes the window and displays a message saying:
             "Restart the program for the changes to take effect."
         """
-        new_settings = Settings(None)
-        if self.set(new_settings) != "error":
-            new_settings.save()
+        if self.set() != "break":
+            self.all_settings.save()
             self.close()
 
     def close(self, coords=None):
@@ -384,83 +565,34 @@ class ChangeSettings:
         self.root.destroy()
         info("Restart the program for the changes to take effect.")
 
-    def set(self, settings: Settings) -> str:
+    def set(self) -> str:
         """
         Iterates over all of the user input and updates the settings
         that it receives.
         """
-        for block_frame in self.notebook.winfo_children():
+        for block_frame in self.notebook.blocks:
             block_name = block_frame.name
-            children = block_frame.winfo_children()[4:]
-            settings_block = Setting(None)
-
-            i = 0
-            while i+3 <= len(children):
-                name_label, dtype_label, entry = children[i:i+3]
-                i += 3
-                setting_name = name_label["text"]
-                dtype = dtype_label["text"]
-                data = entry.get()
-                if self.check_match_type(data, dtype):
-                    entry["bg"] = "white"
+            for setting, getter, (wronger, righter) in block_frame.settings:
+                data = getter()
+                if self.check_match_type(data, setting.type):
+                    righter()
+                    setting.value = data
                 else:
-                    entry["bg"] = "red"
-                    return "error"
-                settings_block[setting_name] = parse_value(data)
+                    wronger()
+                    return "break"
 
-            settings[block_name] = settings_block
-        return "success"
-
-    def stringify(self, name: str):
-        """
-        Converts the type names into a more user fiendly format like:
-            str => string
-            int => whole number
-            bool => boolean
-            ...
-        """
-        if name == "bool":
-            return "boolean"
-        if name == "str":
-            return "string"
-        if name == "tuple":
-            return "list" # Most users wouldn't know what a tuple is
-        if name == "int":
-            return "whole number"
-        if name == "float":
-            return "decimal"
-        else:
-            return name
-
-    def unstringify(self, name: str):
-        """
-        The reverse of self.stringify(name)
-        """
-        if name == "boolean":
-            return "bool"
-        if name == "string":
-            return "str"
-        if name == "list":
-            return "tuple"
-        if name == "whole number":
-            return "int"
-        if name == "decimal":
-            return "float"
-        else:
-            return name
-
-    def check_match_type(self, data, dtype_stringified):
+    def check_match_type(self, data, dtype):
         """
         Checks if the data type of the variable is correct.
         It uses the settings module and the global functions
         there
         """
-        dtype = self.unstringify(dtype_stringified)
         try:
-            data = parse_value(data)
-        except:
+            parse_value(str(data), str(dtype))
+        except ValueError as error:
+            print(error)
             return False
-        return type(data).__name__ == dtype
+        return True
 
 
 def _info(text: str) -> None:
@@ -486,6 +618,3 @@ def info(text: str) -> None:
     thread = threading.Thread(target=_info, args=(text, ))
     thread.deamon = True
     thread.start()
-
-
-settings = Settings()

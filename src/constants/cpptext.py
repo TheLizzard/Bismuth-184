@@ -1,6 +1,6 @@
 from functools import partial
 
-from colorizer.text import ColouredScrolledBarredText
+from colorizer.text import ColouredLinedScrolledBarredText
 
 
 BRACKETS = (("[", "]", "bracketleft"),
@@ -11,7 +11,7 @@ BRACKETS = (("[", "]", "bracketleft"),
 BRACKETS_LIST = tuple(i+j for i, j, _ in BRACKETS)
 
 
-class CPPText(ColouredScrolledBarredText):
+class CPPText(ColouredLinedScrolledBarredText):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
         super().bind("<BackSpace>", self.backspace_pressed)

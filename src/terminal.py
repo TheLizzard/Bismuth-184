@@ -4,21 +4,22 @@ import subprocess
 import sys
 import os
 
-from constants.bettertk import BetterTk
 from basiceditor.text import ScrolledText, KEY_REPLACE_DICT
 from constants.settings import settings
 from constants.tag_negator import Range
+from constants.bettertk import BetterTk
 
 
-FONT = settings.terminal.font
-HEIGHT = settings.terminal.height
-WIDTH = settings.terminal.width
-BG_COLOUR = settings.terminal.bg
-FG_COLOUR = settings.terminal.fg
-TITLEBAR_COLOUR = settings.terminal.titlebar_colour
-TITLEBAR_SIZE = settings.terminal.titlebar_size
+FONT = settings.terminal.font.get()
+HEIGHT = settings.terminal.height.get()
+WIDTH = settings.terminal.width.get()
+BG_COLOUR = settings.terminal.bg.get()
+FG_COLOUR = settings.terminal.fg.get()
+TITLEBAR_COLOUR = settings.terminal.titlebar_colour.get()
+TITLEBAR_SIZE = settings.terminal.titlebar_size.get()
 
-WAIT_NEXT_LOOP = settings.terminal.wait_next_loop_ms
+WAIT_NEXT_LOOP = settings.terminal.wait_next_loop_ms.get()
+WAIT_STDIN_READ = settings.terminal.wait_stdin_read_ms.get()
 
 KILL_PROCESS = "taskkill /f /pid %i /t"
 
@@ -54,7 +55,8 @@ class FileDestriptor:
         os.write(self.fd, text)
 
     def read(self, number_characters):
-        return os.read(self.fd, number_characters)
+        data = os.read(self.fd, number_characters)
+        return data
 
 
 class FileDestriptors:
@@ -88,6 +90,11 @@ class Terminal:
         self.process = FinishedProcess()
         self.file_ptrs = FileDestriptors()
 
+    def __del__(self):
+        self.run_forever = False
+        sleep(0.1)
+        self.stop_process()
+
     def run(self, command, callback=None):
         self.stop_process()
         file_ptrs = self.file_ptrs.get_child()
@@ -99,19 +106,42 @@ class Terminal:
                 callback()
             sleep(0.02)
         exit_code = self.process.returncode
+        self.process = FinishedProcess() # Make sure we clean up
         return exit_code
 
     def stop_process(self):
         if self.process is not None:
-            if self.process.pid is not None:
+            if not isinstance(self.process, FinishedProcess):
                 subprocess.Popen(KILL_PROCESS%self.process.pid, shell=True)
-            self.process = FinishedProcess()
+                self.process = FinishedProcess()
 
-    def stdout_write(self, text, **kwargs):
-        self.file_ptrs.stdout[1].write(text, **kwargs)
+    def stdout_write(self, text, add_padding=False, end="\n"):
+        if add_padding:
+            text = self.add_padding(text)
+        self.file_ptrs.stdout[1].write(text+end)
 
-    def stderr_write(self, text, **kwargs):
-        self.file_ptrs.stderr[1].write(text, **kwargs)
+    def stderr_write(self, text, add_padding=False, end="\n"):
+        if add_padding:
+            text = self.add_padding(text)
+        self.file_ptrs.stderr[1].write(text+end)
+
+    def forever_cmd(self):
+        self.run_forever = True
+        while self.run_forever:
+            msg = "Running cmd.exe"
+            self.stdout_write(msg, add_padding=True)
+            error = self.run("cmd.exe")
+            msg = "Process exit code: %s" % str(error)
+            self.stdout_write(msg, add_padding=True)
+
+    @staticmethod
+    def add_padding(text):
+        #return text
+        text = " %s " % text
+        length = len(text)
+        p1 = "="*int((WIDTH-length)/2+0.5)
+        p2 = "="*int((WIDTH-length)/2)
+        return p1 + text + p2
 
 
 class Buffer:
@@ -120,9 +150,7 @@ class Buffer:
         with self.lock:
             self.data = ""
 
-    def write(self, data, add_padding=False):
-        if add_padding:
-            data = add_padding_to_text(data)+"\n"
+    def write(self, data):
         with self.lock:
             self.data += data
 
@@ -137,12 +165,44 @@ class Buffer:
             self.data = ""
 
 
+class STDINHandle:
+    def __init__(self, read_handle, write_handle):
+        self.handled_write = False
+        self.working = Lock()
+        self.write_handle = write_handle
+        self.read_handle = read_handle
+
+    def check_child_reading(self):
+        with self.working:
+            self.handled_write = True
+            self.write_handle.write("\r")
+            thread = Thread(target=self.try_read)
+            thread.start()
+            sleep(WAIT_STDIN_READ/1000)
+            if self.handled_write:
+                self.write_handle.write("\r"*10)
+                return True
+            return False
+
+    def try_read(self):
+        data = self.read_handle.read(1)
+        self.handled_write = False
+
+    def write(self, text):
+        self.write_handle.write(text)
+
+
+# ping 127.0.0.1 -n 16 > nul
+
+
 class TkTerminal(Terminal):
     def __init__(self):
         super().__init__()
         self.ptrs = self.file_ptrs.get_parent()
+        self.improved_stdin_handle = STDINHandle(*self.file_ptrs.stdin)
         self.closed = False
         self.should_clear_screen = False
+        self.stdin_working = Lock()
 
         self.tk_stdout = Buffer()
         self.tk_stderr = Buffer()
@@ -209,39 +269,56 @@ class TkTerminal(Terminal):
                 self.text.insert("end", text)
                 self.text.tag_add("readonly", insert, "insert")
                 self.text.tag_add("error", insert, "insert")
+                self.text.see("insert")
 
             text = self.tk_stdout.read_all()
             if len(text) > 0:
                 insert = self.text.index("insert")
                 self.text.insert("end", text)
                 self.text.tag_add("readonly", insert, "insert")
+                self.text.see("insert")
 
         self.root.after(WAIT_NEXT_LOOP, self.tk_mainloop)
 
-    def tk_get_input(self):
-        text = ""
-        # Get the ranges
-        ranges = self.text.tag_ranges("readonly")
-        # Subtract them from the whole thing:
-        _range = Range(self.text)
-        for i in range(0, len(ranges), 2):
-            _range.subtract_range(ranges[i], ranges[i+1])
+    def _tk_send_to_stdin(self):
+        with self.stdin_working:
+            mark_for_readonly_range = []
+            text = ""
+            # Get the ranges
+            ranges_readonly = self.text.tag_ranges("readonly")
+            ranges_sent = self.text.tag_ranges("sent_for_checking")
+            _range = Range(self.text)
 
-        for start, end in _range.tolist():
-            text += self.text.get(start, end)
-            if "\n" in text:
-                chars = text.index("\n")+1
-                self.text.tag_add("readonly", "0.0", start+"+%ic" % chars)
-                text = text[:chars]
+            # Subtract them from the whole thing:
+            for i in range(0, len(ranges_readonly), 2):
+                _range.subtract_range(ranges_readonly[i], ranges_readonly[i+1])
+            for i in range(0, len(ranges_sent), 2):
+                _range.subtract_range(ranges_sent[i], ranges_sent[i+1])
 
-                #text = text[:-1]+"\b"+"a\n"
+            for start, end in _range.tolist():
+                text += self.text.get(start, end)
+                if "\n" in text:
+                    chars = text.index("\n")+1
+                    end = start+"+%ic" % chars
+                    mark_for_readonly_range.append((start, end))
+                    self.text.tag_add("sent_for_checking", start, end)
+                    text = text[:chars]
+                    break;
+                mark_for_readonly_range.append((start, end))
 
-                self.ptrs["stdin"].write(text) # Might need `+"\n"`
-                break
+            if text[-1:] == "\n":
+                self.improved_stdin_handle.write(text)
+                for start, end in mark_for_readonly_range:
+                    self.text.tag_add("readonly", start, end)
+                    self.text.tag_remove("sent_for_checking", "0.0", "end")
 
     def tk_send_to_stdin(self, event):
+        self.text.mark_set("insert", "end")
         # First handle the "\n" comming in
-        self.text.after(0, self.tk_get_input)
+        self.text.insert("insert", "\n")
+        if self.improved_stdin_handle.check_child_reading():
+            self._tk_send_to_stdin()
+        return "break"
 
     def tk_stdout_read(self):
         while not self.closed:
@@ -256,12 +333,6 @@ class TkTerminal(Terminal):
         self.closed = True
         super().stop_process()
         self.root.close()
-
-    def stdout_write(self, text, **kwargs):
-        self.tk_stdout.write(text, **kwargs)
-
-    def stderr_write(self, text, **kwargs):
-        self.tk_stdout.write(text, **kwargs)
 
     def run(self, command, callback=None):
         if self.closed:
@@ -278,4 +349,4 @@ class TkTerminal(Terminal):
 
 if __name__ == "__main__":
     terminal = TkTerminal()
-    terminal.run("exe.exe")
+    terminal.forever_cmd()

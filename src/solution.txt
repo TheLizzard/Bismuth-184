@@ -1,0 +1,36 @@
+```python
+class STDINHandle:
+    def __init__(self, read_handle, write_handle):
+        self.handled_write = False
+        self.working = Lock()
+        self.write_handle = write_handle
+        self.read_handle = read_handle
+
+    def check_child_reading(self):
+        with self.working:
+            # Reset the flag
+            self.handled_write = True
+            # Write a character that cmd will ignore
+            self.write_handle.write("\r")
+            thread = Thread(target=self.try_read)
+            thread.start()
+            sleep(0.1)
+            # We need to stop the other thread by giving it data to read
+            if self.handled_write:
+                # Writing only 1 "\r" fails for some reason.
+                # For good measure we write 10 "\r"s
+                self.write_handle.write("\r"*10)
+                return True
+            return False
+
+    def try_read(self):
+        data = self.read_handle.read(1)
+        self.handled_write = False
+
+    def write(self, text):
+        self.write_handle.write(text)
+```
+
+I did a bit of testing and I think cmd ignores `"\r"` characters. I couldn't find a case where cmd will interpret it as an actual character (like what happened when I did `"\b"`). Sending a `"\r"` character and testing if it stays in the pipe. If it does stay in the pipe that means that the child hasn't processed it. If we can't read it from the pipe that means that the child has processed it. But we have a problem - we need to stop the read if we can't read from `stdin` otherwise it will mess with the next write to `stdin`. To do that we write more `"\r"`s to the pipe.
+
+Note: I might have to change the timing on the `sleep(0.1)` line.

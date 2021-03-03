@@ -1,8 +1,9 @@
-from basiceditor.text import ScrolledBarredText
-from colorizer.colorizer import Percolator, ColorDelegator
+from basiceditor.text import LinedScrolledBarredText
+from colorizer.colorizer import ColorDelegator
+from idlelib.percolator import Percolator
 
 
-class ColouredScrolledBarredText(ScrolledBarredText):
+class ColouredLinedScrolledBarredText(LinedScrolledBarredText):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
         percolator = Percolator(self)
