@@ -86,24 +86,26 @@ class FileDestriptors:
 
 
 class Terminal:
-    def __init__(self):
+    def __init__(self, callback=None):
         self.process = FinishedProcess()
         self.file_ptrs = FileDestriptors()
+        self.callback = callback
 
     def __del__(self):
         sleep(0.1)
         self.stop_process()
 
-    def run(self, command, callback=None):
+    def run(self, command):
         self.stop_process()
         file_ptrs = self.file_ptrs.get_child()
         self.process = subprocess.Popen(command, close_fds=False, shell=True,
                                         **file_ptrs)
         # Wait for the proccess to end
         while self.process.poll() is None:
-            if callback is not None:
-                callback()
-            sleep(0.02)
+            if self.callback is not None:
+                self.callback()
+            else:
+                sleep(0.02)
         exit_code = self.process.returncode
         self.process = FinishedProcess() # Make sure we clean up
         return exit_code
@@ -194,8 +196,8 @@ class STDINHandle:
 
 
 class TkTerminal(Terminal):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, callback=None):
+        super().__init__(callback=callback)
         self.ptrs = self.file_ptrs.get_parent()
         self.improved_stdin_handle = STDINHandle(*self.file_ptrs.stdin)
         self.closed = False
@@ -218,11 +220,12 @@ class TkTerminal(Terminal):
         self.root.buttons["X"].config(command=self.tk_close)
         self.text = ScrolledText(self.root, bg=BG_COLOUR, fg=FG_COLOUR,
                                  font=FONT, height=HEIGHT, width=WIDTH,
-                                 undo=False)
+                                 undo=False, call_init=False)
         self.text.pack(fill="both", expand=True)
         self.text.tag_config("error", foreground="red")
         self.text.bind("<Key>", self.tk_check_read_ony)
         self.text.bind("<Return>", self.tk_send_to_stdin)
+        self.text.init()
         self.text.focus()
 
         self.tk_mainloop()
@@ -245,6 +248,10 @@ class TkTerminal(Terminal):
         # Replace all of the words that can be expressed with 1 character
         if char in KEY_REPLACE_DICT:
             char = KEY_REPLACE_DICT[char]
+
+        # White listed:
+        if char in ("Up", "Down", "Left", "Right"):
+            return None
 
         if disallow_write:
             if (len(char) == 1) or (char == "Tab") or (char == "Delete"):
@@ -332,10 +339,10 @@ class TkTerminal(Terminal):
         super().stop_process()
         self.root.close()
 
-    def run(self, command, callback=None):
+    def run(self, command):
         if self.closed:
             return Exception("Terminal closed by user")
-        return super().run(command, callback=callback)
+        return super().run(command)
 
     def clear(self):
         if self.closed:
@@ -355,5 +362,5 @@ class TkTerminal(Terminal):
 
 if __name__ == "__main__":
     terminal = TkTerminal()
-    terminal.run("python.exe")
+    terminal.run("cmd")
     #terminal.forever_cmd()

@@ -77,7 +77,7 @@ class RunnableText:
 
     def run(self, event=None, args=None):
         if (self.terminal is None) or self.terminal.closed:
-            self.terminal = TkTerminal()
+            self.terminal = TkTerminal(callback=self.text.update)
 
         self.terminal.clear()
         self.terminal.text.focus_force()
@@ -97,7 +97,7 @@ class RunnableText:
 
         if self.terminal.closed:
             return None
-        error = self.terminal.run(command, callback=self.text.update)
+        error = self.terminal.run(command)
         msg = "Process exit code: %s" % str(error)
         self.terminal.stdout_write(msg, add_padding=True)
         if isinstance(error, Exception):
@@ -112,7 +112,7 @@ class RunnableText:
                 command = RUN_COMMAND + " " + " ".join(args)
             if self.terminal.closed:
                 return None
-            error = self.terminal.run(command, callback=self.text.update)
+            error = self.terminal.run(command)
             msg = "Process exit code: %s" % str(error)
             self.terminal.stdout_write(msg, add_padding=True)
             self.terminal.forever_cmd()
