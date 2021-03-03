@@ -95,6 +95,8 @@ class RunnableText:
         msg = "Compiling the program"
         self.terminal.stdout_write(msg, add_padding=True)
 
+        if self.terminal.closed:
+            return None
         error = self.terminal.run(command, callback=self.text.update)
         msg = "Process exit code: %s" % str(error)
         self.terminal.stdout_write(msg, add_padding=True)
@@ -108,6 +110,8 @@ class RunnableText:
                 command = RUN_COMMAND
             else:
                 command = RUN_COMMAND + " " + " ".join(args)
+            if self.terminal.closed:
+                return None
             error = self.terminal.run(command, callback=self.text.update)
             msg = "Process exit code: %s" % str(error)
             self.terminal.stdout_write(msg, add_padding=True)
@@ -132,6 +136,7 @@ class RunnableText:
             self.text.delete("0.0", "end")
             self.text.insert("end", text)
             self.text.see("end")
+        self.text.generate_changed_event()
         #self.root.title(os.path.basename(filename))
 
     def saveas(self, event=None):
@@ -140,12 +145,14 @@ class RunnableText:
         if file != "":
             self.file_name = file
             self.save(file)
+        self.text.generate_changed_event()
 
     def _save(self, filename):
         text = self.text.get("0.0", "end")
         with open(filename, "w") as file:
             file.write(text)
             self.saved_text = text.rstrip()
+        self.text.generate_changed_event()
         #self.root.title(os.path.basename(filename))
 
 

@@ -35,6 +35,7 @@ class CPPText(ColouredLinedScrolledBarredText):
                 end = int(float(sel[1]))
             for line in range(start, end+1):
                 super().insert(str(line)+".0", " "*4)
+        super().generate_changed_event()
 
     def unindent_lines(self, event):
         with self.separatorblocker:
@@ -52,6 +53,7 @@ class CPPText(ColouredLinedScrolledBarredText):
                         super().delete(line, line+"+1c")
                     else:
                         break
+        super().generate_changed_event()
 
     def toggle_comment_lines(self, event):
         with self.separatorblocker:
@@ -65,6 +67,7 @@ class CPPText(ColouredLinedScrolledBarredText):
             for line in range(start, end+1):
                 line = str(line)+".0"
                 self.toggle_comment_line(line)
+        super().generate_changed_event()
         return "break"
 
     def toggle_comment_line(self, line):
@@ -99,6 +102,7 @@ class CPPText(ColouredLinedScrolledBarredText):
         super().insert(last, closing_bracket)
         if sel is None:
             super().mark_set("insert", "insert-1c")
+        super().generate_changed_event()
         return "break"
 
     def backspace_pressed(self, event):
@@ -108,6 +112,7 @@ class CPPText(ColouredLinedScrolledBarredText):
         # If it is "()" or "[]" then delete the right one as well
         if both_chars in BRACKETS_LIST:
             super().delete("insert", "insert+1c")
+        super().generate_changed_event()
 
     def delete_pressed(self, event):
         char_after = super().get("insert", "insert+1c")
@@ -116,9 +121,11 @@ class CPPText(ColouredLinedScrolledBarredText):
         # If it is "()" or "[]" then delete the right one as well
         if both_chars in BRACKETS_LIST:
             super().delete("insert+1c", "insert+2c")
+        super().generate_changed_event()
 
     def open_bracket(self, opening_bracket, event):
         super().insert("insert", opening_bracket)
+        super().generate_changed_event()
         return "break"
 
     def enter_pressed(self, event):
@@ -137,6 +144,7 @@ class CPPText(ColouredLinedScrolledBarredText):
             insert = super().index("insert")
             super().insert("insert", "\n"+" "*last_line_indentation)
             super().mark_set("insert", insert)
+        super().generate_changed_event()
         return "break"
 
     def get_indentation(self, line):

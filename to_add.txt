@@ -1,5 +1,4 @@
 Editor:
-* Line numbers
 * Brackets highlighter (when closing bracket for 1 sec highlight the opening bracket)
 * Ask if user really wants to close if program not saved
 

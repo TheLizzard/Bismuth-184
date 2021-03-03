@@ -91,7 +91,6 @@ class Terminal:
         self.file_ptrs = FileDestriptors()
 
     def __del__(self):
-        self.run_forever = False
         sleep(0.1)
         self.stop_process()
 
@@ -126,8 +125,7 @@ class Terminal:
         self.file_ptrs.stderr[1].write(text+end)
 
     def forever_cmd(self):
-        self.run_forever = True
-        while self.run_forever:
+        while True:
             msg = "Running cmd.exe"
             self.stdout_write(msg, add_padding=True)
             error = self.run("cmd.exe")
@@ -346,7 +344,16 @@ class TkTerminal(Terminal):
         while self.should_clear_screen:
             sleep(0.3)
 
+    def forever_cmd(self):
+        while not self.closed:
+            msg = "Running cmd.exe"
+            self.stdout_write(msg, add_padding=True)
+            error = self.run("cmd.exe")
+            msg = "Process exit code: %s" % str(error)
+            self.stdout_write(msg, add_padding=True)
+
 
 if __name__ == "__main__":
     terminal = TkTerminal()
-    terminal.forever_cmd()
+    terminal.run("python.exe")
+    #terminal.forever_cmd()

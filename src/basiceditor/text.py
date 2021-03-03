@@ -1,12 +1,12 @@
-from .scrollbar import AutoScrollbar
-from .linenumbers import LineNumbers
+from functools import partial
 import tkinter as tk
 
+from .scrollbar import AutoScrollbar
+from .linenumbers import LineNumbers
 from constants.settings import settings
 
 
-LINENUMBERS_WIDTH = settings.editor.linenumbers_width.get()
-LINENUMBERS_BG = settings.editor.linenumbers_bg.get()
+FG_COLOUR = settings.editor.fg.get()
 
 
 ALPHABET = "abcdefghijklmnopqrstuvwxyz"
@@ -38,22 +38,31 @@ class PauseSeparators:
 
 class BasicText(tk.Text):
     def __init__(self, master, wrap="none", undo=True, insertbackground=None,
-                 **kwargs):
+                 call_init=True, **kwargs):
         if (insertbackground is None) and ("fg" in kwargs):
             insertbackground = kwargs["fg"]
         super().__init__(master, wrap=wrap, undo=undo,
                          insertbackground=insertbackground, **kwargs)
         self.separatorblocker = PauseSeparators(self)
+        if call_init:
+            self.init()
+
+    def bind(self, sequence, function, add=True):
+        return super().bind(sequence, function, add=add)
 
     def init(self):
         # There is a class that takes over some of the functions (Colorizer)
         # so we are going to have this here
-        super().bind("<Key>", self.add_text)
+        self.bind("<Key>", self.add_text)
+        self.bind("<Return>", self.generate_changed_event)
         self.set_select_colour()
 
         # Change the behaviour of double clicking:
-        super().bind("<Double-Button-1>", self.double_click)
+        self.bind("<Double-Button-1>", self.double_click)
         super().focus()
+
+    def generate_changed_event(self, event=None):
+        super().event_generate("<<Changed>>", when="tail")
 
     def double_click(self, event):
         insert = super().index("insert")
@@ -83,6 +92,8 @@ class BasicText(tk.Text):
         if char in IGNORE_KEYS:
             return "break"
 
+        self.generate_changed_event()
+
         # Normal key press like: ("a", "b", "c", ...)
         if len(char) == 1:
             if "Control" in state:
@@ -100,7 +111,7 @@ class BasicText(tk.Text):
                         self.redo()
                     else:
                         self.undo()
-            else:
+            elif "Alt" not in state:
                 with self.separatorblocker:
                     self.delete_selected()
                     super().insert("insert", char)
@@ -341,8 +352,8 @@ class BasicText(tk.Text):
         super().tag_config("sel", background=bg, foreground=fg)
         super().config(inactiveselectbackground=bg)
 
-    @classmethod
-    def get_state(self, event):
+    @staticmethod
+    def get_state(event):
         # Checks if any other keys/events are happening
         # Returns a list like this:
         #    ["Shift", "Control", "Mod1", "Button1", "Button3"]
@@ -355,7 +366,7 @@ class BasicText(tk.Text):
                 state.append(name)
         return state
 
-    @classmethod
+    @staticmethod
     def ctrl_arrows(sel_range, insert_before, insert_after):
         sel_range = list(sel_range)
         idx = sel_range.index(insert_before)
@@ -363,19 +374,49 @@ class BasicText(tk.Text):
         return tuple(sel_range)
 
 
-class ScrolledText(BasicText):
+class LinedText(BasicText):
+    def __init__(self, master, **kwargs):
+        self.linedframe = tk.Frame(master, bd=0)
+        super().__init__(self.linedframe, **kwargs)
+        self.linenumbers = LineNumbers(self.linedframe)
+        self.separator = tk.Canvas(self.linedframe, width=1, bg=FG_COLOUR,
+                                   bd=0, highlightthickness=0)
+        self.linenumbers.attach(self)
+        self.linenumbers.pack(side="left", fill="y")
+        self.separator.pack(side="left")
+        super().pack(side="right", fill="both", expand=True)
+        super().bind("<<Changed>>", self.update_lines)
+
+    def pack(self, **kwargs):
+        self.linedframe.pack(**kwargs)
+
+    def grid(self, **kwargs):
+        self.linedframe.grid(**kwargs)
+
+    def place(self, **kwargs):
+        self.linedframe.place(**kwargs)
+
+    def update_lines(self, event):
+        self.linenumbers.redraw(event)
+
+
+class ScrolledLinedText(LinedText):
     def __init__(self, master, **kwargs):
         self.scollframe = tk.Frame(master, bd=0)
         self.text_frame = tk.Frame(self.scollframe, bd=0)
         self.text_frame.pack(side="top")
 
         super().__init__(self.text_frame, bd=0, **kwargs)
-        self.xscrollbar = AutoScrollbar(self.scollframe, command=super().xview,
+        command = partial(self.generate_change_event, super().xview)
+        self.xscrollbar = AutoScrollbar(self.scollframe, command=command,
                                         orient="horizontal")
-        self.yscrollbar = AutoScrollbar(self.text_frame, command=super().yview,
+        command = partial(self.generate_change_event, super().yview)
+        self.yscrollbar = AutoScrollbar(self.text_frame, command=command,
                                         orient="vertical")
-        super().config(xscrollcommand=self.xscrollbar.set,
-                       yscrollcommand=self.yscrollbar.set)
+        xcommand = partial(self.generate_change_event, self.xscrollbar.set)
+        ycommand = partial(self.generate_change_event, self.yscrollbar.set)
+        super().config(xscrollcommand=xcommand,
+                       yscrollcommand=ycommand)
         self.yscrollbar.pack(fill="y", side="right")
         super().pack(fill="both", expand=True, side="left")
         self.text_frame.pack(fill="both", side="top", expand=True)
@@ -390,8 +431,12 @@ class ScrolledText(BasicText):
     def place(self, **kwargs):
         self.scollframe.place(**kwargs)
 
+    def generate_change_event(self, function, *args):
+        super().event_generate("<<Changed>>", when="tail")
+        function(*args)
 
-class ScrolledBarredText(ScrolledText):
+
+class BarredScrolledLinedText(ScrolledLinedText):
     FOTMAT = "Line: %s\tCol: %s"
     def __init__(self, master, **kwargs):
         self.barredframe = tk.Frame(master, bd=0)
@@ -399,9 +444,12 @@ class ScrolledBarredText(ScrolledText):
         super().__init__(self.barredframe, **kwargs)
         self.status_bar = tk.Label(self.barredframe, text="", padx=5,
                                    anchor="e", bg="black", fg="white")
+        self.separator = tk.Canvas(self.barredframe, height=1, bg=FG_COLOUR,
+                                   bd=0, highlightthickness=0)
 
-        super().pack(side="top", expand=True, fill="both")
-        self.status_bar.pack(side="bottom", fill="x", anchor="e")
+        super().pack(expand=True, fill="both")
+        self.separator.pack(fill="x")
+        self.status_bar.pack(fill="x", anchor="e")
 
         super().bind("<Key>", self.update_bar)
         super().bind("<Button-1>", self.update_bar)
@@ -426,30 +474,46 @@ class ScrolledBarredText(ScrolledText):
         self.barredframe.place(**kwargs)
 
 
-class LinedScrolledBarredText(ScrolledBarredText):
+class ScrolledText(BasicText):
     def __init__(self, master, **kwargs):
-        self.linedframe = tk.Frame(master, bd=0)
-        super().__init__(self.linedframe, **kwargs)
-        self.linenumbers = LineNumbers(self.linedframe, width=LINENUMBERS_WIDTH,
-                                       bg=LINENUMBERS_BG, bd=0)
-        self.linenumbers.pack(side="left", fill="y")
-        super().pack(side="right", fill="both", expand=True)
+        self.scollframe = tk.Frame(master, bd=0)
+        self.text_frame = tk.Frame(self.scollframe, bd=0)
+        self.text_frame.pack(side="top")
+
+        super().__init__(self.text_frame, bd=0, **kwargs)
+        command = partial(self.generate_change_event, super().xview)
+        self.xscrollbar = AutoScrollbar(self.scollframe, command=command,
+                                        orient="horizontal")
+        command = partial(self.generate_change_event, super().yview)
+        self.yscrollbar = AutoScrollbar(self.text_frame, command=command,
+                                        orient="vertical")
+        xcommand = partial(self.generate_change_event, self.xscrollbar.set)
+        ycommand = partial(self.generate_change_event, self.yscrollbar.set)
+        super().config(xscrollcommand=xcommand,
+                       yscrollcommand=ycommand)
+        self.yscrollbar.pack(fill="y", side="right")
+        super().pack(fill="both", expand=True, side="left")
+        self.text_frame.pack(fill="both", side="top", expand=True)
+        self.xscrollbar.pack(fill="x", side="bottom")
 
     def pack(self, **kwargs):
-        self.linedframe.pack(**kwargs)
+        self.scollframe.pack(**kwargs)
 
     def grid(self, **kwargs):
-        self.linedframe.grid(**kwargs)
+        self.scollframe.grid(**kwargs)
 
     def place(self, **kwargs):
-        self.linedframe.place(**kwargs)
+        self.scollframe.place(**kwargs)
 
+    def generate_change_event(self, function, *args):
+        super().event_generate("<<Changed>>", when="tail")
+        function(*args)
 
 
 if __name__ == "__main__":
     root = tk.Tk()
-    text_widget = ScrolledBarredText(root, bg="black", fg="white")
+    text_widget = LinedScrolledBarredText(root, bg="black", fg="white")
     text_widget.pack(fill="both", expand=True)
-    text = "a"*80 + "\n"*23 + "a"*80
+    text = r"C:\Users\TheLizzard\Documents\GitHub\CPP-IDLE\src>"
     text_widget.insert("end", text)
     root.mainloop()
