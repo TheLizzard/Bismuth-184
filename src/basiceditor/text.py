@@ -193,15 +193,16 @@ class BasicText(tk.Text):
 
     def backspace_pressed(self, event):
         # If the user has selected something delete it
-        if not self.delete_selected():
+        if self.delete_selected():
+            return "break"
+        else:
             # Don't create another delete event if we deleted selected
             return self.backspace(super().index("insert"))
 
     def delete_pressed(self, event):
         # If the user has selected something delete it
-        if not self.delete_selected():
-            # Don't create another delete event if we deleted selected
-            super().delete("insert", "insert+1c")
+        if self.delete_selected():
+            return "break"
 
     def sort_idxs(self, idx1, idx2):
         if super().compare(idx1, "<", idx2):

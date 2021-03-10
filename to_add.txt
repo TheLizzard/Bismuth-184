@@ -3,6 +3,7 @@ Editor:
 
 Terminal:
 * Find a way to determine if child is waiting for stdin (kms) - nearly nearly done
+* Fix `python` crashing cmd
 
 Settings:
 * None
