@@ -17,9 +17,9 @@ BRACKETS_LIST = tuple(i+j for i, j, _ in BRACKETS)
 class CPPText(ColouredLinedScrolledBarredText):
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
-        super().bind("<BackSpace>", self.backspace_pressed)
-        super().bind("<Delete>", self.delete_pressed)
-        super().bind("<Return>", self.enter_pressed)
+        super().bind("<BackSpace>", self.cpp_backspace_pressed)
+        super().bind("<Delete>", self.cpp_delete_pressed)
+        super().bind("<Return>", self.cpp_enter_pressed)
         for open, close, tcl in BRACKETS:
             super().bind(open, partial(self.close_bracket, open, close))
             super().bind(close, self.highlight_bracket)
@@ -162,7 +162,7 @@ class CPPText(ColouredLinedScrolledBarredText):
         super().generate_changed_event()
         return "break"
 
-    def backspace_pressed(self, event):
+    def cpp_backspace_pressed(self, event):
         char_before = super().get("insert-1c", "insert")
         char_after = super().get("insert", "insert+1c")
         both_chars = char_before+char_after
@@ -171,7 +171,7 @@ class CPPText(ColouredLinedScrolledBarredText):
             super().delete("insert", "insert+1c")
         super().generate_changed_event()
 
-    def delete_pressed(self, event):
+    def cpp_delete_pressed(self, event):
         char_after = super().get("insert", "insert+1c")
         char_after_after = super().get("insert+1c", "insert+2c")
         both_chars = char_after+char_after_after
@@ -185,7 +185,7 @@ class CPPText(ColouredLinedScrolledBarredText):
         super().generate_changed_event()
         return "break"
 
-    def enter_pressed(self, event):
+    def cpp_enter_pressed(self, event):
         insert = super().index("insert")
         text = self.get_line_text(insert)
         last_line_indentation = self.get_indentation(insert)

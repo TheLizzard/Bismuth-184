@@ -8,7 +8,6 @@ from constants.settings import settings
 
 FG_COLOUR = settings.editor.fg.get()
 
-
 ALPHABET = "abcdefghijklmnopqrstuvwxyz"
 ALPHABET += ALPHABET.upper()
 ALPHANUMERIC = ALPHABET + "".join(map(str, range(10)))
@@ -17,7 +16,7 @@ ALPHANUMERIC_ = ALPHANUMERIC + "_"
 KEY_REPLACE_DICT = {"Return": "\n"}
 IGNORE_KEYS = ("Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L",
                "Alt_R", "Caps_Lock", "Num_Lock", "Win_L", "Win_R", "Insert",
-               "Clear", "Next", "Prior")
+               "Clear", "Next", "Prior", "BackSpace", "Delete")
 
 
 class PauseSeparators:
@@ -55,6 +54,9 @@ class BasicText(tk.Text):
         # so we are going to have this here
         self.bind("<Key>", self.add_text)
         self.bind("<Return>", self.generate_changed_event)
+        self.bind("<Return>", lambda e: self.after(0, self.see_insert))
+        self.bind("<BackSpace>", self.backspace_pressed)
+        self.bind("<Delete>", self.delete_pressed)
         self.set_select_colour()
 
         # Change the behaviour of double clicking:
@@ -121,20 +123,6 @@ class BasicText(tk.Text):
             with self.separatorblocker:
                 self.delete_selected()
                 super().insert("insert", " "*4)
-
-        # BackSpace pressed
-        elif char == "BackSpace":
-            # If the user has selected something delete it
-            if not self.delete_selected():
-                # Don't create another delete event if we deleted selected
-                self.backspace(insert)
-
-        # Delete pressed
-        elif char == "Delete":
-            # If the user has selected something delete it
-            if not self.delete_selected():
-                # Don't create another delete event if we deleted selected
-                super().delete(insert, insert+"+1c")
 
         # Left key pressed
         elif char == "Left":
@@ -203,6 +191,18 @@ class BasicText(tk.Text):
         self.see_insert()
         return "break"
 
+    def backspace_pressed(self, event):
+        # If the user has selected something delete it
+        if not self.delete_selected():
+            # Don't create another delete event if we deleted selected
+            return self.backspace(super().index("insert"))
+
+    def delete_pressed(self, event):
+        # If the user has selected something delete it
+        if not self.delete_selected():
+            # Don't create another delete event if we deleted selected
+            super().delete("insert", "insert+1c")
+
     def sort_idxs(self, idx1, idx2):
         if super().compare(idx1, "<", idx2):
             return idx1, idx2
@@ -218,12 +218,7 @@ class BasicText(tk.Text):
             if super().index(insert+"-4c").split(".")[0] == line:
                 # Delete 4 characters
                 super().delete(insert+"-4c", insert)
-            else:
-                # If we moved to the last line then just del 1 char
-                super().delete(insert+"-1c", insert)
-        else:
-            # Normal backspace (delete 1 character)
-            super().delete(insert+"-1c", insert)
+                return "break"
 
     def ctrl_left(self, insert):
         chars_skipped = self._ctrl_left(insert)
@@ -511,9 +506,13 @@ class ScrolledText(BasicText):
 
 
 if __name__ == "__main__":
+    def callback(event):
+        print("!", event)
+        text_widget.generate_changed_event()
     root = tk.Tk()
     text_widget = BarredScrolledLinedText(root, bg="black", fg="white")
     text_widget.pack(fill="both", expand=True)
+    text_widget.bind("<BackSpace>", callback)
     text = r"C:\Users\TheLizzard\Documents\GitHub\CPP-IDLE\src>"
     text_widget.insert("end", text)
     root.mainloop()

@@ -6,3 +6,7 @@ Terminal:
 
 Settings:
 * None
+
+Window:
+* Add to the Windows task bar when user hides the window
+* Add a way to dynamically resize the window
