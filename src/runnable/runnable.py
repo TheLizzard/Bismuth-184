@@ -31,7 +31,7 @@ PATH = os.path.dirname(os.path.realpath(__file__))
 if OS == "windows":
     PATH_EXECUTABLE = settings.win_path_executable.get().format(path=PATH)
     COMPILE_COMMAND = settings.win_compile.get().format(out=PATH_EXECUTABLE,
-                                                           _in="{_in}")
+                                                        _in="{_in}")
     RUN_COMMAND = settings.win_run_command.get().format(file=PATH_EXECUTABLE)
 if OS == "linux":
     PATH_EXECUTABLE = settings.lin_path_executable.get().format(PATH)
@@ -74,6 +74,10 @@ class RunnableText:
             return None
         DEFAULT_ARGS = tuple(inputs)
         self.run(event, inputs)
+
+    def close(self):
+        if self.saved_text == self.text.get("0.0", "end").rstrip():
+            return "saved"
 
     def run(self, event=None, args=None):
         if (self.terminal is None) or self.terminal.closed:

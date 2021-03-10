@@ -1,6 +1,5 @@
 Editor:
-* Brackets highlighter (when closing bracket for 1 sec highlight the opening bracket)
-* Ask if user really wants to close if program not saved
+* remove: ())
 
 Terminal:
-* Find a way to determine if child is waiting for stdin (kms) - nearly done
+* Find a way to determine if child is waiting for stdin (kms) - nearly nearly done

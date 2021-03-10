@@ -512,7 +512,7 @@ class ScrolledText(BasicText):
 
 if __name__ == "__main__":
     root = tk.Tk()
-    text_widget = LinedScrolledBarredText(root, bg="black", fg="white")
+    text_widget = BarredScrolledLinedText(root, bg="black", fg="white")
     text_widget.pack(fill="both", expand=True)
     text = r"C:\Users\TheLizzard\Documents\GitHub\CPP-IDLE\src>"
     text_widget.insert("end", text)

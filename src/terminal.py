@@ -269,6 +269,7 @@ class TkTerminal(Terminal):
             self.should_clear_screen = False
         else:
             text = self.tk_stderr.read_all()
+            text = self.remove_dead_chars(text)
             if len(text) > 0:
                 insert = self.text.index("insert")
                 self.text.insert("end", text)
@@ -277,6 +278,7 @@ class TkTerminal(Terminal):
                 self.text.see("insert")
 
             text = self.tk_stdout.read_all()
+            text = self.remove_dead_chars(text)
             if len(text) > 0:
                 insert = self.text.index("insert")
                 self.text.insert("end", text)
@@ -284,6 +286,24 @@ class TkTerminal(Terminal):
                 self.text.see("insert")
 
         self.root.after(WAIT_NEXT_LOOP, self.tk_mainloop)
+
+    @staticmethod
+    def remove_dead_chars(text):
+        output = ""
+        i = 0
+        while i < len(text):
+            char = text[i]
+            if char == "\r":
+                if len(text[i+1:]) > 0:
+                    next_char = text[i+1]
+                    if next_char == "\n":
+                        output += text[i]
+                        #output += "\r\n"
+                        #i += 1
+            else:
+                output += text[i]
+            i += 1
+        return output
 
     def _tk_send_to_stdin(self):
         with self.stdin_working:

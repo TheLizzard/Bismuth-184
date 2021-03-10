@@ -1,4 +1,5 @@
 from functools import partial
+import tkinter as tk
 
 from colorizer.text import ColouredLinedScrolledBarredText
 
@@ -19,10 +20,57 @@ class CPPText(ColouredLinedScrolledBarredText):
         super().bind("<Return>", self.enter_pressed)
         for open, close, tcl in BRACKETS:
             super().bind(open, partial(self.close_bracket, open, close))
+            super().bind(close, self.highlight_bracket)
             super().bind(f"<Alt-{tcl}>", partial(self.open_bracket, open))
         super().bind("<Control-bracketleft>", self.unindent_lines)
         super().bind("<Control-bracketright>", self.indent_lines)
         super().bind("<Control-/>", self.toggle_comment_lines)
+        super().tag_config("bracket highlighter", background="grey30")
+
+    def highlight_bracket(self, event=None):
+        for open, close, _ in BRACKETS:
+            if event.char == close:
+                super().after(0, self._highlight_bracket, open)
+
+    def _highlight_bracket(self, open):
+        #self.update_bracket_tags()
+        #bracket = super().get("insert-1c", "insert")
+        skip = 0
+        while super().get("insert-%ic" % (skip+1), "insert-%ic" % skip) != open:
+            skip += 1
+            if super().compare("insert-%ic" % (skip+1), "==", "0.0"):
+                return None
+        start = super().index("insert-%ic" % (skip+1))
+        end = super().index("insert")
+        super().tag_add("bracket highlighter", start, end)
+        super().after(1000, self.remove_bracket_highlighter)
+
+    def remove_bracket_highlighter(self):
+        super().tag_remove("bracket highlighter", "0.0", "end")
+
+    def update_bracket_tags(self):
+        # Not used
+        for open, close, _ in BRACKETS:
+            super().tag_remove(open, "0.0", "end")
+            super().tag_remove(close, "0.0", "end")
+        for *brackets, _ in BRACKETS[:3]:
+            for bracket in brackets:
+                start = super().index("0.0")
+                end = super().index("end")
+                super().mark_set("matchStart", start)
+                super().mark_set("matchEnd", start)
+                super().mark_set("searchLimit", end)
+
+                count = tk.IntVar()
+                while True:
+                    index = super().search(bracket, "matchEnd", "searchLimit",
+                                           count=count)
+                    length = count.get()
+                    if (index == "") or (length == 0):
+                        break
+                    super().mark_set("matchStart", index)
+                    super().mark_set("matchEnd", "%s+%sc" % (index, length))
+                    super().tag_add(bracket, "matchStart", "matchEnd")
 
     def indent_lines(self, event):
         with self.separatorblocker:

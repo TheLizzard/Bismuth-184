@@ -1,7 +1,12 @@
-from constants.bettertk import BetterTk
-from runnable.runnable import RunnableText
-from constants.cpptext import CPPText
+from tkinter import messagebox
+
 from constants.settings import settings, ChangeSettings
+from runnable.runnable import RunnableText
+from constants.bettertk import BetterTk
+from constants.cpptext import CPPText
+
+
+# <ttk.Notebook>.enable_traversal()
 
 
 SAMPLE_CODE = """
@@ -31,12 +36,22 @@ class App:
                              titlebar_sep_colour=FG_COLOUR,
                              titlebar_size=TITLEBAR_SIZE)
         self.root.title("C++ Editor by TheLizzard")
+        self.root.buttons["X"].config(command=self.ask_close)
         self.text_widget = CPPText(self.root, bg=BG_COLOUR, fg=FG_COLOUR,
                                    font=FONT, height=HEIGHT, width=WIDTH)
         self.text_widget.pack(fill="both", expand=True)
         self.text_widget.insert("end", SAMPLE_CODE)
         self.text_widget_wrapper = RunnableText(self.text_widget)
         self.text_widget.bind("<F1>", self.change_settings)
+
+    def ask_close(self):
+        result = self.text_widget_wrapper.close()
+        if result != "saved":
+            msg = "Are you sure you want to exit?"
+            result = messagebox.askyesno("Exit", msg)
+            if not result:
+                return None
+        self.root.close()
 
     def change_settings(self, event):
         changer = ChangeSettings(self.root)
