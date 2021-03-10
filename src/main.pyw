@@ -5,7 +5,6 @@ from runnable.runnable import RunnableText
 from constants.bettertk import BetterTk
 from constants.cpptext import CPPText
 
-
 # <ttk.Notebook>.enable_traversal()
 
 
@@ -45,12 +44,13 @@ class App:
         self.text_widget.bind("<F1>", self.change_settings)
 
     def ask_close(self):
-        result = self.text_widget_wrapper.close()
+        result = self.text_widget_wrapper.ask_close()
         if result != "saved":
             msg = "Are you sure you want to exit?"
             result = messagebox.askyesno("Exit", msg)
             if not result:
                 return None
+        self.text_widget_wrapper.close()
         self.root.close()
 
     def change_settings(self, event):

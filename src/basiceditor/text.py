@@ -214,7 +214,7 @@ class BasicText(tk.Text):
         # Get the line number
         line = insert.split(".")[0]
         # Check if everything (from the start of the line) in only spaces
-        if super().get(line+".0", insert).replace(" ", "") == "":
+        if super().get(line+".0", insert).lstrip(" ") == "":
             # Check if we moved to the last line
             if super().index(insert+"-4c").split(".")[0] == line:
                 # Delete 4 characters

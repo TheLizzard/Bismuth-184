@@ -10,10 +10,6 @@ import os
 from terminal import TkTerminal, WIDTH
 from constants.settings import settings
 
-settings = settings.compiler
-
-DEFAULT_ARGS = ()
-
 
 def get_os_bits() -> int:
     return 8 * struct.calcsize("P")
@@ -25,6 +21,11 @@ def get_os() -> int:
         return result
     else:
         raise OSError("Can't recognise the OS type.")
+
+
+settings = settings.compiler
+
+DEFAULT_ARGS = ()
 
 OS = get_os()
 PATH = os.path.dirname(os.path.realpath(__file__))
@@ -46,10 +47,10 @@ FILE_TYPES = (("C++ file", "*.cpp"),
 
 class RunnableText:
     def __init__(self, text_widget):
-        self.terminal = None
         self.text = text_widget
         self.saved_text = None
         self.file_name = None
+        self.terminal = None
         self.set_up_bindings()
 
     def set_up_bindings(self):
@@ -75,9 +76,14 @@ class RunnableText:
         DEFAULT_ARGS = tuple(inputs)
         self.run(event, inputs)
 
-    def close(self):
+    def ask_close(self):
         if self.saved_text == self.text.get("0.0", "end").rstrip():
             return "saved"
+
+    def close(self):
+        if self.terminal is not None:
+            self.terminal.clear()
+            self.terminal.close()
 
     def run(self, event=None, args=None):
         if (self.terminal is None) or self.terminal.closed:

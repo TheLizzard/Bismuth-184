@@ -127,7 +127,8 @@ class Terminal:
         self.file_ptrs.stderr[1].write(text+end)
 
     def forever_cmd(self):
-        while True:
+        self.forver_cmd_running = True
+        while self.forver_cmd_running:
             msg = "Running cmd.exe"
             self.stdout_write(msg, add_padding=True)
             error = self.run("cmd.exe")
@@ -201,14 +202,13 @@ class TkTerminal(Terminal):
         self.ptrs = self.file_ptrs.get_parent()
         self.improved_stdin_handle = STDINHandle(*self.file_ptrs.stdin)
         self.closed = False
-        self.should_clear_screen = False
         self.stdin_working = Lock()
+        self.should_clear_screen = False
 
         self.tk_stdout = Buffer()
         self.tk_stderr = Buffer()
 
-        self.tk_thread = Thread(target=self.tk_init, daemon=True)
-        self.tk_thread.start()
+        Thread(target=self.tk_init, daemon=True).start()
 
         Thread(target=self.tk_stdout_read, daemon=True).start()
         Thread(target=self.tk_stderr_read, daemon=True).start()
@@ -218,12 +218,15 @@ class TkTerminal(Terminal):
                              titlebar_sep_colour=FG_COLOUR,
                              titlebar_size=TITLEBAR_SIZE)
         self.root.buttons["X"].config(command=self.tk_close)
+
         self.text = ScrolledText(self.root, bg=BG_COLOUR, fg=FG_COLOUR,
                                  font=FONT, height=HEIGHT, width=WIDTH,
                                  undo=False, call_init=False)
         self.text.pack(fill="both", expand=True)
         self.text.tag_config("error", foreground="red")
         self.text.bind("<Key>", self.tk_check_read_ony)
+        self.text.bind("<BackSpace>", self.tk_check_read_ony, add=True)
+        self.text.bind("<Delete>", self.tk_check_read_ony, add=True)
         self.text.bind("<Return>", self.tk_send_to_stdin)
         self.text.init()
         self.text.focus()
@@ -285,7 +288,10 @@ class TkTerminal(Terminal):
                 self.text.tag_add("readonly", insert, "insert")
                 self.text.see("insert")
 
-        self.root.after(WAIT_NEXT_LOOP, self.tk_mainloop)
+        if self.closed:
+            self.tk_close()
+        else:
+            self.root.after(WAIT_NEXT_LOOP, self.tk_mainloop)
 
     @staticmethod
     def remove_dead_chars(text):
@@ -355,6 +361,7 @@ class TkTerminal(Terminal):
             self.tk_stderr.write(self.ptrs["stderr"].read(1).decode())
 
     def tk_close(self):
+        self.forver_cmd_running = False
         self.closed = True
         super().stop_process()
         self.root.close()
@@ -371,13 +378,8 @@ class TkTerminal(Terminal):
         while self.should_clear_screen:
             sleep(0.3)
 
-    def forever_cmd(self):
-        while not self.closed:
-            msg = "Running cmd.exe"
-            self.stdout_write(msg, add_padding=True)
-            error = self.run("cmd.exe")
-            msg = "Process exit code: %s" % str(error)
-            self.stdout_write(msg, add_padding=True)
+    def close(self):
+        self.closed = True
 
 
 if __name__ == "__main__":

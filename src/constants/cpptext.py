@@ -210,8 +210,15 @@ class CPPText(ColouredLinedScrolledBarredText):
 
     def check_needs_more_indentation(self, line, insert):
         line_text = self.get_without_comments(line).rstrip(" ")
-        if len(self.get_line_text(line).rstrip(" ")) == 0:
-            super().delete(line+" linestart", line+" lineend")
+        if len(super().get("insert linestart", "insert").rstrip(" ")) == 0:
+            super().delete("insert linestart", "insert")
+            return False
+        char_number = int(insert.split(".")[1])
+        if len(line_text) <= char_number:
+            return line_text[-1] in ":{"
+
+        return line_text[char_number-1] in ":{"
+
         in_brackets = (super().get(insert, insert+"+1c") == "}") and \
                       (super().get(insert+"-1c", insert) == "{")
         return (line_text[-1:] == ":") or ((line_text[-2:] == "{}") and \

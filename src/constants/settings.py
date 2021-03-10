@@ -523,6 +523,7 @@ class ChangeSettings:
         dtype_label.grid(row=row, column=2, sticky="nws")
         if dtype == "bool":
             button = tk.Button(frame, text=str(value.value))
+            button.grid(row=row, column=3, sticky="news")
             command = partial(self.toggle_button, button)
             button.config(command=command)
             getter = partial(button.cget, "text")
@@ -539,7 +540,7 @@ class ChangeSettings:
 
     def toggle_button(self, button):
         text = button.cget("text")
-        button.config(text=str(not bool(text)))
+        button.config(text=str(text == "False"))
 
     def add_entries(self, notebook, settings):
         """
