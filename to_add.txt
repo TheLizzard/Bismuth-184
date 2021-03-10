@@ -1,5 +1,8 @@
 Editor:
-* remove: ())
+* None
 
 Terminal:
 * Find a way to determine if child is waiting for stdin (kms) - nearly nearly done
+
+Settings:
+* None

@@ -2,7 +2,9 @@ from functools import partial
 import tkinter as tk
 
 from colorizer.text import ColouredLinedScrolledBarredText
+from constants.settings import settings
 
+TIME_HIGHLIGHT_BRACKETS = settings.editor.time_highlight_brackets_ms.get()
 
 BRACKETS = (("[", "]", "bracketleft"),
             ("(", ")", "parenleft"),
@@ -28,13 +30,14 @@ class CPPText(ColouredLinedScrolledBarredText):
         super().tag_config("bracket highlighter", background="grey30")
 
     def highlight_bracket(self, event=None):
+        if "bracket highlighter" in super().tag_names("insert"):
+            super().mark_set("insert", "insert+1c")
+            return "break"
         for open, close, _ in BRACKETS:
             if event.char == close:
                 super().after(0, self._highlight_bracket, open)
 
     def _highlight_bracket(self, open):
-        #self.update_bracket_tags()
-        #bracket = super().get("insert-1c", "insert")
         skip = 0
         while super().get("insert-%ic" % (skip+1), "insert-%ic" % skip) != open:
             skip += 1
@@ -42,8 +45,11 @@ class CPPText(ColouredLinedScrolledBarredText):
                 return None
         start = super().index("insert-%ic" % (skip+1))
         end = super().index("insert")
+        self.add_bracket_highlight(start, end)
+
+    def add_bracket_highlight(self, start, end):
         super().tag_add("bracket highlighter", start, end)
-        super().after(1000, self.remove_bracket_highlighter)
+        super().after(TIME_HIGHLIGHT_BRACKETS, self.remove_bracket_highlighter)
 
     def remove_bracket_highlighter(self):
         super().tag_remove("bracket highlighter", "0.0", "end")
@@ -150,6 +156,9 @@ class CPPText(ColouredLinedScrolledBarredText):
         super().insert(last, closing_bracket)
         if sel is None:
             super().mark_set("insert", "insert-1c")
+            self.add_bracket_highlight("insert-1c", "insert+1c")
+        else:
+            self.add_bracket_highlight(first, last+"+1c")
         super().generate_changed_event()
         return "break"
 

@@ -197,6 +197,7 @@ editor(block):
     titlebar_size(int) = 0
     linenumbers_width(int) = 35
     linenumbers_bg(colour) = black
+    time_highlight_brackets_ms(int) = 1500
 
 terminal(block):
     font(tuple) = ("DejaVu Sans Mono", 11)
