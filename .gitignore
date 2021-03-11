@@ -130,4 +130,6 @@ dmypy.json
 
 # Custom files/folders:
 src/C++ programs/
+src/output.file
+src/profiler.py
 solution.txt

@@ -186,6 +186,7 @@ class CPPText(ColouredLinedScrolledBarredText):
         return "break"
 
     def cpp_enter_pressed(self, event):
+        last_2_chars = super().get("insert-1c", "insert+1c")
         insert = super().index("insert")
         text = self.get_line_text(insert)
         last_line_indentation = self.get_indentation(insert)
@@ -197,7 +198,7 @@ class CPPText(ColouredLinedScrolledBarredText):
 
         super().insert("insert", "\n"+" "*new_indentation)
 
-        if needs_more_indentation and (text[-2:] == "{}"):
+        if needs_more_indentation and (last_2_chars == "{}"):
             insert = super().index("insert")
             super().insert("insert", "\n"+" "*last_line_indentation)
             super().mark_set("insert", insert)
@@ -213,16 +214,28 @@ class CPPText(ColouredLinedScrolledBarredText):
         if len(super().get("insert linestart", "insert").rstrip(" ")) == 0:
             super().delete("insert linestart", "insert")
             return False
+
+        self.insert_comment_phobic(line)
+        output = super().get("insert -1c", "insert") in ":{"
+        super().mark_set("insert", insert)
+        return output
+
         char_number = int(insert.split(".")[1])
         if len(line_text) <= char_number:
             return line_text[-1] in ":{"
 
         return line_text[char_number-1] in ":{"
 
-        in_brackets = (super().get(insert, insert+"+1c") == "}") and \
-                      (super().get(insert+"-1c", insert) == "{")
-        return (line_text[-1:] == ":") or ((line_text[-2:] == "{}") and \
-                                           in_brackets)
+    def insert_comment_phobic(self, line):
+        line = super().index(line+" lineend-1c")
+        skip = 0
+        while ("comment" in super().tag_names(line+"-%ic" % skip)):
+            skip += 1
+            char_left = super().index(line+"-%ic" % (skip+1))
+            char_right = super().index(line+"-%ic" % skip)
+            if char_left == char_right:
+                break
+        super().mark_set("insert", line+" lineend-%c" % skip)
 
     def get_without_comments(self, line):
         line = super().index(line+" lineend-1c")

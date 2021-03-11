@@ -34,6 +34,7 @@ class App:
         self.root = BetterTk(titlebar_bg=BG_COLOUR, titlebar_fg=TITLEBAR_COLOUR,
                              titlebar_sep_colour=FG_COLOUR,
                              titlebar_size=TITLEBAR_SIZE)
+        self.root.iconbitmap("logo/logo1.ico")
         self.root.title("C++ Editor by TheLizzard")
         self.root.buttons["X"].config(command=self.ask_close)
         self.text_widget = CPPText(self.root, bg=BG_COLOUR, fg=FG_COLOUR,
@@ -47,7 +48,7 @@ class App:
         result = self.text_widget_wrapper.ask_close()
         if result != "saved":
             msg = "Are you sure you want to exit?"
-            result = messagebox.askyesno("Exit", msg)
+            result = messagebox.askyesno("Exit", msg, default="no")
             if not result:
                 return None
         self.text_widget_wrapper.close()

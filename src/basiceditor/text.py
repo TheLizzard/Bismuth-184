@@ -53,7 +53,7 @@ class BasicText(tk.Text):
         # There is a class that takes over some of the functions (Colorizer)
         # so we are going to have this here
         self.bind("<Key>", self.add_text)
-        self.bind("<Return>", self.generate_changed_event)
+        self.bind("<Return>", self.generate_view_changed_event)
         self.bind("<Return>", lambda e: self.after(0, self.see_insert))
         self.bind("<BackSpace>", self.backspace_pressed)
         self.bind("<Delete>", self.delete_pressed)
@@ -66,15 +66,31 @@ class BasicText(tk.Text):
     def generate_changed_event(self, event=None):
         super().event_generate("<<Changed>>", when="tail")
 
+    def generate_view_changed_event(self, event=None):
+        self.generate_changed_event()
+        super().event_generate("<<ViewChanged>>", when="tail")
+
     def double_click(self, event):
-        insert = super().index("insert")
+        super().tag_remove("sel", "0.0", "end")
+
+        # Doesn't work when we double click twice. "insert" moves to the
+        # right so next time we double click `_ctrl_right` doesn't behave
+        # correctly
+        #insert = super().index("insert")
+        insert = super().index("@%i,%i" % (event.x, event.y))
+        self.mark_set("insert", insert)
+
         chars_skip_left = self._ctrl_left(insert)
         chars_skip_right = self._ctrl_right(insert)
         left = "insert-%ic" % chars_skip_left
         right = "insert+%ic" % chars_skip_right
 
+        left = super().index(left)
+        if super().compare(left, "==", left+" lineend"):
+            left += "+1c"
+
         super().tag_add("sel", left, right)
-        self.mark_set("insert", left)
+        self.mark_set("insert", right)
         return "break"
 
     def add_text(self, event):
@@ -131,6 +147,9 @@ class BasicText(tk.Text):
             else:
                 self.mark_set("insert", "insert-1c")
                 if "Shift" not in state:
+                    sel = self.get_sel()
+                    if sel is not None:
+                        self.mark_set("insert", sel[0])
                     super().tag_remove("sel", "0.0", "end")
 
         # Right key pressed
@@ -140,6 +159,9 @@ class BasicText(tk.Text):
             else:
                 self.mark_set("insert", "insert+1c")
                 if "Shift" not in state:
+                    sel = self.get_sel()
+                    if sel is not None:
+                        self.mark_set("insert", sel[1])
                     super().tag_remove("sel", "0.0", "end")
 
         # Down key pressed
@@ -150,7 +172,10 @@ class BasicText(tk.Text):
 
         # Up key pressed
         elif char == "Up":
-            self.mark_set("insert", "insert-1l")
+            if super().compare("0.0", "==", "insert linestart"):
+                self.mark_set("insert", "0.0")
+            else:
+                self.mark_set("insert", "insert-1l")
             if "Shift" not in state:
                 super().tag_remove("sel", "0.0", "end")
 
@@ -178,7 +203,8 @@ class BasicText(tk.Text):
 
         # ONLY for keys that change `insert`:
         # When shift is pressed we want to extend the sel tag.
-        if (char in ("Up", "Down", "Left", "Right", "Home", "End")) and ("Shift" in state):
+        movement_keys = ("Up", "Down", "Left", "Right", "Home", "End")
+        if (char in movement_keys) and ("Shift" in state):
             current_insert = super().index("insert")
             sel = self.get_sel()
             if sel is None:
@@ -381,7 +407,7 @@ class LinedText(BasicText):
         self.linenumbers.pack(side="left", fill="y")
         self.separator.pack(side="left")
         super().pack(side="right", fill="both", expand=True)
-        super().bind("<<Changed>>", self.update_lines)
+        super().bind("<<ViewChanged>>", self.update_lines)
 
     def pack(self, **kwargs):
         self.linedframe.pack(**kwargs)
@@ -404,10 +430,10 @@ class ScrolledLinedText(LinedText):
 
         super().__init__(self.text_frame, bd=0, **kwargs)
         command = partial(self.generate_change_event, super().xview)
-        self.xscrollbar = AutoScrollbar(self.scollframe, command=command,
+        self.xscrollbar = AutoScrollbar(self.scollframe, self, command=command,
                                         orient="horizontal")
         command = partial(self.generate_change_event, super().yview)
-        self.yscrollbar = AutoScrollbar(self.text_frame, command=command,
+        self.yscrollbar = AutoScrollbar(self.text_frame, self, command=command,
                                         orient="vertical")
         xcommand = partial(self.generate_change_event, self.xscrollbar.set)
         ycommand = partial(self.generate_change_event, self.yscrollbar.set)
@@ -478,10 +504,10 @@ class ScrolledText(BasicText):
 
         super().__init__(self.text_frame, bd=0, **kwargs)
         command = partial(self.generate_change_event, super().xview)
-        self.xscrollbar = AutoScrollbar(self.scollframe, command=command,
+        self.xscrollbar = AutoScrollbar(self.scollframe, self, command=command,
                                         orient="horizontal")
         command = partial(self.generate_change_event, super().yview)
-        self.yscrollbar = AutoScrollbar(self.text_frame, command=command,
+        self.yscrollbar = AutoScrollbar(self.text_frame, self, command=command,
                                         orient="vertical")
         xcommand = partial(self.generate_change_event, self.xscrollbar.set)
         ycommand = partial(self.generate_change_event, self.yscrollbar.set)

@@ -148,8 +148,7 @@ class Terminal:
 class Buffer:
     def __init__(self):
         self.lock = Lock()
-        with self.lock:
-            self.data = ""
+        self.reset()
 
     def write(self, data):
         with self.lock:
@@ -204,6 +203,7 @@ class TkTerminal(Terminal):
         self.closed = False
         self.stdin_working = Lock()
         self.should_clear_screen = False
+        self.set_up = False
 
         self.tk_stdout = Buffer()
         self.tk_stderr = Buffer()
@@ -213,10 +213,15 @@ class TkTerminal(Terminal):
         Thread(target=self.tk_stdout_read, daemon=True).start()
         Thread(target=self.tk_stderr_read, daemon=True).start()
 
+        while not self.set_up:
+            sleep(0.1)
+        del self.set_up
+
     def tk_init(self):
         self.root = BetterTk(titlebar_bg=BG_COLOUR, titlebar_fg=TITLEBAR_COLOUR,
                              titlebar_sep_colour=FG_COLOUR,
                              titlebar_size=TITLEBAR_SIZE)
+        self.root.title("Terminal")
         self.root.buttons["X"].config(command=self.tk_close)
 
         self.text = ScrolledText(self.root, bg=BG_COLOUR, fg=FG_COLOUR,
@@ -230,6 +235,8 @@ class TkTerminal(Terminal):
         self.text.bind("<Return>", self.tk_send_to_stdin)
         self.text.init()
         self.text.focus()
+
+        self.set_up = True
 
         self.tk_mainloop()
         self.root.mainloop()
@@ -273,6 +280,8 @@ class TkTerminal(Terminal):
         else:
             text = self.tk_stderr.read_all()
             text = self.remove_dead_chars(text)
+            if "\r" in text:
+                print(repr(text))
             if len(text) > 0:
                 insert = self.text.index("insert")
                 self.text.insert("end", text)
@@ -282,6 +291,8 @@ class TkTerminal(Terminal):
 
             text = self.tk_stdout.read_all()
             text = self.remove_dead_chars(text)
+            if "\r" in text:
+                print(repr(text))
             if len(text) > 0:
                 insert = self.text.index("insert")
                 self.text.insert("end", text)
@@ -295,21 +306,7 @@ class TkTerminal(Terminal):
 
     @staticmethod
     def remove_dead_chars(text):
-        output = ""
-        i = 0
-        while i < len(text):
-            char = text[i]
-            if char == "\r":
-                if len(text[i+1:]) > 0:
-                    next_char = text[i+1]
-                    if next_char == "\n":
-                        output += text[i]
-                        #output += "\r\n"
-                        #i += 1
-            else:
-                output += text[i]
-            i += 1
-        return output
+        return text.replace("\r", "")
 
     def _tk_send_to_stdin(self):
         with self.stdin_working:
@@ -369,6 +366,8 @@ class TkTerminal(Terminal):
     def run(self, command):
         if self.closed:
             return Exception("Terminal closed by user")
+        self.tk_stdout.reset()
+        self.tk_stderr.reset()
         return super().run(command)
 
     def clear(self):

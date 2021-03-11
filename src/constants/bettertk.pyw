@@ -1,3 +1,4 @@
+from PIL import Image, ImageTk
 import tkinter as tk
 
 
@@ -5,13 +6,15 @@ class BetterTk(tk.Frame):
     def __init__(self, *args, show_close=True, show_minimise=True, bg=None,
                  show_questionmark=False, show_fullscreen=True, _class=tk.Tk,
                  highlightthickness=3, titlebar_bg="white", titlebar_size=1,
-                 titlebar_fg="black", titlebar_sep_colour="black", **kwargs):
+                 titlebar_fg="black", titlebar_sep_colour="black",
+                 sensitivity=10, disable_north_west_resizing=False, **kwargs):
         if bg is None:
             bg = titlebar_bg
         # Set up the window
         self.root = _class(*args, **kwargs)
         self.root.update()
         self.destroyed = False
+        self.sensitivity = sensitivity
         geometry = "+%i+%i" % (self.root.winfo_x(), self.root.winfo_y())
         self.root.overrideredirect(True)
         self.root.geometry(geometry)
@@ -20,17 +23,16 @@ class BetterTk(tk.Frame):
 
         # Master frame so that I can add a grey border around the window
         self.master_frame = tk.Frame(self.root, highlightbackground="grey",
-                                     highlightthickness=1, bd=0)
+                                     highlightthickness=3, bd=0,
+                                     cursor="sizing")
         self.master_frame.pack(expand=True, fill="both")
 
         # The callback for when the "?" is pressed
         self._question = None
 
-        super().__init__(self.master_frame, bd=0)
-        super().pack(expand=True, side="bottom", fill="both")
-
         # Set up the title bar frame
-        self.title_bar = tk.Frame(self.master_frame, bg=titlebar_bg, bd=0)
+        self.title_bar = tk.Frame(self.master_frame, bg=titlebar_bg, bd=0,
+                                  cursor="arrow")
         self.title_bar.pack(side="top", fill="x")
 
         # When the user double clicks on the titlebar
@@ -45,9 +47,16 @@ class BetterTk(tk.Frame):
         self._offsetx = 0
         self._offsety = 0
         self.dragging = False
-        self.root.bind("<Button-1>", self.clickwin)
-        self.root.bind("<ButtonRelease-1>", self.stopclickwin)
-        self.root.bind("<B1-Motion>", self.dragwin)
+        self.root.bind("<Button-1>", self.mouse_press)
+        self.root.bind("<ButtonRelease-1>", self.mouse_release)
+        self.root.bind("<B1-Motion>", self.mouse_motion)
+
+        # Variables for resizing:
+        self.started_resizing = False
+        self.quadrant_resizing = None
+        self.disable_north_west_resizing = disable_north_west_resizing
+        self.resizable_horizontal = True
+        self.resizable_vertical = True
 
         self.title_frame = tk.Frame(self.title_bar, bg=titlebar_bg)
         self.buttons_frame = tk.Frame(self.title_bar, bg=titlebar_bg)
@@ -57,7 +66,8 @@ class BetterTk(tk.Frame):
 
         self.title_label = tk.Label(self.title_frame, text="Better Tk",
                                     bg=titlebar_bg, fg=titlebar_fg)
-        self.title_label.grid(row=1, column=1, sticky="news")
+        self.title_label.grid(row=1, column=2, sticky="news")
+        self.icon_label = None
 
         # Set up all of the buttons
         self.buttons = {}
@@ -91,6 +101,10 @@ class BetterTk(tk.Frame):
             self.buttons.update({"X": button})
             column += 1
 
+        # The actual <tk.Frame> where you can put your widgets
+        super().__init__(self.master_frame, bd=0, cursor="arrow")
+        super().pack(expand=True, side="bottom", fill="both")
+
     def check_parent_titlebar(self, event):
         # Get the widget that was pressed:
         widget = event.widget
@@ -99,12 +113,15 @@ class BetterTk(tk.Frame):
         # its parent's parent's parent and ... until it finds
         # whether or not the widget clicked on is the title bar.
         while widget != self.root:
-            if widget == self:
-                # If it isn't the title bar just stop
+            if widget == self.buttons_frame:
+                # Don't allow moving the window when buttons are clicked
                 return False
+            if widget == self.title_bar:
+                return True
             widget = widget.master
-        return True
+        return False
 
+    # Titlebar buttons:
     def toggle_fullscreen(self, event):
         if not self.check_parent_titlebar(event):
             return None
@@ -114,19 +131,9 @@ class BetterTk(tk.Frame):
         else:
             self.fullscreen()
 
-    def title(self, title):
-        # Changing the title of the window
-        self.title_label.config(text=title)
-
-    def geometry(self, *args, **kwargs):
-        self.root.geometry(*args, **kwargs)
-
     def question(self):
         if self._question is not None:
             self._question()
-
-    def close(self):
-        self.root.destroy()
 
     def minimise(self):
         self.root.withdraw()
@@ -151,36 +158,163 @@ class BetterTk(tk.Frame):
         self.root.attributes("-fullscreen", False)
         self.root.overrideredirect(True)
 
-    def dragwin(self, event):
-        # If started dragging:
+    # Resizing and dragging:
+    def mouse_motion(self, event):
+        # Resizing:
+        if self.started_resizing:
+            new_params = [self.current_width, self.current_height,
+                          self.currentx, self.currenty]
+
+            if "e" in self.quadrant_resizing:
+                self.update_resizing_params(new_params, self.resize_east())
+            if "n" in self.quadrant_resizing:
+                self.update_resizing_params(new_params, self.resize_north())
+            if "s" in self.quadrant_resizing:
+                self.update_resizing_params(new_params, self.resize_south())
+            if "w" in self.quadrant_resizing:
+                self.update_resizing_params(new_params, self.resize_west())
+
+            self.root.geometry("%ix%i+%i+%i" % tuple(new_params))
+            return "break"
+        # Dragging the window:
         if self.dragging:
             x = self.root.winfo_pointerx() - self._offsetx
             y = self.root.winfo_pointery() - self._offsety
             # Move to the cursor's location
             self.root.geometry("+%d+%d"%(x, y))
 
-    def stopclickwin(self, event):
+    def mouse_release(self, event):
         self.dragging = False
+        self.started_resizing = False
 
-    def clickwin(self, event):
+    def mouse_press(self, event):
+        # Resizing the window:
+        if event.widget == self.master_frame:
+            x, y = self.root.winfo_pointerx(), self.root.winfo_pointery()
+            width, height = self.root.winfo_width(), self.root.winfo_height()
+
+            self.current_width, self.current_height = width, height
+            self.currentx = self.root.winfo_rootx()
+            self.currenty = self.root.winfo_rooty()
+
+            x -= self.currentx
+            y -= self.currenty
+
+            quadrant_resizing = ""
+            if self.resizable_vertical:
+                if y + self.sensitivity > height:
+                    quadrant_resizing += "s"
+                if not self.disable_north_west_resizing:
+                    if y < self.sensitivity:
+                        quadrant_resizing += "n"
+            if self.resizable_horizontal:
+                if x + self.sensitivity > width:
+                    quadrant_resizing += "e"
+                if not self.disable_north_west_resizing:
+                    if x < self.sensitivity:
+                        quadrant_resizing += "w"
+
+            if len(quadrant_resizing) > 0:
+                self.started_resizing = True
+                self.quadrant_resizing = quadrant_resizing
+
+        # If it is the title bar start dragging:
         if not self.check_parent_titlebar(event):
             return None
-        # If it is the title bar start dragging:
+        # Dragging the window:
         self.dragging = True
         self._offsetx = event.x+event.widget.winfo_rootx()-\
                         self.root.winfo_rootx()
         self._offsety = event.y+event.widget.winfo_rooty()-\
                         self.root.winfo_rooty()
 
+    # For resizing:
+    def resize_east(self):
+        x = self.root.winfo_pointerx()
+        new_width = x - self.currentx
+        if new_width < self.title_bar.winfo_reqwidth()+5:
+            new_width = self.title_bar.winfo_reqwidth()+5
+        return new_width, None, None, None
+
+    def resize_south(self):
+        y = self.root.winfo_pointery()
+        new_height = y - self.currenty
+        if new_height < self.title_bar.winfo_reqheight()+5:
+            new_height = self.title_bar.winfo_reqheight()+5
+        return None, new_height, None, None
+
+    def resize_north(self):
+        y = self.root.winfo_pointery()
+        dy = self.currenty - y
+        if dy < self.title_bar.winfo_reqheight()+5 - self.current_height:
+            dy = self.title_bar.winfo_reqheight()+5 - self.current_height
+        new_height = self.current_height + dy
+        return None, new_height, None, self.currenty - dy
+
+    def resize_west(self):
+        x = self.root.winfo_pointerx()
+        dx = self.currentx - x
+        if dx < self.title_bar.winfo_reqwidth()+5 - self.current_width:
+            dx = self.title_bar.winfo_reqwidth()+5 - self.current_width
+        new_width = self.current_width + dx
+        return new_width, None, self.currentx - dx, None
+
+    def update_resizing_params(self, _list, _tuple):
+        for i in range(len(_tuple)):
+            element = _tuple[i]
+            if element is not None:
+                _list[i] = element
+
     def destroy(self):
         # Using a flag here because `self.root.destroy()` calls
         # '<this frame>.destroy()' which calls `self.root.destroy()`
         # in an infinite loop
+        # Do NOT call this directly
         if not self.destroyed:
             self.destroyed = True
             self.title_bar.destroy()
             super().destroy()
             self.master_frame.destroy()
+
+    # Normal <tk.Tk> methods:
+    def title(self, title):
+        # Changing the title of the window
+        # Note the name will aways be shows and the window can't be resized
+        # to cover it up.
+        self.title_label.config(text=title)
+        self.root.title(title)
+
+    def focus_force(self):
+        self.root.deiconify()
+        self.root.focus_force()
+
+    def geometry(self, *args, **kwargs):
+        self.root.geometry(*args, **kwargs)
+
+    def close(self):
+        self.root.destroy()
+
+    def iconbitmap(self, filename):
+        if self.icon_label is not None:
+            self.icon_label.destroy()
+        self.root.iconbitmap(filename)
+        self.root.update_idletasks()
+        size = self.title_frame.winfo_height()
+        img = Image.open(filename).resize((size, size), Image.LANCZOS)
+        self.icon = ImageTk.PhotoImage(img, master=self.root)
+        colour = self.root.cget("background")
+        self.icon_label = tk.Label(self.title_frame, image=self.icon, bg=colour)
+        self.icon_label.grid(row=1, column=1, sticky="news")
+
+    def resizable(self, width=None, height=None):
+        if width is not None:
+            self.resizable_horizontal = width
+        if height is not None:
+            self.resizable_vertical = height
+        if (not self.resizable_horizontal) and (not self.resizable_vertical):
+            self.master_frame.config(cursor="arrow")
+        else:
+            self.master_frame.config(cursor="sizing")
 
     def protocol(self, *args, **kwargs):
         raise Exception("Use `<BetterTk>.buttons[\"X\"]"+\
@@ -208,4 +342,4 @@ if __name__ == "__main__":
     entry = tk.Entry(root, bg=BG_COLOUR, fg=FG_COLOUR)
     entry.grid(row=2, column=1, sticky="news")
 
-    #root.mainloop()
+    root.mainloop()

@@ -40,8 +40,9 @@ if OS == "linux":
     RUN_COMMAND = settings.win_lin_command.get().format(file=PATH_EXECUTABLE)
 
 
-FILE_TYPES = (("C++ file", "*.cpp"),
-              ("Text file", "*.txt"),
+FILE_TYPES = (("C++/Header file", "*.cpp *h"),
+              ("Header file", "*.h"),
+              ("C++ file", "*.cpp"),
               ("All types", "*"))
 
 
@@ -88,8 +89,10 @@ class RunnableText:
     def run(self, event=None, args=None):
         if (self.terminal is None) or self.terminal.closed:
             self.terminal = TkTerminal(callback=self.text.update)
+            self.terminal.root.iconbitmap("logo/logo2.ico")
 
         self.terminal.clear()
+        self.terminal.root.focus_force()
         self.terminal.text.focus_force()
 
         # Check if the file is saved
@@ -125,7 +128,7 @@ class RunnableText:
             error = self.terminal.run(command)
             msg = "Process exit code: %s" % str(error)
             self.terminal.stdout_write(msg, add_padding=True)
-            self.terminal.forever_cmd()
+            # self.terminal.forever_cmd()
 
     def save(self, event=None):
         if self.file_name is None:

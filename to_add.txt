@@ -1,5 +1,5 @@
 Editor:
-* None
+* `Ctrl-F`, `Ctrl-R`, `Ctrl-H`
 
 Terminal:
 * Find a way to determine if child is waiting for stdin (kms) - nearly nearly done
@@ -9,5 +9,7 @@ Settings:
 * None
 
 Window:
-* Add to the Windows task bar when user hides the window
-* Add a way to dynamically resize the window
+* Add to the Windows task bar when user hides the window (https://stackoverflow.com/q/66581467/11106801)
+
+Speed:
+* None
