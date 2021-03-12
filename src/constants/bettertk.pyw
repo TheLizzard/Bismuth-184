@@ -5,7 +5,7 @@ import tkinter as tk
 class BetterTk(tk.Frame):
     def __init__(self, *args, show_close=True, show_minimise=True, bg=None,
                  show_questionmark=False, show_fullscreen=True, _class=tk.Tk,
-                 highlightthickness=3, titlebar_bg="white", titlebar_size=1,
+                 highlightthickness=5, titlebar_bg="white", titlebar_size=1,
                  titlebar_fg="black", titlebar_sep_colour="black",
                  sensitivity=10, disable_north_west_resizing=False, **kwargs):
         if bg is None:
@@ -23,8 +23,9 @@ class BetterTk(tk.Frame):
 
         # Master frame so that I can add a grey border around the window
         self.master_frame = tk.Frame(self.root, highlightbackground="grey",
-                                     highlightthickness=3, bd=0,
-                                     cursor="sizing")
+                                     highlightthickness=3, bd=0)
+        self.master_frame.bind("<Enter>", self.change_cursor_resizing)
+        self.master_frame.bind("<Motion>", self.change_cursor_resizing)
         self.master_frame.pack(expand=True, fill="both")
 
         # The callback for when the "?" is pressed
@@ -190,29 +191,12 @@ class BetterTk(tk.Frame):
     def mouse_press(self, event):
         # Resizing the window:
         if event.widget == self.master_frame:
-            x, y = self.root.winfo_pointerx(), self.root.winfo_pointery()
-            width, height = self.root.winfo_width(), self.root.winfo_height()
-
-            self.current_width, self.current_height = width, height
+            self.current_width = self.root.winfo_width()
+            self.current_height = self.root.winfo_height()
             self.currentx = self.root.winfo_rootx()
             self.currenty = self.root.winfo_rooty()
 
-            x -= self.currentx
-            y -= self.currenty
-
-            quadrant_resizing = ""
-            if self.resizable_vertical:
-                if y + self.sensitivity > height:
-                    quadrant_resizing += "s"
-                if not self.disable_north_west_resizing:
-                    if y < self.sensitivity:
-                        quadrant_resizing += "n"
-            if self.resizable_horizontal:
-                if x + self.sensitivity > width:
-                    quadrant_resizing += "e"
-                if not self.disable_north_west_resizing:
-                    if x < self.sensitivity:
-                        quadrant_resizing += "w"
+            quadrant_resizing = self.get_quadrant_resizing()
 
             if len(quadrant_resizing) > 0:
                 self.started_resizing = True
@@ -229,6 +213,43 @@ class BetterTk(tk.Frame):
                         self.root.winfo_rooty()
 
     # For resizing:
+    def change_cursor_resizing(self, event):
+        if self.started_resizing:
+            return None
+        quadrant_resizing = self.get_quadrant_resizing()
+        if quadrant_resizing == "":
+            # Reset the cursor back to "arrow"
+            self.master_frame.config(cursor="arrow")
+        elif (quadrant_resizing == "ne") or (quadrant_resizing == "sw"):
+            self.master_frame.config(cursor="size_ne_sw")
+        elif (quadrant_resizing == "nw") or (quadrant_resizing == "se"):
+            self.master_frame.config(cursor="size_nw_se")
+        elif (quadrant_resizing == "n") or (quadrant_resizing == "s"):
+            self.master_frame.config(cursor="size_ns")
+        elif (quadrant_resizing == "e") or (quadrant_resizing == "w"):
+            self.master_frame.config(cursor="size_we")
+
+    def get_quadrant_resizing(self):
+        x, y = self.root.winfo_pointerx(), self.root.winfo_pointery()
+        width, height = self.root.winfo_width(), self.root.winfo_height()
+
+        x -= self.root.winfo_rootx()
+        y -= self.root.winfo_rooty()
+        quadrant_resizing = ""
+        if self.resizable_vertical:
+            if y + self.sensitivity > height:
+                quadrant_resizing += "s"
+            if not self.disable_north_west_resizing:
+                if y < self.sensitivity:
+                    quadrant_resizing += "n"
+        if self.resizable_horizontal:
+            if x + self.sensitivity > width:
+                quadrant_resizing += "e"
+            if not self.disable_north_west_resizing:
+                if x < self.sensitivity:
+                    quadrant_resizing += "w"
+        return quadrant_resizing
+
     def resize_east(self):
         x = self.root.winfo_pointerx()
         new_width = x - self.currentx
@@ -311,10 +332,7 @@ class BetterTk(tk.Frame):
             self.resizable_horizontal = width
         if height is not None:
             self.resizable_vertical = height
-        if (not self.resizable_horizontal) and (not self.resizable_vertical):
-            self.master_frame.config(cursor="arrow")
-        else:
-            self.master_frame.config(cursor="sizing")
+        return None
 
     def protocol(self, *args, **kwargs):
         raise Exception("Use `<BetterTk>.buttons[\"X\"]"+\
