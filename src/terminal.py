@@ -17,6 +17,7 @@ BG_COLOUR = settings.terminal.bg.get()
 FG_COLOUR = settings.terminal.fg.get()
 TITLEBAR_COLOUR = settings.terminal.titlebar_colour.get()
 TITLEBAR_SIZE = settings.terminal.titlebar_size.get()
+NOTACTIVETITLE_BG = settings.terminal.notactivetitle_bg.get()
 
 WAIT_NEXT_LOOP = settings.terminal.wait_next_loop_ms.get()
 WAIT_STDIN_READ = settings.terminal.wait_stdin_read_ms.get()
@@ -220,7 +221,8 @@ class TkTerminal(Terminal):
     def tk_init(self):
         self.root = BetterTk(titlebar_bg=BG_COLOUR, titlebar_fg=TITLEBAR_COLOUR,
                              titlebar_sep_colour=FG_COLOUR,
-                             titlebar_size=TITLEBAR_SIZE)
+                             titlebar_size=TITLEBAR_SIZE,
+                             notactivetitle_bg=NOTACTIVETITLE_BG)
         self.root.title("Terminal")
         self.root.buttons["X"].config(command=self.tk_close)
 

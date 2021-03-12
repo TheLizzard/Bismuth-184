@@ -27,13 +27,15 @@ BG_COLOUR = settings.editor.bg.get()
 FG_COLOUR = settings.editor.fg.get()
 TITLEBAR_COLOUR = settings.editor.titlebar_colour.get()
 TITLEBAR_SIZE = settings.editor.titlebar_size.get()
+NOTACTIVETITLE_BG = settings.editor.notactivetitle_bg.get()
 
 
 class App:
     def __init__(self):
         self.root = BetterTk(titlebar_bg=BG_COLOUR, titlebar_fg=TITLEBAR_COLOUR,
                              titlebar_sep_colour=FG_COLOUR,
-                             titlebar_size=TITLEBAR_SIZE)
+                             titlebar_size=TITLEBAR_SIZE,
+                             notactivetitle_bg=NOTACTIVETITLE_BG)
         self.root.iconbitmap("logo/logo1.ico")
         self.root.title("C++ Editor by TheLizzard")
         self.root.buttons["X"].config(command=self.ask_close)

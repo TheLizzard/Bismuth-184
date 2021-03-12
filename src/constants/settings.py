@@ -156,7 +156,7 @@ NAMED_COLOURS = ("alice blue", "AliceBlue", "antique white", "AntiqueWhite",
                  "yellow green", "yellow1", "yellow2", "yellow3", "yellow4",
                  "YellowGreen")
 # Also "grey0", "grey1", "grey2", ..., "grey100"
-NAMED_COLOURS += tuple("gray%i"%i for i in range(101))
+NAMED_COLOURS += tuple("grey%i"%i for i in range(101))
 
 
 SETTINGS_HEADER = """
@@ -194,9 +194,10 @@ editor(block):
     bg(colour) = black
     fg(colour) = white
     titlebar_colour(colour) = light grey
+    notactivetitle_bg(colour) = grey20
+    linenumbers_bg(colour) = black
     titlebar_size(int) = 0
     linenumbers_width(int) = 35
-    linenumbers_bg(colour) = black
     time_highlight_brackets_ms(int) = 1500
 
 terminal(block):
@@ -206,6 +207,7 @@ terminal(block):
     bg(colour) = black
     fg(colour) = white
     titlebar_colour(colour) = light grey
+    notactivetitle_bg(colour) = grey20
     titlebar_size(int) = 1
     wait_next_loop_ms(int) = 30
     wait_stdin_read_ms(int) = 100

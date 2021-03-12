@@ -7,19 +7,28 @@ class BetterTk(tk.Frame):
                  show_questionmark=False, show_fullscreen=True, _class=tk.Tk,
                  highlightthickness=5, titlebar_bg="white", titlebar_size=1,
                  titlebar_fg="black", titlebar_sep_colour="black",
-                 sensitivity=10, disable_north_west_resizing=False, **kwargs):
+                 sensitivity=10, disable_north_west_resizing=False,
+                 notactivetitle_bg="grey20", **kwargs):
         if bg is None:
             bg = titlebar_bg
         # Set up the window
         self.root = _class(*args, **kwargs)
+        self.focused_widget = None
+        self.dummy_root = tk.Toplevel(self.root)
+        self.dummy_root.geometry("1x1")
+        self.dummy_root.bind("<FocusIn>", self.focus_main)
         self.root.update()
         self.destroyed = False
+        self.is_full_screen = False
         self.sensitivity = sensitivity
         geometry = "+%i+%i" % (self.root.winfo_x(), self.root.winfo_y())
         self.root.overrideredirect(True)
         self.root.geometry(geometry)
-        self.root.bind("<Map>", self.check_map)
-        self.root.config(background=titlebar_bg)
+        self.dummy_root.geometry(geometry)
+        self.root.bind("<FocusIn>", lambda e:self.change_bg(titlebar_bg))
+        self.root.bind("<FocusOut>", lambda e:self.change_bg(notactivetitle_bg))
+
+        self.root.config(bg=bg)
 
         # Master frame so that I can add a grey border around the window
         self.master_frame = tk.Frame(self.root, highlightbackground="grey",
@@ -103,8 +112,33 @@ class BetterTk(tk.Frame):
             column += 1
 
         # The actual <tk.Frame> where you can put your widgets
-        super().__init__(self.master_frame, bd=0, cursor="arrow")
+        super().__init__(self.master_frame, bd=0, bg=bg, cursor="arrow")
         super().pack(expand=True, side="bottom", fill="both")
+
+    def focus_main(self, event=None):
+        self.root.lift()
+        self.root.deiconify()
+        #pos = self.root.winfo_rootx(), self.root.winfo_rooty()
+        #self.dummy_root.geometry("+%i+%i" % pos)
+        if self.focused_widget is None:
+            self.root.focus_force()
+        else:
+            self.focused_widget.focus_force()
+
+    def get_focused_widget(self, event=None):
+        widget = self.root.focus_get()
+        if not ((widget == self.root) or (widget == None)):
+            self.focused_widget = widget
+
+    def change_bg(self, colour):
+        self.get_focused_widget()
+        items = (self.root, self.title_bar, self.title_frame,
+                 self.buttons_frame, self.title_label)
+        items += tuple(self.buttons.values())
+        if self.icon_label is not None:
+            items += (self.icon_label, )
+        for item in items:
+            item.config(background=colour)
 
     def check_parent_titlebar(self, event):
         # Get the widget that was pressed:
@@ -127,7 +161,7 @@ class BetterTk(tk.Frame):
         if not self.check_parent_titlebar(event):
             return None
         # If it is the title bar toggle fullscreen:
-        if self.root.attributes("-fullscreen"):
+        if self.is_full_screen:
             self.notfullscreen()
         else:
             self.fullscreen()
@@ -137,27 +171,22 @@ class BetterTk(tk.Frame):
             self._question()
 
     def minimise(self):
+        self.dummy_root.iconify()
         self.root.withdraw()
-        self.root.overrideredirect(False)
-        self.root.iconify()
-
-    def check_map(self, event):
-        # Whenever the user clicks on the window from the Windows bar
-        # Kindly plagiarised from:
-        # https://stackoverflow.com/a/52720802/11106801
-        self.root.overrideredirect(True)
 
     def fullscreen(self):
         # This toggles between the `fullscreen` and `notfullscreen` methods
         self.buttons["[]"].config(command=self.notfullscreen)
         self.root.overrideredirect(False)
         self.root.attributes("-fullscreen", True)
+        self.is_full_screen = True
 
     def notfullscreen(self):
         # This toggles between the `fullscreen` and `notfullscreen` methods
         self.buttons["[]"].config(command=self.fullscreen)
         self.root.attributes("-fullscreen", False)
         self.root.overrideredirect(True)
+        self.is_full_screen = False
 
     # Resizing and dragging:
     def mouse_motion(self, event):
@@ -176,13 +205,16 @@ class BetterTk(tk.Frame):
                 self.update_resizing_params(new_params, self.resize_west())
 
             self.root.geometry("%ix%i+%i+%i" % tuple(new_params))
+            new_params = (new_params[2] + 75, new_params[3] + 20)
+            self.dummy_root.geometry("+%i+%i" % new_params)
             return "break"
         # Dragging the window:
         if self.dragging:
             x = self.root.winfo_pointerx() - self._offsetx
             y = self.root.winfo_pointery() - self._offsety
             # Move to the cursor's location
-            self.root.geometry("+%d+%d"%(x, y))
+            self.root.geometry("+%d+%d" % (x, y))
+            self.dummy_root.geometry("+%i+%i" % (x + 75, y + 20))
 
     def mouse_release(self, event):
         self.dragging = False
@@ -253,30 +285,30 @@ class BetterTk(tk.Frame):
     def resize_east(self):
         x = self.root.winfo_pointerx()
         new_width = x - self.currentx
-        if new_width < self.title_bar.winfo_reqwidth()+5:
-            new_width = self.title_bar.winfo_reqwidth()+5
+        if new_width < 240:
+            new_width = 240
         return new_width, None, None, None
 
     def resize_south(self):
         y = self.root.winfo_pointery()
         new_height = y - self.currenty
-        if new_height < self.title_bar.winfo_reqheight()+5:
-            new_height = self.title_bar.winfo_reqheight()+5
+        if new_height < 80:
+            new_height = 80
         return None, new_height, None, None
 
     def resize_north(self):
         y = self.root.winfo_pointery()
         dy = self.currenty - y
-        if dy < self.title_bar.winfo_reqheight()+5 - self.current_height:
-            dy = self.title_bar.winfo_reqheight()+5 - self.current_height
+        if dy < 80 - self.current_height:
+            dy = 80 - self.current_height
         new_height = self.current_height + dy
         return None, new_height, None, self.currenty - dy
 
     def resize_west(self):
         x = self.root.winfo_pointerx()
         dx = self.currentx - x
-        if dx < self.title_bar.winfo_reqwidth()+5 - self.current_width:
-            dx = self.title_bar.winfo_reqwidth()+5 - self.current_width
+        if dx < 240 - self.current_width:
+            dx = 240 - self.current_width
         new_width = self.current_width + dx
         return new_width, None, self.currentx - dx, None
 
@@ -304,6 +336,7 @@ class BetterTk(tk.Frame):
         # to cover it up.
         self.title_label.config(text=title)
         self.root.title(title)
+        self.dummy_root.title(title)
 
     def focus_force(self):
         self.root.deiconify()
@@ -319,6 +352,7 @@ class BetterTk(tk.Frame):
         if self.icon_label is not None:
             self.icon_label.destroy()
         self.root.iconbitmap(filename)
+        self.dummy_root.iconbitmap(filename)
         self.root.update_idletasks()
         size = self.title_frame.winfo_height()
         img = Image.open(filename).resize((size, size), Image.LANCZOS)
@@ -347,7 +381,7 @@ if __name__ == "__main__":
 
     root = BetterTk(show_questionmark=True, titlebar_bg=BG_COLOUR,
                     titlebar_fg=TITLEBAR_COLOUR, titlebar_sep_colour=FG_COLOUR,
-                    titlebar_size=TITLEBAR_SIZE)
+                    titlebar_size=TITLEBAR_SIZE, bg="black")
 
     def function():
         print("question was pressed")
