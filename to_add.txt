@@ -9,7 +9,7 @@ Settings:
 * None
 
 Window:
-* Add to the Windows task bar when user hides the window (https://stackoverflow.com/q/66581467/11106801)
+* None
 
 Speed:
 * None

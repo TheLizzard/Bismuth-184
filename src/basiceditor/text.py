@@ -129,6 +129,7 @@ class BasicText(tk.Text):
                         self.redo()
                     else:
                         self.undo()
+                return "break"
             elif "Alt" not in state:
                 with self.separatorblocker:
                     self.delete_selected()

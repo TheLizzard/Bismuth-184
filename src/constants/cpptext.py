@@ -35,17 +35,28 @@ class CPPText(ColouredLinedScrolledBarredText):
             return "break"
         for open, close, _ in BRACKETS:
             if event.char == close:
-                super().after(0, self._highlight_bracket, open)
+                super().after(0, self._highlight_bracket, open, close)
+                return None
 
-    def _highlight_bracket(self, open):
+    def _highlight_bracket(self, open, close):
         skip = 0
-        while super().get("insert-%ic" % (skip+1), "insert-%ic" % skip) != open:
+        open_brackets = 1
+        char = self.get_char_insert_with_skip(skip)
+        while (char != open) or (open_brackets != 0):
             skip += 1
+            char = self.get_char_insert_with_skip(skip)
+            if char == close:
+                open_brackets += 1
+            if char == open:
+                open_brackets -= 1
             if super().compare("insert-%ic" % (skip+1), "==", "0.0"):
                 return None
         start = super().index("insert-%ic" % (skip+1))
         end = super().index("insert")
         self.add_bracket_highlight(start, end)
+
+    def get_char_insert_with_skip(self, skip):
+        return super().get("insert-%ic" % (skip+1), "insert-%ic" % skip)
 
     def add_bracket_highlight(self, start, end):
         super().tag_add("bracket highlighter", start, end)
