@@ -141,7 +141,7 @@ class Terminal:
         #return text
         text = " %s " % text
         length = len(text)
-        p1 = "="*int((WIDTH-length)/2+0.5)
+        p1 = "="*int((WIDTH-length)/2+1)
         p2 = "="*int((WIDTH-length)/2)
         return p1 + text + p2
 
@@ -224,6 +224,7 @@ class TkTerminal(Terminal):
                              titlebar_size=TITLEBAR_SIZE,
                              notactivetitle_bg=NOTACTIVETITLE_BG)
         self.root.title("Terminal")
+        self.root.iconbitmap("logo/logo2.ico")
         self.root.buttons["X"].config(command=self.tk_close)
 
         self.text = ScrolledText(self.root, bg=BG_COLOUR, fg=FG_COLOUR,

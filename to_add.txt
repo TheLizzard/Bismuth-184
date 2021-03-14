@@ -1,5 +1,8 @@
 Editor:
 * `Ctrl-F`, `Ctrl-R`, `Ctrl-H`
+* Bug when "\n" pressed and text is selected
+* Bug when double clicking ".a|aa"
+* All chars are added to the undo stack
 
 Terminal:
 * Find a way to determine if child is waiting for stdin (kms) - nearly nearly done

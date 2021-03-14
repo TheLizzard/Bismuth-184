@@ -37,22 +37,31 @@ class App:
                              titlebar_size=TITLEBAR_SIZE,
                              notactivetitle_bg=NOTACTIVETITLE_BG)
         self.root.iconbitmap("logo/logo1.ico")
-        self.root.title("C++ Editor by TheLizzard")
+        self.change_title("Untitled")
         self.root.buttons["X"].config(command=self.ask_close)
         self.text_widget = CPPText(self.root, bg=BG_COLOUR, fg=FG_COLOUR,
                                    font=FONT, height=HEIGHT, width=WIDTH)
         self.text_widget.pack(fill="both", expand=True)
         self.text_widget.insert("end", SAMPLE_CODE)
-        self.text_widget_wrapper = RunnableText(self.text_widget)
+        self.text_widget_wrapper = RunnableText(self.text_widget,
+                                                self.change_title,
+                                                self.ask_close_file)
         self.text_widget.bind("<F1>", self.change_settings)
 
-    def ask_close(self):
-        result = self.text_widget_wrapper.ask_close()
-        if result != "saved":
-            msg = "Are you sure you want to exit?"
-            result = messagebox.askyesno("Exit", msg, default="no")
-            if not result:
+    def ask_close_file(self):
+        if not self.text_widget_wrapper.is_saved():
+            msg = "Do you want to save the file?"
+            result = messagebox.askyesnocancel("Exit", msg, default="yes")
+            if result is None:
+                return "break"
+            elif result:
+                self.text_widget_wrapper.save()
+            else:
                 return None
+
+    def ask_close(self):
+        if self.ask_close_file() == "break":
+            return "break"
         self.text_widget_wrapper.close()
         self.root.close()
 
@@ -61,6 +70,12 @@ class App:
 
     def mainloop(self):
         self.root.mainloop()
+
+    def change_title(self, filename):
+        #if not self.text_widget_wrapper.is_saved():
+        #    filename = "*" + filename + "*"
+        title = "C++ Editor by TheLizzard - %s" % filename
+        self.root.title(title)
 
 
 app = App()

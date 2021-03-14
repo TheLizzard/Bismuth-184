@@ -47,7 +47,10 @@ FILE_TYPES = (("C++/Header file", "*.cpp *h"),
 
 
 class RunnableText:
-    def __init__(self, text_widget):
+    def __init__(self, text_widget, change_title_callback=None,
+                 open_file_callback=None):
+        self.open_file_callback = open_file_callback
+        self.change_title = change_title_callback
         self.text = text_widget
         self.saved_text = None
         self.file_name = None
@@ -77,9 +80,10 @@ class RunnableText:
         DEFAULT_ARGS = tuple(inputs)
         self.run(event, inputs)
 
-    def ask_close(self):
-        if self.saved_text == self.text.get("0.0", "end").rstrip():
-            return "saved"
+    def is_saved(self):
+        no_file = self.saved_text is None
+        saved_to_file = self.saved_text == self.text.get("0.0", "end").rstrip()
+        return no_file or saved_to_file
 
     def close(self):
         if self.terminal is not None:
@@ -89,7 +93,6 @@ class RunnableText:
     def run(self, event=None, args=None):
         if (self.terminal is None) or self.terminal.closed:
             self.terminal = TkTerminal(callback=self.text.update)
-            self.terminal.root.iconbitmap("logo/logo2.ico")
 
         self.terminal.clear()
         self.terminal.root.focus_force()
@@ -135,22 +138,29 @@ class RunnableText:
             self.saveas()
         else:
             self._save(self.file_name)
+        return "break"
 
     def open(self, event=None):
+        if self.open_file_callback is not None:
+            if self.open_file_callback() == "break":
+                return "break"
         file = filedialog.askopenfilename(filetypes=FILE_TYPES)
         if (file != "") and (file != ()):
             self.file_name = file
             self._open(file)
+        return "break"
 
     def _open(self, filename):
         with open(filename, "r") as file:
             text = file.read().rstrip()
             self.saved_text = text
             self.text.delete("0.0", "end")
-            self.text.insert("end", text)
+            self.text.insert("end", text.rstrip())
             self.text.see("end")
-        self.text.generate_changed_event()
-        #self.root.title(os.path.basename(filename))
+        self.text.generate_view_changed_event()
+        if self.change_title is not None:
+            self.change_title(os.path.basename(filename))
+        return "break"
 
     def saveas(self, event=None):
         file = filedialog.asksaveasfilename(filetypes=FILE_TYPES,
@@ -158,15 +168,16 @@ class RunnableText:
         if file != "":
             self.file_name = file
             self.save(file)
-        self.text.generate_changed_event()
+        return "break"
 
     def _save(self, filename):
-        text = self.text.get("0.0", "end")
+        text = self.text.get("0.0", "end").rstrip()
         with open(filename, "w") as file:
             file.write(text)
-            self.saved_text = text.rstrip()
-        self.text.generate_changed_event()
-        #self.root.title(os.path.basename(filename))
+            self.saved_text = text
+        if self.change_title is not None:
+            self.change_title(os.path.basename(filename))
+        return "break"
 
 
 class Question:

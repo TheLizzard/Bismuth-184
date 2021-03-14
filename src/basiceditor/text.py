@@ -120,16 +120,17 @@ class BasicText(tk.Text):
                     self.select_all()
                 elif char.lower() == "c":
                     self.copy()
+                    return "break"
                 elif char.lower() == "v":
                     self.paste()
                 elif char.lower() == "x":
                     self.cut()
+                    return "break"
                 elif char.lower() == "z":
                     if "Shift" in state:
                         self.redo()
                     else:
                         self.undo()
-                return "break"
             elif "Alt" not in state:
                 with self.separatorblocker:
                     self.delete_selected()
@@ -219,6 +220,7 @@ class BasicText(tk.Text):
         return "break"
 
     def backspace_pressed(self, event):
+        self.generate_view_changed_event()
         # If the user has selected something delete it
         if self.delete_selected():
             return "break"
@@ -227,6 +229,7 @@ class BasicText(tk.Text):
             return self.backspace(super().index("insert"))
 
     def delete_pressed(self, event):
+        self.generate_view_changed_event()
         # If the user has selected something delete it
         if self.delete_selected():
             return "break"
