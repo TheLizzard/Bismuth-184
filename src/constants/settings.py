@@ -6,6 +6,7 @@ import threading
 import platform
 import struct
 import copy
+import sys
 import ast
 import os
 import re
@@ -281,8 +282,13 @@ class Settings:
             self.__dict__[key] = value
 
     def update_from_file(self, filename: str):
-        with open(filename, "r") as file:
-            self.update_from_string(file.read())
+        try:
+            with open(filename, "r") as file:
+                self.update_from_string(file.read())
+        except:
+            sys.stderr.write("Couldn't find the settings file so using"+\
+                             "the default settings.\n")
+            self.update(parse(DEFAULT_SETTINGS))
 
     def update_from_string(self, text: str):
         # Make sure we have all of the settings:

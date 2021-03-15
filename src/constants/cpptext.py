@@ -197,6 +197,7 @@ class CPPText(ColouredLinedScrolledBarredText):
         return "break"
 
     def cpp_enter_pressed(self, event):
+        super().delete_selected()
         last_2_chars = super().get("insert-1c", "insert+1c")
         insert = super().index("insert")
         text = self.get_line_text(insert)

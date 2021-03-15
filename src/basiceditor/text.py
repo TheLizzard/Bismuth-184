@@ -1,4 +1,5 @@
 from functools import partial
+from time import perf_counter
 import tkinter as tk
 
 from .scrollbar import AutoScrollbar
@@ -19,30 +20,13 @@ IGNORE_KEYS = ("Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L",
                "Clear", "Next", "Prior", "BackSpace", "Delete")
 
 
-class PauseSeparators:
-    def __init__(self, text_widget):
-        self.text_widget = text_widget
-        self.autoseparators = self.text_widget.cget("autoseparators")
-
-    def __enter__(self):
-        self.text_widget.edit_separator()
-        if self.autoseparators:
-            self.text_widget.config(autoseparators=False)
-
-    def __exit__(self, *args):
-        self.text_widget.edit_separator()
-        if self.autoseparators:
-            self.text_widget.config(autoseparators=True)
-
-
 class BasicText(tk.Text):
     def __init__(self, master, wrap="none", undo=True, insertbackground=None,
                  call_init=True, **kwargs):
         if (insertbackground is None) and ("fg" in kwargs):
             insertbackground = kwargs["fg"]
-        super().__init__(master, wrap=wrap, undo=undo,
+        super().__init__(master, wrap=wrap, undo=undo, autoseparators=False,
                          insertbackground=insertbackground, **kwargs)
-        self.separatorblocker = PauseSeparators(self)
         if call_init:
             self.init()
 
@@ -52,6 +36,8 @@ class BasicText(tk.Text):
     def init(self):
         # There is a class that takes over some of the functions (Colorizer)
         # so we are going to have this here
+        self.chars_since_last_sep = 100
+        self.time_last_sep = perf_counter()
         self.bind("<Key>", self.add_text)
         self.bind("<Return>", self.generate_view_changed_event)
         self.bind("<Return>", lambda e: self.after(0, self.see_insert))
@@ -80,7 +66,7 @@ class BasicText(tk.Text):
         insert = super().index("@%i,%i" % (event.x, event.y))
         self.mark_set("insert", insert)
 
-        chars_skip_left = self._ctrl_left(insert)
+        chars_skip_left = self._ctrl_left(super().index(insert+"+1c"))-1
         chars_skip_right = self._ctrl_right(insert)
         left = "insert-%ic" % chars_skip_left
         right = "insert+%ic" % chars_skip_right
@@ -120,11 +106,17 @@ class BasicText(tk.Text):
                     self.select_all()
                 elif char.lower() == "c":
                     self.copy()
+                    # Stop code execution before it reaches
+                    # `self.see_insert()` down there (at the
+                    # end of this function)
                     return "break"
                 elif char.lower() == "v":
                     self.paste()
                 elif char.lower() == "x":
                     self.cut()
+                    # Stop code execution before it reaches
+                    # `self.see_insert()` down there (at the
+                    # end of this function)
                     return "break"
                 elif char.lower() == "z":
                     if "Shift" in state:
@@ -132,15 +124,26 @@ class BasicText(tk.Text):
                     else:
                         self.undo()
             elif "Alt" not in state:
-                with self.separatorblocker:
-                    self.delete_selected()
-                    super().insert("insert", char)
+                if char in ALPHANUMERIC:
+                    self.chars_since_last_sep += 1
+                    if (self.chars_since_last_sep >= 5) or\
+                       (perf_counter() - self.time_last_sep > 3):
+                        super().edit_separator()
+                        self.chars_since_last_sep = 0
+                        self.time_last_sep = perf_counter()
+                else:
+                    super().edit_separator()
+                self.delete_selected()
+                super().insert("insert", char)
+                if char not in ALPHANUMERIC:
+                    super().edit_separator()
 
         # Tab pressed
         elif char == "Tab":
-            with self.separatorblocker:
-                self.delete_selected()
-                super().insert("insert", " "*4)
+            super().edit_separator()
+            self.delete_selected()
+            super().insert("insert", " "*4)
+            super().edit_separator()
 
         # Left key pressed
         elif char == "Left":
@@ -351,9 +354,10 @@ class BasicText(tk.Text):
                 self.mark_set("insert", sel[1])
                 return True
 
-        with self.separatorblocker:
-            self.delete_selected()
-            self.insert("insert", text_copied)
+        super().edit_separator()
+        self.delete_selected()
+        self.insert("insert", text_copied)
+        super().edit_separator()
         return True
 
     def cut(self):
@@ -544,6 +548,6 @@ if __name__ == "__main__":
     text_widget = BarredScrolledLinedText(root, bg="black", fg="white")
     text_widget.pack(fill="both", expand=True)
     text_widget.bind("<BackSpace>", callback)
-    text = r"C:\Users\TheLizzard\Documents\GitHub\CPP-IDLE\src>"
+    text = r".aaa"
     text_widget.insert("end", text)
     root.mainloop()
