@@ -112,8 +112,10 @@ class BasicText(tk.Text):
                     return "break"
                 elif char.lower() == "v":
                     self.paste()
+                    self.generate_view_changed_event()
                 elif char.lower() == "x":
                     self.cut()
+                    self.generate_view_changed_event()
                     # Stop code execution before it reaches
                     # `self.see_insert()` down there (at the
                     # end of this function)
@@ -123,6 +125,7 @@ class BasicText(tk.Text):
                         self.redo()
                     else:
                         self.undo()
+                    self.generate_view_changed_event()
             elif "Alt" not in state:
                 if char in ALPHANUMERIC:
                     self.chars_since_last_sep += 1
@@ -467,7 +470,7 @@ class ScrolledLinedText(LinedText):
 
 
 class BarredScrolledLinedText(ScrolledLinedText):
-    FOTMAT = "Line: %s\tCol: %s"
+    FOTMAT = "Line: %s    Col: %s"
     def __init__(self, master, **kwargs):
         self.barredframe = tk.Frame(master, bd=0)
 

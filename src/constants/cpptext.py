@@ -90,48 +90,51 @@ class CPPText(ColouredLinedScrolledBarredText):
                     super().tag_add(bracket, "matchStart", "matchEnd")
 
     def indent_lines(self, event):
-        with self.separatorblocker:
-            sel = super().get_sel()
-            if sel is None:
-                start = int(float(super().index("insert")))
-                end = start
-            else:
-                start = int(float(sel[0]))
-                end = int(float(sel[1]))
-            for line in range(start, end+1):
-                super().insert(str(line)+".0", " "*4)
+        super().edit_separator()
+        sel = super().get_sel()
+        if sel is None:
+            start = int(float(super().index("insert")))
+            end = start
+        else:
+            start = int(float(sel[0]))
+            end = int(float(sel[1]))
+        for line in range(start, end+1):
+            super().insert(str(line)+".0", " "*4)
+        super().edit_separator()
         super().generate_changed_event()
 
     def unindent_lines(self, event):
-        with self.separatorblocker:
-            sel = super().get_sel()
-            if sel is None:
-                start = int(float(super().index("insert")))
-                end = start
-            else:
-                start = int(float(sel[0]))
-                end = int(float(sel[1]))
-            for line in range(start, end+1):
-                line = str(line)+".0"
-                for i in range(4):
-                    if super().get(line, line+"+1c") == " ":
-                        super().delete(line, line+"+1c")
-                    else:
-                        break
+        super().edit_separator()
+        sel = super().get_sel()
+        if sel is None:
+            start = int(float(super().index("insert")))
+            end = start
+        else:
+            start = int(float(sel[0]))
+            end = int(float(sel[1]))
+        for line in range(start, end+1):
+            line = str(line)+".0"
+            for i in range(4):
+                if super().get(line, line+"+1c") == " ":
+                    super().delete(line, line+"+1c")
+                else:
+                    break
+        super().edit_separator()
         super().generate_changed_event()
 
     def toggle_comment_lines(self, event):
-        with self.separatorblocker:
-            sel = super().get_sel()
-            if sel is None:
-                start = int(float(super().index("insert")))
-                end = start
-            else:
-                start = int(float(sel[0]))
-                end = int(float(sel[1]))
-            for line in range(start, end+1):
-                line = str(line)+".0"
-                self.toggle_comment_line(line)
+        super().edit_separator()
+        sel = super().get_sel()
+        if sel is None:
+            start = int(float(super().index("insert")))
+            end = start
+        else:
+            start = int(float(sel[0]))
+            end = int(float(sel[1]))
+        for line in range(start, end+1):
+            line = str(line)+".0"
+            self.toggle_comment_line(line)
+        super().edit_separator()
         super().generate_changed_event()
         return "break"
 

@@ -282,9 +282,6 @@ class TkTerminal(Terminal):
             self.should_clear_screen = False
         else:
             text = self.tk_stderr.read_all()
-            text = self.remove_dead_chars(text)
-            if "\r" in text:
-                print(repr(text))
             if len(text) > 0:
                 insert = self.text.index("insert")
                 self.text.insert("end", text)
@@ -293,9 +290,6 @@ class TkTerminal(Terminal):
                 self.text.see("insert")
 
             text = self.tk_stdout.read_all()
-            text = self.remove_dead_chars(text)
-            if "\r" in text:
-                print(repr(text))
             if len(text) > 0:
                 insert = self.text.index("insert")
                 self.text.insert("end", text)
@@ -306,10 +300,6 @@ class TkTerminal(Terminal):
             self.tk_close()
         else:
             self.root.after(WAIT_NEXT_LOOP, self.tk_mainloop)
-
-    @staticmethod
-    def remove_dead_chars(text):
-        return text.replace("\r", "")
 
     def _tk_send_to_stdin(self):
         with self.stdin_working:
@@ -353,12 +343,22 @@ class TkTerminal(Terminal):
 
     def tk_stdout_read(self):
         while not self.closed:
-            data = self.ptrs["stdout"].read(1).decode()
-            self.tk_stdout.write(data)
+            char = self.ptrs["stdout"].read(1)
+            if char != "\r":
+                self.tk_stdout.write(self.decode_char(char))
 
     def tk_stderr_read(self):
         while not self.closed:
-            self.tk_stderr.write(self.ptrs["stderr"].read(1).decode())
+            char = self.ptrs["stderr"].read(1)
+            if char != "\r":
+                self.tk_stderr.write(self.decode_char(char))
+
+    @staticmethod
+    def decode_char(char):
+        try:
+            return char.decode()
+        except:
+            return "\\" + hex(ord(char))[1:]
 
     def tk_close(self):
         self.forver_cmd_running = False
@@ -386,5 +386,6 @@ class TkTerminal(Terminal):
 
 if __name__ == "__main__":
     terminal = TkTerminal()
-    terminal.run("cmd")
-    #terminal.forever_cmd()
+    terminal.run(r"compiled\ccarotmodule.exe")
+    # terminal.run("cmd")
+    # terminal.forever_cmd()
