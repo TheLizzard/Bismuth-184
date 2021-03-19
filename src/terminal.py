@@ -371,6 +371,7 @@ class TkTerminal(Terminal):
             return Exception("Terminal closed by user")
         self.tk_stdout.reset()
         self.tk_stderr.reset()
+        super().stop_process()
         return super().run(command)
 
     def clear(self):

@@ -93,6 +93,8 @@ class RunnableText:
     def run(self, event=None, args=None):
         if (self.terminal is None) or self.terminal.closed:
             self.terminal = TkTerminal(callback=self.text.update)
+        else:
+            self.terminal.stop_process()
 
         self.terminal.clear()
         self.terminal.root.focus_force()

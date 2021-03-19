@@ -132,6 +132,8 @@ dmypy.json
 src/C++ programs/
 src/basiceditor/constants/
 src/failed tries/
+src/file_explorer/test folder/
+src/file_explorer/file_explorer old.py
 src/output.file
 src/profiler.py
 solution.txt
