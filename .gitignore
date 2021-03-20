@@ -128,12 +128,15 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Custom files/folders:
+# Custom files
+# Non editor related files
 src/C++ programs/
+# Debug files
 src/basiceditor/constants/
 src/failed tries/
 src/file_explorer/test folder/
-src/file_explorer/file_explorer old.py
 src/output.file
 src/profiler.py
-solution.txt
+# Old/Useless files
+src/file_explorer/file_explorer old.py
+src/file_explorer/file_explorer old old.py

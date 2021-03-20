@@ -1,6 +1,7 @@
 from PIL import Image, ImageTk
 from itertools import chain
 import tkinter as tk
+import shutil
 import os
 
 
@@ -29,14 +30,20 @@ class GroupedCanvas(tk.Canvas):
         self.groups.append(items)
 
     def move(self, item, dx, dy):
-        if item in chain.from_iterable(self.groups):
-            for group in self.groups:
-                if item in group:
-                    for group_item in group:
-                        super().move(group_item, dx, dy)
-                    return None
-            raise Exception("An error occured. GL figuring it out")
-        super().move(item, dx, dy)
+        group = self.get_group(item)
+        for group_item in group:
+            super().move(group_item, dx, dy)
+
+    def tag_raise(self, tag):
+        group = self.get_group(tag)
+        for group_item in group:
+            super().tag_raise(group_item)
+
+    def get_group(self, item):
+        for group in self.groups:
+            if item in group:
+                return group
+        raise ValueError("The item isn't in a group.")
 
 
 class FileExplorer(tk.Frame):
@@ -65,15 +72,80 @@ class FileExplorer(tk.Frame):
         self.arrow_width = self.get_arrow_width() + 2
 
         self.file_structure = []
+        self.called_added_folders = []
         self.reset()
 
         self.idx = 0
         self.tkimgs = [] # A list so that gc doesn't collect out images
+
         self.rectangle_selected = None
+        self.selected_file_idx = None
         self.file_selected = None
 
-        self.canvas.bind("<Button-1>", self.select)
+        self.button1_down = False
+        self.dragging = False
+
+        self.canvas.bind("<Button-1>", self.mouse_down)
+        self.canvas.bind("<B1-Motion>", self.mouse_motion)
+        self.canvas.bind("<ButtonRelease-1>", self.mouse_up)
         self.canvas.bind("<Double-Button-1>", self.open_file)
+
+        self.bind("<<_FolderSelected>>", self.on_select)
+        self.bind("<<_FileSelected>>", self.on_select)
+
+    def mouse_down(self, event):
+        self.select(event)
+        self.mouse_lastx = self.canvas.canvasx(event.x)
+        self.mouse_lasty = self.canvas.canvasy(event.y)
+
+    def on_select(self, event):
+        self.button1_down = True
+        self.dragging = False
+
+    def mouse_up(self, event):
+        self.button1_down = False
+        if self.dragging:
+            moving_file_idx = self.selected_file_idx
+            this_file = self.idx_to_full_path[moving_file_idx]
+            new_idx = self.pos_to_idx(self.canvas.canvasy(event.y))
+            if new_idx >= self.idx:
+                new_idx = 0
+            new_file = self.idx_to_file[new_idx]
+
+            new_file_location_data = self.shown_files_dict[new_file]
+            new_dir = new_file_location_data[3]
+            if not new_file_location_data[2]:
+                new_dir = os.path.dirname(new_dir)
+
+            try:
+                shutil.move(this_file, new_dir)
+                old_file_structure = self.file_structure
+                called_added_folders = self.called_added_folders
+                self.called_added_folders = []
+                self.file_structure = []
+                for args in called_added_folders:
+                    self.add_dir(*args)
+                self.scared_copy_file_structure(old_file_structure)
+            except:
+                pass
+            finally:
+                self.dragging = False
+                self.redraw_tree()
+
+    def mouse_motion(self, event):
+        if not self.button1_down:
+            return None
+        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+        moving = self.pos_to_idx(y) == self.selected_file_idx
+        if moving and (not self.dragging):
+            return None
+        self.dragging = True
+        if self.button1_down:
+            dx, dy = x - self.mouse_lastx, y - self.mouse_lasty
+            self.canvas.move(self.rectangle_selected, dx, dy)
+            self.canvas.tag_raise(self.rectangle_selected)
+        self.mouse_lastx = x
+        self.mouse_lasty = y
 
     def reset(self):
         self.canvas.delete("all")
@@ -114,6 +186,7 @@ class FileExplorer(tk.Frame):
         file_structure = self._add_dir(parent, folder)
         self.file_structure.append([folder, file_structure, expanded,
                                     os.path.abspath(parent + "/" + folder)])
+        self.called_added_folders.append((parent, folder, expanded))
 
     def _add_dir(self, root_path, folder_searching):
         """
@@ -133,6 +206,28 @@ class FileExplorer(tk.Frame):
                 output.append((folder_searching + "/" + file, file_path))
             continue
         return output
+
+    def scared_copy_file_structure(self, scared_file_structure,
+                                   actual_tree=None):
+        """
+        Coppies only the `expanded` part of `scared_file_structure`
+        into `self.file_structure``
+        """
+        if actual_tree is None:
+            actual_tree = self.file_structure
+        for item in actual_tree:
+            if len(item) != 2:
+                found = None
+                for candidate_item in scared_file_structure:
+                    if found is not None:
+                        continue
+                    if len(candidate_item) != 2:
+                        if candidate_item[-1] == item[-1]:
+                            found = candidate_item
+                if found is not None:
+                    item[2] = found[2]
+                    self.scared_copy_file_structure(found[1],
+                                                    item[1])
 
     def get_all_files_folders(self, path):
         """
@@ -247,9 +342,9 @@ class FileExplorer(tk.Frame):
             else:
                 select the folder
         """
-        x = self.canvas.canvasy(event.x)
+        x = self.canvas.canvasx(event.x)
         y = self.canvas.canvasy(event.y)
-        idx = int((y - self.pady) / self.box_height)
+        idx = self.pos_to_idx(y)
         if idx >= self.idx:
             return None
 
@@ -264,19 +359,22 @@ class FileExplorer(tk.Frame):
                 self._open_folder(idx, file)
                 return None
             self.event_generate("<<FolderSelected>>", when="tail")
+            self.event_generate("<<_FolderSelected>>", when="tail")
         else:
             self.event_generate("<<FileSelected>>", when="tail")
+            self.event_generate("<<_FileSelected>>", when="tail")
 
         # Change the selected rectangle's bg to "#0000a0"
         if self.rectangle_selected is not None:
             self.canvas.itemconfig(self.rectangle_selected, fill=self.bg)
         self.rectangle_selected = rectangle
         self.file_selected = file
+        self.selected_file_idx = idx
         self.canvas.itemconfig(rectangle, fill="#0000a0")
 
     def open_file(self, event):
         y = self.canvas.canvasy(event.y)
-        idx = int((y - self.pady) / self.box_height)
+        idx = self.pos_to_idx(y)
         if idx >= self.idx:
             return None
 
@@ -288,24 +386,33 @@ class FileExplorer(tk.Frame):
         else:
             self.event_generate("<<FileOpened>>", when="tail")
 
+    def search_filestructure(self, file, tree=None):
+        if tree is None:
+            tree = self.file_structure
+        for item in tree:
+            if item[0] == file:
+                return item
+            if len(item) != 2:
+                result = self.search_filestructure(file, item[1])
+                if result is not None:
+                    return result
+
+    def search_filestructure_full(self, file, tree=None):
+        if tree is None:
+            tree = self.file_structure
+        for item in tree:
+            if item[-1] == file:
+                return item
+            if len(item) != 2:
+                result = self.search_filestructure(file, item[1])
+                if result is not None:
+                    return result
+
     def _open_folder(self, idx, file):
         full_path = self.idx_to_full_path[idx]
         self.event_generate("<<FolderOpened>>", when="tail")
 
-        # Find the folder's list location in self.file_structure
-        # So the we can change its `shown` value
-        trees = [self.file_structure]
-        searching_for = None
-        while searching_for is None:
-            if len(trees) == 0:
-                raise ValueError("An error occured. GL solving it.")
-            tree = trees.pop()
-            for item in tree:
-                if not isinstance(item, str):
-                    if item[0] == file:
-                        searching_for = item
-                        break
-                    trees.append(item[1])
+        searching_for = self.search_filestructure(file)
         _, files_inside_folder, already_shown, fill_path = searching_for
         # Change the `show` value
         searching_for[2] = not already_shown
@@ -330,10 +437,17 @@ class FileExplorer(tk.Frame):
 
     def idx_to_pos(self, idx):
         """
-        Converts `idx` to y position. The `+5` is there because otherwise
+        Converts `idx` to y position. The `pady` is there because otherwise
         the whole tree is too high (no pady)
         """
         return idx * self.box_height + self.pady
+
+    def pos_to_idx(self, pos):
+        """
+        Converts `idx` to y position. The `pady` is there because otherwise
+        the whole tree is too high (no pady)
+        """
+        return int((pos - self.pady) / self.box_height)
 
 
 if __name__ == "__main__":
