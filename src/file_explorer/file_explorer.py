@@ -64,16 +64,23 @@ class FileExplorer(tk.Frame):
         self.box_height = self.text_height * 1.2
         self.arrow_width = self.get_arrow_width() + 2
 
-        self.idx = 0
         self.file_structure = []
-        self.shown_files_dict = {} # file: (idx, (canvas_ids), isdir)
-        self.idx_files_dict = {} # idx: file
+        self.reset()
+
+        self.idx = 0
         self.tkimgs = [] # A list so that gc doesn't collect out images
         self.rectangle_selected = None
         self.file_selected = None
 
         self.canvas.bind("<Button-1>", self.select)
         self.canvas.bind("<Double-Button-1>", self.open_file)
+
+    def reset(self):
+        self.canvas.delete("all")
+        self.idx = 0
+        self.shown_files_dict = {} # file: (idx, (canvas_ids), isdir, full_path)
+        self.idx_to_file = {} #      idx: file
+        self.idx_to_full_path = {}#  idx: full_path
 
     def get_text_height(self):
         """
@@ -105,7 +112,8 @@ class FileExplorer(tk.Frame):
         Call `<FileExplorer>.redraw_tree()` to update the display
         """
         file_structure = self._add_dir(parent, folder)
-        self.file_structure.append([folder, file_structure, expanded])
+        self.file_structure.append([folder, file_structure, expanded,
+                                    os.path.abspath(parent + "/" + folder)])
 
     def _add_dir(self, root_path, folder_searching):
         """
@@ -119,9 +127,10 @@ class FileExplorer(tk.Frame):
             if os.path.isdir(file_path):
                 new_folder_searching = folder_searching + "/" + file
                 file_structure = self._add_dir(root_path, new_folder_searching)
-                output.append([new_folder_searching, file_structure, False])
+                output.append([new_folder_searching, file_structure, False,
+                               file_path])
             else:
-                output.append(folder_searching + "/" + file)
+                output.append((folder_searching + "/" + file, file_path))
             continue
         return output
 
@@ -141,16 +150,12 @@ class FileExplorer(tk.Frame):
         for candidate_path, dirs, files in data:
             if candidate_path == path:
                 return dirs + files
-        # return reversed(os.listdir(path))
 
     def redraw_tree(self):
         """
         Redraws all of the sprites.
         """
-        self.canvas.delete("all")
-        self.shown_files_dict = {}
-        self.idx_files_dict = {}
-        self.idx = 0
+        self.reset()
         self._redraw_tree(self.file_structure)
 
     def _redraw_tree(self, tree):
@@ -158,7 +163,7 @@ class FileExplorer(tk.Frame):
         Redraws all of the sprites recursively
         """
         for item in tree:
-            if isinstance(item, str):
+            if len(item) == 2:
                 # Normal file
                 self.display_file(item)
             else:
@@ -180,19 +185,19 @@ class FileExplorer(tk.Frame):
         # `r` is the rectangle
         # `t` is the text
         # `img` is the file image/arrow
-        if isinstance(file, str):
+        if len(file) == 2:
             # A normal file
-            filename = file
             isfolder = False
-            extention = "." + file.split(".")[-1]
+            filename, full_path = file
+            # Get the correct image sprite:
+            extention = "." + filename.split(".")[-1]
             if extention in EXTENTION_TO_IMG:
                 pil_img = EXTENTION_TO_IMG[extention]
             else:
                 pil_img = EXTENTION_TO_IMG["other"]
         else:
             # A folder
-            filename = file[0]
-            shown = file[2]
+            filename, _, shown, full_path = file
             isfolder = True
             if shown:
                 arrow = ARROW_OPENED
@@ -224,8 +229,9 @@ class FileExplorer(tk.Frame):
             self.tkimgs.append(tkimg)
 
         self.shown_files_dict.update({filename: [self.idx, (r, t, img),
-                                                 isfolder]})
-        self.idx_files_dict.update({self.idx: filename})
+                                                 isfolder, full_path]})
+        self.idx_to_file.update({self.idx: filename})
+        self.idx_to_full_path.update({self.idx: full_path})
         self.canvas.group(r, t, img)
         self.idx += 1
 
@@ -244,11 +250,11 @@ class FileExplorer(tk.Frame):
         x = self.canvas.canvasy(event.x)
         y = self.canvas.canvasy(event.y)
         idx = int((y - self.pady) / self.box_height)
-        if idx >= len(self.shown_files_dict):
+        if idx >= self.idx:
             return None
 
-        file = self.idx_files_dict[idx]
-        _, canvas_ids, isdir = self.shown_files_dict[file]
+        file = self.idx_to_file[idx]
+        _, canvas_ids, isdir, full_path = self.shown_files_dict[file]
         rectangle = canvas_ids[0]
 
         if isdir:
@@ -261,8 +267,7 @@ class FileExplorer(tk.Frame):
         else:
             self.event_generate("<<FileSelected>>", when="tail")
 
-        if self.rectangle_selected == rectangle:
-            return None
+        # Change the selected rectangle's bg to "#0000a0"
         if self.rectangle_selected is not None:
             self.canvas.itemconfig(self.rectangle_selected, fill=self.bg)
         self.rectangle_selected = rectangle
@@ -272,11 +277,11 @@ class FileExplorer(tk.Frame):
     def open_file(self, event):
         y = self.canvas.canvasy(event.y)
         idx = int((y - self.pady) / self.box_height)
-        if idx >= len(self.shown_files_dict):
+        if idx >= self.idx:
             return None
 
-        file = self.idx_files_dict[idx]
-        _, canvas_ids, isdir = self.shown_files_dict[file]
+        file = self.idx_to_file[idx]
+        _, canvas_ids, isdir, full_path = self.shown_files_dict[file]
 
         if isdir:
             self._open_folder(idx, file)
@@ -284,7 +289,11 @@ class FileExplorer(tk.Frame):
             self.event_generate("<<FileOpened>>", when="tail")
 
     def _open_folder(self, idx, file):
+        full_path = self.idx_to_full_path[idx]
         self.event_generate("<<FolderOpened>>", when="tail")
+
+        # Find the folder's list location in self.file_structure
+        # So the we can change its `shown` value
         trees = [self.file_structure]
         searching_for = None
         while searching_for is None:
@@ -297,65 +306,27 @@ class FileExplorer(tk.Frame):
                         searching_for = item
                         break
                     trees.append(item[1])
-        _, files_inside_folder, already_shown = searching_for
-        length = self.get_length(files_inside_folder)
-        _, (_, _, img), _ = self.shown_files_dict[file]
+        _, files_inside_folder, already_shown, fill_path = searching_for
+        # Change the `show` value
+        searching_for[2] = not already_shown
+        # Change the arrow from `ARROW_CLOSED` to `ARROW_OPENED`
+        # and vice versa
+        _, (_, _, img), _, _ = self.shown_files_dict[file]
         if already_shown:
             self.canvas.itemconfig(img, text=ARROW_CLOSED)
-            self.remove(idx + 1, idx + length)
-            self.move(idx + length + 1, self.idx - 1, -length)
         else:
             self.canvas.itemconfig(img, text=ARROW_OPENED)
-            self.move(idx + 1, self.idx - 1, length)
-            self.idx = idx + 1
-            self._redraw_tree(files_inside_folder)
-        searching_for[2] = not already_shown
-        self.fix_idxs()
-
-    def fix_idxs(self):
-        self.idx_files_dict = {}
-        for file, (idx, _, _) in self.shown_files_dict.items():
-            self.idx_files_dict.update({idx: file})
-
-        self.idx = max(idx for _, (idx, _, _) in self.shown_files_dict.items())
-        self.idx += 1
-
-    def get_length(self, tree):
-        """
-        Takes a part of `self.file_structure` as tree and return the length
-        of it in terms of the number of files/folder that will have to be
-        drawn
-        """
-        length = 0
-        for item in tree:
-            if isinstance(item, str):
-                length += 1
-            else:
-                if item[2]:
-                    length += self.get_length(item[1])
-                length += 1
-        return length
-
-    def move(self, idx1, idx2, dy):
-        if idx2 < idx1:
+        # Redraw the whole screen
+        self.redraw_tree()
+        # Select the previously selected file
+        if self.file_selected is None:
             return None
-        dy_pixels = dy * self.box_height
-        for idx in range(idx1, idx2 + 1):
-            file = self.idx_files_dict[idx]
-            _, canvas_ids, isdir = self.shown_files_dict[file]
-            self.shown_files_dict[file][0] += dy
-            self.canvas.move(canvas_ids[0], 0, dy_pixels)
-
-    def remove(self, idx1, idx2):
-        if idx2 < idx1:
-            return None
-        for idx in range(idx1, idx2 + 1):
-            file = self.idx_files_dict[idx]
-            _, canvas_ids, isdir = self.shown_files_dict[file]
-            for id in canvas_ids:
-                self.canvas.delete(id)
-            del self.idx_files_dict[idx]
-            del self.shown_files_dict[file]
+        try:
+            _, (rectangle, *_), *_ = self.shown_files_dict[self.file_selected]
+            self.rectangle_selected = rectangle
+            self.canvas.itemconfig(rectangle, fill="#0000a0")
+        except KeyError:
+            pass
 
     def idx_to_pos(self, idx):
         """
@@ -367,7 +338,7 @@ class FileExplorer(tk.Frame):
 
 if __name__ == "__main__":
     def opened(event):
-        print("Opened:", explorer.file_selected)
+        print("Opened a folder")
 
     def selected(event):
         print("Selected:", explorer.file_selected)
@@ -386,4 +357,4 @@ if __name__ == "__main__":
     explorer.bind("<<FileSelected>>", selected)
     explorer.bind("<<FolderSelected>>", selected)
 
-    root.mainloop()
+    # root.mainloop()
