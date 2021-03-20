@@ -1,3 +1,4 @@
+from tkinter import messagebox
 from PIL import Image, ImageTk
 from itertools import chain
 import tkinter as tk
@@ -133,11 +134,14 @@ class FileExplorer(tk.Frame):
     def delete(self):
         if self.selected_file is None:
             return None
-        try:
-            *_, full_path = self.shown_files_dict[self.selected_file]
-            os.remove(full_path)
-        except:
-            pass
+        msg = "Are you sure you want to delete the file?"
+        result = messagebox.askquestion("Delete file?", msg)#, icon="warning"
+        if result == "yes":
+            try:
+                *_, full_path = self.shown_files_dict[self.selected_file]
+                shutil.rmtree(full_path, ignore_errors=True)
+            except:
+                pass
 
     def rename(self):
         if self.selected_file is None:
