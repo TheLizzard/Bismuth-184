@@ -17,6 +17,16 @@ EXTENTION_TO_IMG = {".h": HEADER_FILE_IMG,
                     ".c++": CPP_FILE_IMG,
                     "other": OTHER_FILE_IMG}
 
+ILLEGAL_FILE_NAMES = ("$Mft", "$MftMirr", "$LogFile", "$Volume", "$AttrDef",
+                      "$Bitmap", "$Boot", "$BadClus", "$Secure", "$Upcase",
+                      "$Extend", "$Quota", "$ObjId", "$Reparse", "CON", "PRN",
+                      "AUX", "CLOCK$", "NUL", "COM0", "COM1", "COM2", "COM3",
+                      "COM4", "COM5", "COM6", "COM7", "COM8", "COM9", "LPT0",
+                      "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7",
+                      "LPT8", "LPT9", "LST", "KEYBD$", "SCREEN$", "$IDLE$",
+                      "CONFIG$")
+ILLEGAL_FILE_CHARS = "\\/:*?\"<>|%" # \/:*?"<>|%
+
 
 class GroupedCanvas(tk.Canvas):
     def __init__(self, master, **kwargs):
@@ -47,8 +57,9 @@ class GroupedCanvas(tk.Canvas):
 
 
 class FileExplorer(tk.Frame):
-    def __init__(self, master, font=None, width=150, bg="black", fg="white",
-                 pady=5, padx1=10, padx2=5, **kwargs):
+    def __init__(self, master, font=None, width=150, height=200, bg="black",
+                 fg="white", pady=5, padx1=10, padx2=5, refresh_time=3000,
+                 select_colour="#0000a0", **kwargs):
         """
         Note:
             `padx1` is between the left edge and the first `+`/`-`
@@ -56,9 +67,12 @@ class FileExplorer(tk.Frame):
             `pady` is between the top edge and the start of the text
         """
         super().__init__(master, bd=0, highlightthickness=0)
-        self.canvas = GroupedCanvas(self, width=width, bg=bg, **kwargs)
-        self.canvas.pack(fill="both", expand=True)
-
+        self.canvas = GroupedCanvas(self, height=height, width=width, bg=bg,
+                                    **kwargs)
+        self.scrollbar = tk.Scrollbar(self, command=self.canvas.yview)
+        self.canvas.config(yscrollcommand=self.scrollbar.set)
+        self.scrollbar.pack(fill="y", side="right")
+        self.canvas.pack(fill="both", expand=True, side="left")
         self.bg = bg
         self.fg = fg
         self.font = font
@@ -66,13 +80,16 @@ class FileExplorer(tk.Frame):
         self.padx1 = padx1
         self.padx2 = padx2
         self.width = width
+        self.height = height
+        self.refresh_time = refresh_time
+        self.select_colour = select_colour
 
         self.text_height = self.get_text_height()
         self.box_height = self.text_height * 1.2
         self.arrow_width = self.get_arrow_width() + 2
 
         self.file_structure = []
-        self.called_added_folders = []
+        self.caller_added_folders = []
         self.reset()
 
         self.idx = 0
@@ -80,12 +97,19 @@ class FileExplorer(tk.Frame):
 
         self.rectangle_selected = None
         self.selected_file_idx = None
-        self.file_selected = None
+        self.selected_file = None
 
         self.button1_down = False
+        self.renaming = False
         self.dragging = False
+        self.refreshing = True
+
+        self.menu = tk.Menu(self, tearoff=False, bg=bg, fg=fg, bd=0)
+        self.menu.add_command(label="Rename", command=self.rename)
+        self.menu.add_command(label="Delete", command=self.delete)
 
         self.canvas.bind("<Button-1>", self.mouse_down)
+        self.canvas.bind("<Button-3>", self.open_menu)
         self.canvas.bind("<B1-Motion>", self.mouse_motion)
         self.canvas.bind("<ButtonRelease-1>", self.mouse_up)
         self.canvas.bind("<Double-Button-1>", self.open_file)
@@ -93,7 +117,118 @@ class FileExplorer(tk.Frame):
         self.bind("<<_FolderSelected>>", self.on_select)
         self.bind("<<_FileSelected>>", self.on_select)
 
+        self.bind_all("<Control-r>", self.refresh)
+
+        self.canvas.bind("<MouseWheel>", self._on_mousewheel)
+
+        self.refresh_loop()
+
+    def open_menu(self, event):
+        if self.renaming:
+            return None
+        self.select(event, False)
+        self.menu.tk_popup(event.x_root, event.y_root)
+        self.menu.grab_release()
+
+    def delete(self):
+        if self.selected_file is None:
+            return None
+        try:
+            *_, full_path = self.shown_files_dict[self.selected_file]
+            os.remove(full_path)
+        except:
+            pass
+
+    def rename(self):
+        if self.selected_file is None:
+            return None
+        self.refreshing = False
+        self.renaming = True
+        file = self.selected_file
+        idx, canvas_ids, isdir, full_path = self.shown_files_dict[file]
+        r, t, img = canvas_ids
+        self.canvas.tag_raise(r)
+
+        x, y, *_ = self.canvas.bbox(t)
+
+        self.renaming_entry = tk.Entry(self.canvas, bg=self.bg, fg=self.fg,
+                                       insertbackground=self.fg, font=self.font)
+        self.renaming_entry_id = self.canvas.create_window(x, y,
+                                     window=self.renaming_entry, anchor="nw")
+        self.renaming_entry.focus()
+
+        self.renaming_entry.insert("end", file.split("/")[-1])
+        self.renaming_entry.select_range(0, "end")
+        self.renaming_entry.icursor("end")
+
+        self.renaming_entry.bind("<Escape>", self.rename_escape)
+        self.renaming_entry.bind("<Return>", self.rename_done)
+
+        self.renaming_entry.filename = file
+        self.renaming_entry.full_path = full_path
+        self.renaming_entry.idx = idx
+
+    def rename_escape(self, event=None):
+        self.refresh()
+        self.refreshing = True
+        self.renaming = False
+
+    def illegal_file_name_rename(self):
+        # Tell the user thatthey entered a wrong filename
+        root = tk.Toplevel(self)
+        root.overrideredirect(True)
+        root.attributes("-topmost", True)
+        x, y, *_ = self.canvas.bbox(self.renaming_entry_id)
+        x += self.canvas.winfo_rootx()
+        y += self.canvas.winfo_rooty()
+        root.geometry("+%i+%i" % (x, y))
+        tk.Label(root, text="Illegal char/filename.", bg="orange").pack()
+        root.after(1500, root.destroy)
+
+        self.refresh()
+        self.refreshing = True
+        self.renaming = False
+
+    def rename_done(self, event):
+        new_file_name = self.renaming_entry
+        new_file = new_file_name.get()
+
+        # Check if the name is legal:
+        if len(new_file) == 0:
+            self.illegal_file_name_rename()
+            return None
+        if new_file in ILLEGAL_FILE_NAMES:
+            self.illegal_file_name_rename()
+            return None
+        for char in ILLEGAL_FILE_CHARS:
+            if char in new_file:
+                self.illegal_file_name_rename()
+                return None
+
+        idx = self.renaming_entry.idx
+        old_full_path = self.renaming_entry.full_path
+
+        new_full_path = "\\".join(old_full_path.split("\\")[:-1] + [new_file])
+        try:
+            os.rename(old_full_path, new_full_path)
+        except:
+            pass
+
+        self.refresh()
+        self.refreshing = True
+        self.renaming = False
+
+    def refresh_loop(self):
+        if (not self.dragging) and self.refreshing:
+            self.refresh()
+        self.after(self.refresh_time, self.refresh_loop)
+
+    def _on_mousewheel(self, event):
+        self.canvas.yview_scroll(int(-event.delta/120), "units")
+
     def mouse_down(self, event):
+        if self.renaming:
+            self.rename_escape()
         self.select(event)
         self.mouse_lastx = self.canvas.canvasx(event.x)
         self.mouse_lasty = self.canvas.canvasy(event.y)
@@ -105,11 +240,15 @@ class FileExplorer(tk.Frame):
     def mouse_up(self, event):
         self.button1_down = False
         if self.dragging:
+            self.dragging = False
             moving_file_idx = self.selected_file_idx
             this_file = self.idx_to_full_path[moving_file_idx]
             new_idx = self.pos_to_idx(self.canvas.canvasy(event.y))
             if new_idx >= self.idx:
                 new_idx = 0
+            if new_idx < 0:
+                self.redraw_tree()
+                return None
             new_file = self.idx_to_file[new_idx]
 
             new_file_location_data = self.shown_files_dict[new_file]
@@ -119,33 +258,42 @@ class FileExplorer(tk.Frame):
 
             try:
                 shutil.move(this_file, new_dir)
-                old_file_structure = self.file_structure
-                called_added_folders = self.called_added_folders
-                self.called_added_folders = []
-                self.file_structure = []
-                for args in called_added_folders:
-                    self.add_dir(*args)
-                self.scared_copy_file_structure(old_file_structure)
+                self.refresh()
             except:
-                pass
-            finally:
-                self.dragging = False
                 self.redraw_tree()
 
+    def refresh(self, event=None):
+        selected_file = self.selected_file
+        old_file_structure = self.file_structure
+        caller_added_folders = self.caller_added_folders
+        self.caller_added_folders = []
+        self.file_structure = []
+        for args in caller_added_folders:
+            self.add_dir(*args)
+        self.scared_copy_file_structure(old_file_structure)
+        self.redraw_tree()
+        try:
+            self._select(selected_file)
+        except:
+            pass
+
     def mouse_motion(self, event):
-        if not self.button1_down:
-            return None
-        x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
-        moving = self.pos_to_idx(y) == self.selected_file_idx
-        if moving and (not self.dragging):
-            return None
-        self.dragging = True
-        if self.button1_down:
-            dx, dy = x - self.mouse_lastx, y - self.mouse_lasty
-            self.canvas.move(self.rectangle_selected, dx, dy)
-            self.canvas.tag_raise(self.rectangle_selected)
-        self.mouse_lastx = x
-        self.mouse_lasty = y
+        try:
+            if not self.button1_down:
+                return None
+            x, y = self.canvas.canvasx(event.x), self.canvas.canvasy(event.y)
+            moving = self.pos_to_idx(y) == self.selected_file_idx
+            if moving and (not self.dragging):
+                return None
+            self.dragging = True
+            if self.button1_down:
+                dx, dy = x - self.mouse_lastx, y - self.mouse_lasty
+                self.canvas.move(self.rectangle_selected, dx, dy)
+                self.canvas.tag_raise(self.rectangle_selected)
+            self.mouse_lastx = x
+            self.mouse_lasty = y
+        except:
+            pass
 
     def reset(self):
         self.canvas.delete("all")
@@ -186,7 +334,8 @@ class FileExplorer(tk.Frame):
         file_structure = self._add_dir(parent, folder)
         self.file_structure.append([folder, file_structure, expanded,
                                     os.path.abspath(parent + "/" + folder)])
-        self.called_added_folders.append((parent, folder, expanded))
+        self.caller_added_folders.append((parent, folder, expanded))
+        self.redraw_tree()
 
     def _add_dir(self, root_path, folder_searching):
         """
@@ -252,6 +401,9 @@ class FileExplorer(tk.Frame):
         """
         self.reset()
         self._redraw_tree(self.file_structure)
+        maxy = max(self.canvas.winfo_height() - 4,
+                   self.idx_to_pos(self.idx) + self.pady)
+        self.canvas.config(scrollregion=(0, 0, self.width, maxy))
 
     def _redraw_tree(self, tree):
         """
@@ -330,7 +482,7 @@ class FileExplorer(tk.Frame):
         self.canvas.group(r, t, img)
         self.idx += 1
 
-    def select(self, event):
+    def select(self, event, open_dir=True):
         """
         When ever the user clicks on a folder/file.
         Check if it is a folder or a file
@@ -346,31 +498,44 @@ class FileExplorer(tk.Frame):
         y = self.canvas.canvasy(event.y)
         idx = self.pos_to_idx(y)
         if idx >= self.idx:
+            self.unselect()
             return None
 
         file = self.idx_to_file[idx]
         _, canvas_ids, isdir, full_path = self.shown_files_dict[file]
-        rectangle = canvas_ids[0]
 
         if isdir:
-            # Check if `+` or `-` is pressed:
-            bbox = self.canvas.bbox(canvas_ids[2])
-            if bbox[0] <= x <= bbox[2]:
-                self._open_folder(idx, file)
-                return None
+            if open_dir:
+                # Check if `+` or `-` is pressed:
+                bbox = self.canvas.bbox(canvas_ids[2])
+                if bbox[0] <= x <= bbox[2]:
+                    self._open_folder(idx, file)
+                    return None
             self.event_generate("<<FolderSelected>>", when="tail")
             self.event_generate("<<_FolderSelected>>", when="tail")
         else:
             self.event_generate("<<FileSelected>>", when="tail")
             self.event_generate("<<_FileSelected>>", when="tail")
+        self._select(file)
 
-        # Change the selected rectangle's bg to "#0000a0"
+    def unselect(self):
+        # Change the selected rectangle's bg to `self.select_colour`
         if self.rectangle_selected is not None:
             self.canvas.itemconfig(self.rectangle_selected, fill=self.bg)
+            self.rectangle_selected = None
+            self.selected_file = None
+            self.selected_file_idx = None
+
+    def _select(self, file):
+        if file is None:
+            return None
+        idx, canvas_ids, isdir, full_path = self.shown_files_dict[file]
+        rectangle = canvas_ids[0]
+        self.unselect()
         self.rectangle_selected = rectangle
-        self.file_selected = file
+        self.selected_file = file
         self.selected_file_idx = idx
-        self.canvas.itemconfig(rectangle, fill="#0000a0")
+        self.canvas.itemconfig(rectangle, fill=self.select_colour)
 
     def open_file(self, event):
         y = self.canvas.canvasy(event.y)
@@ -397,7 +562,7 @@ class FileExplorer(tk.Frame):
                 if result is not None:
                     return result
 
-    def search_filestructure_full(self, file, tree=None):
+    def search_filestructure_full_path(self, file, tree=None):
         if tree is None:
             tree = self.file_structure
         for item in tree:
@@ -426,12 +591,12 @@ class FileExplorer(tk.Frame):
         # Redraw the whole screen
         self.redraw_tree()
         # Select the previously selected file
-        if self.file_selected is None:
+        if self.selected_file is None:
             return None
         try:
-            _, (rectangle, *_), *_ = self.shown_files_dict[self.file_selected]
+            _, (rectangle, *_), *_ = self.shown_files_dict[self.selected_file]
             self.rectangle_selected = rectangle
-            self.canvas.itemconfig(rectangle, fill="#0000a0")
+            self.canvas.itemconfig(rectangle, fill=self.select_colour)
         except KeyError:
             pass
 
@@ -452,10 +617,12 @@ class FileExplorer(tk.Frame):
 
 if __name__ == "__main__":
     def opened(event):
-        print("Opened a folder")
+        pass
+        # print("Opened a folder")
 
     def selected(event):
-        print("Selected:", explorer.file_selected)
+        pass
+        # print("Selected:", explorer.selected_file)
 
 
     root = tk.Tk()
@@ -463,7 +630,6 @@ if __name__ == "__main__":
     explorer.pack(expand=True, fill="both")
 
     explorer.add_dir(".", "test folder")
-    explorer.redraw_tree()
 
     explorer.bind("<<FileOpened>>", opened)
     explorer.bind("<<FolderOpened>>", opened)
@@ -471,4 +637,4 @@ if __name__ == "__main__":
     explorer.bind("<<FileSelected>>", selected)
     explorer.bind("<<FolderSelected>>", selected)
 
-    # root.mainloop()
+    root.mainloop()
