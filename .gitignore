@@ -129,14 +129,17 @@ dmypy.json
 .pyre/
 
 # Custom files
-# Non editor related files
+# Non editor related files/Other projects
 src/C++ programs/
+src/state.state
+
 # Debug files
 src/basiceditor/constants/
 src/failed tries/
 src/file_explorer/test folder/
 src/output.file
 src/profiler.py
+
 # Old/Useless files
 src/file_explorer/file_explorer old.py
 src/file_explorer/file_explorer old old.py

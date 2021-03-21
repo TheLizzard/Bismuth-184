@@ -1,6 +1,7 @@
 Editor:
 * `Ctrl-F`, `Ctrl-R`, `Ctrl-H`
 * Clicking/BackSpace/Delete don't call `.edit_separator()`
+* Add the file explorer
 
 Terminal:
 * Find a way to determine if child is waiting for stdin (kms) - nearly nearly done

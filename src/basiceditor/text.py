@@ -125,7 +125,8 @@ class BasicText(tk.Text):
                         self.redo()
                     else:
                         self.undo()
-                    self.generate_view_changed_event()
+                elif char.lower() == "w":
+                    return None
             elif "Alt" not in state:
                 if char in ALPHANUMERIC:
                     self.chars_since_last_sep += 1
@@ -143,10 +144,13 @@ class BasicText(tk.Text):
 
         # Tab pressed
         elif char == "Tab":
-            super().edit_separator()
-            self.delete_selected()
-            super().insert("insert", " "*4)
-            super().edit_separator()
+            if "Control" in state:
+                return None
+            else:
+                super().edit_separator()
+                self.delete_selected()
+                super().insert("insert", " "*4)
+                super().edit_separator()
 
         # Left key pressed
         elif char == "Left":
@@ -212,15 +216,18 @@ class BasicText(tk.Text):
         # ONLY for keys that change `insert`:
         # When shift is pressed we want to extend the sel tag.
         movement_keys = ("Up", "Down", "Left", "Right", "Home", "End")
-        if (char in movement_keys) and ("Shift" in state):
-            current_insert = super().index("insert")
-            sel = self.get_sel()
-            if sel is None:
-                indices = (current_insert, insert)
+        if char in movement_keys:
+            if "Shift" in state:
+                current_insert = super().index("insert")
+                sel = self.get_sel()
+                if sel is None:
+                    indices = (current_insert, insert)
+                else:
+                    indices = self.ctrl_arrows(sel, insert, current_insert)
+                super().tag_remove("sel", "0.0", "end")
+                super().tag_add("sel", *self.sort_idxs(*indices))
             else:
-                indices = self.ctrl_arrows(sel, insert, current_insert)
-            super().tag_remove("sel", "0.0", "end")
-            super().tag_add("sel", *self.sort_idxs(*indices))
+                super().tag_remove("sel", "0.0", "end")
 
         self.see_insert()
         return "break"

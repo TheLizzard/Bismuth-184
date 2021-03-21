@@ -47,15 +47,34 @@ FILE_TYPES = (("C++/Header file", "*.cpp *h"),
 
 
 class RunnableText:
-    def __init__(self, text_widget, change_title_callback=None,
+    def __init__(self, text_widget, idx, change_title_callback=None,
                  open_file_callback=None):
+        self.change_title_callback = change_title_callback
         self.open_file_callback = open_file_callback
-        self.change_title = change_title_callback
         self.text = text_widget
         self.saved_text = None
         self.file_name = None
         self.terminal = None
+        self.idx = idx
         self.set_up_bindings()
+
+    def get_state(self):
+        state = {"saved_text": self.saved_text,
+                 "file_name": self.file_name,
+                 "text": self.text.get("0.0", "end").rstrip()}
+        return state
+
+    def set_state(self, state):
+        self.saved_text = state.pop("saved_text")
+        self.file_name = state.pop("file_name")
+        if self.file_name is not None:
+            title = os.path.basename(self.file_name)
+            self.change_title_callback(self.idx, title)
+        self.text.delete("0.0", "end")
+        self.text.insert("end", state.pop("text"))
+        self.text.after(500, self.text.see_insert)
+        if len(state) > 0:
+            print("[RunnableText] Didn't handle this part of `state`:", state)
 
     def set_up_bindings(self):
         self.text.bind("<Control-s>", self.save)
@@ -144,11 +163,10 @@ class RunnableText:
 
     def open(self, event=None):
         if self.open_file_callback is not None:
-            if self.open_file_callback() == "break":
+            if self.open_file_callback(self.idx) == "break":
                 return "break"
         file = filedialog.askopenfilename(filetypes=FILE_TYPES)
         if (file != "") and (file != ()):
-            self.file_name = file
             self._open(file)
         return "break"
 
@@ -160,16 +178,16 @@ class RunnableText:
             self.text.insert("end", text.rstrip())
             self.text.see("end")
         self.text.generate_view_changed_event()
-        if self.change_title is not None:
-            self.change_title(os.path.basename(filename))
+        self.file_name = filename
+        if self.change_title_callback is not None:
+            self.change_title_callback(self.idx, os.path.basename(filename))
         return "break"
 
     def saveas(self, event=None):
         file = filedialog.asksaveasfilename(filetypes=FILE_TYPES,
                                             defaultextension=FILE_TYPES[0][1])
         if file != "":
-            self.file_name = file
-            self.save(file)
+            self._save(file)
         return "break"
 
     def _save(self, filename):
@@ -177,8 +195,9 @@ class RunnableText:
         with open(filename, "w") as file:
             file.write(text)
             self.saved_text = text
-        if self.change_title is not None:
-            self.change_title(os.path.basename(filename))
+        self.file_name = filename
+        if self.change_title_callback is not None:
+            self.change_title_callback(self.idx, os.path.basename(filename))
         return "break"
 
 

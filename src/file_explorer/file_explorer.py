@@ -1,6 +1,7 @@
 from tkinter import messagebox
 from PIL import Image, ImageTk
 from itertools import chain
+from random import randint
 import tkinter as tk
 import shutil
 import os
@@ -104,10 +105,13 @@ class FileExplorer(tk.Frame):
         self.renaming = False
         self.dragging = False
         self.refreshing = True
+        self.new_file_bindings = [None, None]
+        self.new_file_full_path = None
 
         self.menu = tk.Menu(self, tearoff=False, bg=bg, fg=fg, bd=0)
         self.menu.add_command(label="Rename", command=self.rename)
         self.menu.add_command(label="Delete", command=self.delete)
+        self.menu.add_command(label="New file", command=self.new_file)
 
         self.canvas.bind("<Button-1>", self.mouse_down)
         self.canvas.bind("<Button-3>", self.open_menu)
@@ -131,6 +135,56 @@ class FileExplorer(tk.Frame):
         self.menu.tk_popup(event.x_root, event.y_root)
         self.menu.grab_release()
 
+    def new_file(self):
+        if self.selected_file is None:
+            self._select(self.idx_to_file[self.idx - 1])
+
+        file_idx = self.selected_file_idx
+        file = self.idx_to_file[file_idx]
+        full_path = self.shown_files_dict[file][3]
+
+        if os.path.isdir(full_path):
+            self._open_folder(file_idx, file, close=False)
+        else:
+            full_path = os.path.dirname(full_path)
+
+        padding = "".join(map(str, [randint(0, 9) for i in range(20)]))
+        while os.path.exists(full_path + "\\" + "_"*5 + padding):
+            print("WOW. This is a verry rare occurance!!!")
+            padding = "".join(map(str, [randint(0, 9) for i in range(20)]))
+        full_path = full_path + "\\" + "_"*5 + padding
+        self.new_file_full_path = full_path
+
+        with open(full_path, "w") as _:
+            pass
+
+        self.refresh() # Display the new file
+
+        full_path_to_idx = {v: k for k, v in self.idx_to_full_path.items()}
+        idx = full_path_to_idx[full_path]
+        file = self.idx_to_file[idx]
+
+        self._select(file) # Select the new file
+        self.rename(show_file=False) # Rename the selected file
+
+        id1 = self.bind("<<_FileRenamed>>", self.new_file_done)
+        id2 = self.bind("<<_FileRenamedFailed>>", self.new_file_failed)
+        self.new_file_bindings = [id1, id2]
+
+    def new_file_done(self, event):
+        for id in self.new_file_bindings:
+            self.canvas.unbind(id)
+
+    def new_file_failed(self, event):
+        try:
+            shutil.rmtree(self.new_file_full_path, ignore_errors=True)
+            os.remove(self.new_file_full_path)
+        except:
+           pass
+        for id in self.new_file_bindings:
+            self.canvas.unbind(id)
+        self.refresh()
+
     def delete(self):
         if self.selected_file is None:
             return None
@@ -140,10 +194,11 @@ class FileExplorer(tk.Frame):
             try:
                 *_, full_path = self.shown_files_dict[self.selected_file]
                 shutil.rmtree(full_path, ignore_errors=True)
+                os.remove(full_path)
             except:
                 pass
 
-    def rename(self):
+    def rename(self, show_file=True):
         if self.selected_file is None:
             return None
         self.refreshing = False
@@ -151,19 +206,21 @@ class FileExplorer(tk.Frame):
         file = self.selected_file
         idx, canvas_ids, isdir, full_path = self.shown_files_dict[file]
         r, t, img = canvas_ids
-        self.canvas.tag_raise(r)
 
         x, y, *_ = self.canvas.bbox(t)
+        self.canvas.delete(t)
 
         self.renaming_entry = tk.Entry(self.canvas, bg=self.bg, fg=self.fg,
-                                       insertbackground=self.fg, font=self.font)
+                                       insertbackground=self.fg, font=self.font,
+                                       width=100)
         self.renaming_entry_id = self.canvas.create_window(x, y,
                                      window=self.renaming_entry, anchor="nw")
         self.renaming_entry.focus()
 
-        self.renaming_entry.insert("end", file.split("/")[-1])
-        self.renaming_entry.select_range(0, "end")
-        self.renaming_entry.icursor("end")
+        if show_file:
+            self.renaming_entry.insert("end", file.split("/")[-1])
+            self.renaming_entry.select_range(0, "end")
+            self.renaming_entry.icursor("end")
 
         self.renaming_entry.bind("<Escape>", self.rename_escape)
         self.renaming_entry.bind("<Return>", self.rename_done)
@@ -173,11 +230,15 @@ class FileExplorer(tk.Frame):
         self.renaming_entry.idx = idx
 
     def rename_escape(self, event=None):
+        self.event_generate("<<FileRenamedFailed>>", when="tail")
+        self.event_generate("<<_FileRenamedFailed>>", when="tail")
         self.refresh()
         self.refreshing = True
         self.renaming = False
 
     def illegal_file_name_rename(self):
+        self.event_generate("<<FileRenamedFailed>>", when="tail")
+        self.event_generate("<<_FileRenamedFailed>>", when="tail")
         # Tell the user thatthey entered a wrong filename
         root = tk.Toplevel(self)
         root.overrideredirect(True)
@@ -194,6 +255,8 @@ class FileExplorer(tk.Frame):
         self.renaming = False
 
     def rename_done(self, event):
+        self.event_generate("<<FileRenamed>>", when="tail")
+        self.event_generate("<<_FileRenamed>>", when="tail")
         new_file_name = self.renaming_entry
         new_file = new_file_name.get()
 
@@ -243,7 +306,7 @@ class FileExplorer(tk.Frame):
 
     def mouse_up(self, event):
         self.button1_down = False
-        if self.dragging:
+        if self.dragging and (self.selected_file_idx is not None):
             self.dragging = False
             moving_file_idx = self.selected_file_idx
             this_file = self.idx_to_full_path[moving_file_idx]
@@ -577,12 +640,14 @@ class FileExplorer(tk.Frame):
                 if result is not None:
                     return result
 
-    def _open_folder(self, idx, file):
+    def _open_folder(self, idx, file, close=True):
         full_path = self.idx_to_full_path[idx]
         self.event_generate("<<FolderOpened>>", when="tail")
 
         searching_for = self.search_filestructure(file)
         _, files_inside_folder, already_shown, fill_path = searching_for
+        if already_shown and (not close):
+            return None
         # Change the `show` value
         searching_for[2] = not already_shown
         # Change the arrow from `ARROW_CLOSED` to `ARROW_OPENED`
