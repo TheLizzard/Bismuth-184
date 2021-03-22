@@ -1,12 +1,14 @@
+from tkinter.filedialog import askdirectory
 from tkinter import messagebox
-import pickle
 import tkinter as tk
+import pickle
 
 from constants.settings import settings, ChangeSettings
 from runnable.runnable import RunnableText
 from constants.bettertk import BetterTk
 from constants.cpptext import CPPText
 from constants.notebook import Notebook
+from file_explorer.file_explorer import FileExplorer
 
 
 SAMPLE_CODE = """
@@ -42,8 +44,27 @@ class App:
         self.root.title("Bismuth 184")
         self.root.buttons["X"].config(command=self.close_app)
 
-        self.notebook = Notebook(self.root)
-        self.notebook.pack(fill="both", expand=True)
+        pannedwindow = tk.PanedWindow(self.root, sashwidth=4,
+                                      orient="horizontal")
+        pannedwindow.pack(fill="both", expand=True)
+
+        self.explorer_window = tk.Frame(pannedwindow, bd=0,
+                                        highlightthickness=0)
+        # self.explorer_window.pack(fill="both", expand=True, side="left")
+
+        self.explorer = FileExplorer(self.explorer_window, width=200)
+        self.explorer.pack(fill="both", expand=True, side="bottom")
+        self.explorer.bind("<<FileOpened>>", self.open_file_explorer)
+
+        self.explorer_buttons_frame = tk.Frame(self.explorer_window, bd=0,
+                                               highlightthickness=0)
+        self.explorer_buttons_frame.pack(fill="x", side="top")
+        self.populate_explorer_buttons()
+
+        self.notebook = Notebook(pannedwindow)
+        pannedwindow.add(self.explorer_window, sticky="news")
+        pannedwindow.add(self.notebook, sticky="news", width=780, height=690)
+        # self.notebook.pack(fill="both", expand=True, side="right")
         self.tabs = {}
 
         self.notebook._delete_tab = self.close_tab
@@ -56,6 +77,35 @@ class App:
             self.open_app(state)
         except FileNotFoundError:
             self.add_tab()
+
+    def open_file_explorer(self, event):
+        idx = self.explorer.shown_files_dict[self.explorer.selected_file][0]
+        full_path = self.explorer.idx_to_full_path[idx]
+        idx = self.add_tab()
+        wrapper = self.tabs[idx][1]
+        wrapper._open(full_path)
+        wrapper.text.update_idletasks()
+        wrapper.text.after(500, wrapper.text.see_insert)
+
+    def add_folder_explorer(self):
+        full_path = askdirectory()
+        # Check if user canceled
+        if len(full_path) > 0:
+            *parent, folder = full_path.split("/")
+            parent = "\\".join(parent)
+            self.explorer.add_dir(parent, folder)
+
+    def remove_folder_explorer(self):
+        self.explorer.remove_selected()
+
+    def populate_explorer_buttons(self):
+        b1 = tk.Button(self.explorer_buttons_frame, bg=BG_COLOUR, fg=FG_COLOUR,
+                       command=self.add_folder_explorer, text="Add folder")
+        b2 = tk.Button(self.explorer_buttons_frame, bg=BG_COLOUR,
+                       fg=FG_COLOUR, command=self.remove_folder_explorer,
+                       text="Remove folder")
+        b1.pack(fill="x", expand=True, side="left")
+        b2.pack(fill="x", expand=True, side="left")
 
     def set_active_tab(self, idx):
         try:
@@ -122,9 +172,15 @@ class App:
             self.add_tab(state=value)
 
     def get_state(self):
-        return {}
+        return {"explorer": self.explorer.caller_added_folders}
 
     def set_state(self, state):
+        caller_added_folders = state.pop("explorer")
+        for args in caller_added_folders:
+            try:
+                self.explorer.add_dir(*args[:-1])
+            except:
+                pass
         if len(state) > 0:
             print("[App] Didn't handle this part of `state`:", state)
 

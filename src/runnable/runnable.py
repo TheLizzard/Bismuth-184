@@ -72,6 +72,7 @@ class RunnableText:
             self.change_title_callback(self.idx, title)
         self.text.delete("0.0", "end")
         self.text.insert("end", state.pop("text"))
+        self.text.update_idletasks()
         self.text.after(500, self.text.see_insert)
         if len(state) > 0:
             print("[RunnableText] Didn't handle this part of `state`:", state)

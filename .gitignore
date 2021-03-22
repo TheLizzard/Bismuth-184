@@ -139,7 +139,3 @@ src/failed tries/
 src/file_explorer/test folder/
 src/output.file
 src/profiler.py
-
-# Old/Useless files
-src/file_explorer/file_explorer old.py
-src/file_explorer/file_explorer old old.py
