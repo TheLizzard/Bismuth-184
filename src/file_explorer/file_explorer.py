@@ -98,12 +98,13 @@ class FileExplorer(tk.Frame):
         self.box_height = self.text_height * 1.2
         self.arrow_width = self.get_arrow_width() + 2
 
+        self.create_tkimages()
+
         self.file_structure = []
         self.caller_added_folders = []
         self.reset()
 
         self.idx = 0
-        self.tkimgs = [] # A list so that gc doesn't collect out images
 
         self.rectangle_selected = None
         self.selected_file_idx = None
@@ -145,6 +146,16 @@ class FileExplorer(tk.Frame):
         self.canvas.bind("<MouseWheel>", self._on_mousewheel)
 
         self.refresh_loop()
+
+    def create_tkimages(self):
+        global EXTENTION_TO_TKIMG
+        EXTENTION_TO_TKIMG = {}
+        width = int(self.arrow_width + 0.5)
+        height = int(self.text_height + 0.5)
+        for key, value in EXTENTION_TO_IMG.items():
+            value = value.resize((width, height), Image.NEAREST)
+            value = ImageTk.PhotoImage(value)
+            EXTENTION_TO_TKIMG.update({key: value})
 
     def reset(self):
         self.canvas.delete("all")
@@ -594,9 +605,9 @@ class FileExplorer(tk.Frame):
             # Get the correct image sprite:
             extention = "." + filename.split(".")[-1]
             if extention in EXTENTION_TO_IMG:
-                pil_img = EXTENTION_TO_IMG[extention]
+                tkimg = EXTENTION_TO_TKIMG[extention]
             else:
-                pil_img = EXTENTION_TO_IMG["other"]
+                tkimg = EXTENTION_TO_TKIMG["other"]
         else:
             # A folder
             filename, _, shown, full_path = file
@@ -623,12 +634,7 @@ class FileExplorer(tk.Frame):
             img = self.canvas.create_text(x, y, text=arrow, fill=self.fg,
                                           font=self.font, anchor="nw")
         else:
-            width = int(self.arrow_width + 0.5)
-            height = int(self.text_height + 0.5)
-            pil_image = pil_img.resize((width, height), Image.NEAREST)
-            tkimg = ImageTk.PhotoImage(pil_image)
             img = self.canvas.create_image(x, y, image=tkimg, anchor="nw")
-            self.tkimgs.append(tkimg)
 
         self.shown_files_dict.update({filename: [self.idx, (r, t, img),
                                                  isfolder, full_path]})
