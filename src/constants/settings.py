@@ -157,7 +157,7 @@ NAMED_COLOURS = ("alice blue", "AliceBlue", "antique white", "AntiqueWhite",
                  "yellow green", "yellow1", "yellow2", "yellow3", "yellow4",
                  "YellowGreen")
 # Also "grey0", "grey1", "grey2", ..., "grey100"
-NAMED_COLOURS += tuple("grey%i"%i for i in range(101))
+NAMED_COLOURS += tuple("grey%i" % i for i in range(101))
 
 
 SETTINGS_HEADER = """
@@ -212,6 +212,7 @@ terminal(block):
     titlebar_size(int) = 1
     wait_next_loop_ms(int) = 30
     wait_stdin_read_ms(int) = 100
+    kill_proc(str) = taskkill /f /pid {pid} /t
 
 compiler(block):
     win_path_executable(str) = {path}\..\compiled\ccarotmodule.exe
@@ -230,7 +231,7 @@ class Setting:
         return self.value
 
     def __repr__(self):
-        return f"Setting(type={self.type}, value={self.value})"
+        return f"Setting(type={self.type}, value={repr(self.value)})"
 
     def __str__(self):
         return "<Setting object at %s>" % (hex(id(self))[2:])

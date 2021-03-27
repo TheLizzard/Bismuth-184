@@ -7,7 +7,7 @@ import time
 import sys
 import os
 
-from terminal import TkTerminal, WIDTH
+from terminal import TerminalWindow, WIDTH
 from constants.settings import settings
 
 
@@ -55,6 +55,7 @@ class RunnableText:
         self.saved_text = None
         self.file_name = None
         self.terminal = None
+        self.procs = []
         self.idx = idx
         self.set_up_bindings()
 
@@ -112,13 +113,15 @@ class RunnableText:
 
     def run(self, event=None, args=None):
         if (self.terminal is None) or self.terminal.closed:
-            self.terminal = TkTerminal(callback=self.text.update)
+            self.terminal = TerminalWindow(self.text, _class=tk.Toplevel)
+            self.terminal.bind("<<FinishedProcess>>", self.start_next_proc)
+            self.start_next_proc()
         else:
+            self.procs.clear()
             self.terminal.stop_process()
 
         self.terminal.clear()
-        self.terminal.root.focus_force()
-        self.terminal.text.focus_force()
+        self.terminal.focus_force()
 
         # Check if the file is saved
         work_saved = self.saved_text == self.text.get("0.0", "end").rstrip()
@@ -129,31 +132,29 @@ class RunnableText:
 
         # Create the compile instuction
         command = COMPILE_COMMAND.format(_in=self.file_name)
+        self.procs.append((command, "Compiling the program"))
 
-        msg = "Compiling the program"
-        self.terminal.stdout_write(msg, add_padding=True)
+        # Run the program if compiled
+        if args is None:
+            command = RUN_COMMAND
+        else:
+            command = RUN_COMMAND + " " + " ".join(args)
+        self.procs.append((command, "Running the program"))
 
-        if self.terminal.closed:
-            return None
-        error = self.terminal.run(command)
-        msg = "Process exit code: %s" % str(error)
-        self.terminal.stdout_write(msg, add_padding=True)
-        if isinstance(error, Exception):
-            return None
-        if error == 0:
-            # Run the program if compiled
-            msg = "Running the program"
-            self.terminal.stdout_write(msg, add_padding=True)
-            if args is None:
-                command = RUN_COMMAND
+    def start_next_proc(self, event=None):
+        if not self.terminal.running:
+            if event is None:
+                if len(self.procs) > 0:
+                    command, run_msg = self.procs.pop(0)
+                    self.terminal.stdout_write(run_msg, add_padding=True)
+                    self.terminal.run(command)
             else:
-                command = RUN_COMMAND + " " + " ".join(args)
-            if self.terminal.closed:
-                return None
-            error = self.terminal.run(command)
-            msg = "Process exit code: %s" % str(error)
-            self.terminal.stdout_write(msg, add_padding=True)
-            # self.terminal.forever_cmd()
+                err_code = self.terminal.err_code
+                msg = "Process exit code: %s" % str(err_code)
+                self.terminal.stdout_write(msg, add_padding=True)
+                if err_code != 0:
+                    self.procs.clear()
+        self.text.after(200, self.start_next_proc)
 
     def save(self, event=None):
         if self.file_name is None:

@@ -40,7 +40,7 @@ class App:
                              titlebar_size=TITLEBAR_SIZE,
                              notactivetitle_bg=NOTACTIVETITLE_BG)
         self.root.iconbitmap("logo/logo1.ico")
-        self.root.bind("<F1>", self.change_settings)
+        self.root.bind_all("<F1>", self.change_settings)
         self.root.title("Bismuth 184")
         self.root.buttons["X"].config(command=self.close_app)
 
