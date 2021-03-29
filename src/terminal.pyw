@@ -95,7 +95,7 @@ class Terminal(tk.Frame):
         self.text.tag_config("readonly", foreground="white")
         self.text.tag_config("error", foreground="red")
         self.text.bind("<Key>", self.check_stdin_read_ony)
-        self.text.bind("<Control-Shift-KeyPress-C>", self.send_interupt)
+        # self.text.bind("<Control-Shift-KeyPress-C>", self.send_interupt)
         self.text.bind("<Control-Delete>", self.send_kill_proc)
         self.text.bind("<BackSpace>", self.check_stdin_read_ony, add=True)
         self.text.bind("<Delete>", self.check_stdin_read_ony, add=True)
@@ -105,21 +105,18 @@ class Terminal(tk.Frame):
 
         self.tk_mainloop()
 
-    def send_interupt(self, event):
+    def send_interupt(self, event): # Not working
         from ctypes import WinError
         print("sending ctrl-c")
         if self.term.pid is not None:
-            os.kill(self.term.pid, CTRL_BREAK_EVENT)
-            # self.term.proc.send_signal(CTRL_C_EVENT)
             try:
-                self.term.proc.send_signal(SIGINT)
-                # os.kill(self.term.pid, SIGINT) # CTRL_C_EVENT
+                # CTRL_BREAK_EVENT # SIGINT # CTRL_C_EVENT
+                os.kill(self.term.pid, CTRL_BREAK_EVENT)
             except Exception as error:
                 print(WinError())
                 print(error)
 
     def send_kill_proc(self, event):
-        print("sending terminate")
         if self.term.pid is not None:
             self.term.proc.send_signal(SIGTERM)
             # os.kill(self.term.pid, SIGTERM)

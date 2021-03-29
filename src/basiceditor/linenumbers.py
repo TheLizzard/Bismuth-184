@@ -14,9 +14,10 @@ class LineNumbers(tk.Canvas):
                  **kwargs):
         super().__init__(master, bd=bd, highlightthickness=highlightthickness,
                          bg=bg, width=width, **kwargs)
-        self.textwidget = None
         self.font = font
+        self.width = width
         self.colour = colour
+        self.textwidget = None
 
     def attach(self, text_widget):
         self.textwidget = text_widget
@@ -31,7 +32,7 @@ class LineNumbers(tk.Canvas):
             dline = self.textwidget.dlineinfo(i)
             if dline is None:
                 break
-            text = super().create_text(34, dline[1], anchor="nw",
+            text = super().create_text(self.width-1, dline[1], anchor="nw",
                                        font=self.font, text=int(float(i)),
                                        fill=self.colour)
 
