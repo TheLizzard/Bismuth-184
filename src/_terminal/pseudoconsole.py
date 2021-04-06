@@ -1,6 +1,6 @@
 from threading import Thread, Lock
 from time import sleep
-import _pseudoconsole
+from . import _pseudoconsole
 import os
 
 
@@ -78,10 +78,16 @@ class Console:
         resize(width:int=None, height:int=None) -> None
 
     Attributes:
-        proc_alive:bool=False    # Is the process alive
-        width:int                # The width of the console
-        height:int               # The height of the console
-        last_error:int=None      # The last windows api error code
+        proc_alive:bool=False            # Is the process alive
+        width:int                        # The width of the console
+        height:int                       # The height of the console
+        last_error:int=None              # The last windows api error code
+        stdout_callback:function=None    # The function to be called when
+                                         #   something is read from proc's
+                                         #   stdout
+        raise_callback_errors:bool=True  # Tells us if we should raise an error
+                                         #   if something goes wrong in the
+                                         #   callback
 
     Example (remove the `\` to add syntax highlighting):
         \"""
@@ -131,6 +137,8 @@ class Console:
 
         self.last_exit_code = None
         self.last_error = None
+        self.stdout_callback = None
+        self.raise_callback_errors = True
 
     def __del__(self) -> None:
         self.close_console()
@@ -243,16 +251,18 @@ class Console:
         self.console_alive = False
         self.read_output = False
 
-        # Tell the program that we are about to close its stdout
-        _pseudoconsole.CancelIoEx(self.console.read_handler,
-                                  _pseudoconsole.null_ptr)
-
-        # Close the handles
-        _pseudoconsole.CloseHandle(self.console.write_handler)
-        _pseudoconsole.CloseHandle(self.console.read_handler)
-
         # Close the PseudoConsole
         _pseudoconsole.ClosePseudoConsole(self.console)
+
+        # Close the fds
+        os.close(self.console.read_fd)
+        os.close(self.console.write_fd)
+        # Tell the program that we are about to close its stdout
+        #_pseudoconsole.CancelIoEx(self.console.read_fd,
+        #                          _pseudoconsole.null_ptr)
+        # Close the handles
+        #_pseudoconsole.CloseHandle(self.console.write_handler)
+        #_pseudoconsole.CloseHandle(self.console.read_handler)
 
     def pipe_listener(self, buffer_size:int=1) -> None:
         """
@@ -274,6 +284,12 @@ class Console:
                 data = os.read(self.console.read_fd, 1)
                 with self.lock:
                     self.output_buffer.append(data)
+                if self.stdout_callback is not None:
+                    try:
+                        self.stdout_callback(data)
+                    except Exception as error:
+                        if self.raise_callback_errors:
+                            raise error
             except OSError as error:
                 error_code = _pseudoconsole.GetLastError()
                 self.read_output = False
@@ -339,7 +355,7 @@ class Console:
 
 if __name__ == "__main__":
     console = Console(80, 24)
-    console.run("python simple_input_req.py")
+    console.run("python -m tkinter")
     console.write(b"Hello\r")
     while console.poll() is None:
         sleep(0.2)
@@ -347,6 +363,7 @@ if __name__ == "__main__":
     print(console.read(10000).decode())
     print("Exit code =", console.poll())
     console.close_proc()
+    console.close_console()
     console.close_console()
 
 #pseudoconsole.py
