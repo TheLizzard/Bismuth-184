@@ -61,6 +61,8 @@ TITLEBAR_COLOUR = settings.terminal.titlebar_colour.get()
 TITLEBAR_SIZE = settings.terminal.titlebar_size.get()
 NOTACTIVETITLE_BG = settings.terminal.notactivetitle_bg.get()
 
+WAIT_NEXT_LOOP_MS = settings.terminal.wait_next_loop_ms.get()
+
 
 DO_NOT_WRITE_STDIN = ("Control_L", "Control_R", "Win_L", "Win_R", "Alt_L",
                       "Alt_R", "Caps_Lock", "Escape", "Shift_L", "Shift_R",
@@ -90,25 +92,30 @@ class Terminal(tk.Frame):
     def __init__(self, master):
         super().__init__(master, bd=0, highlightthickness=0)
         self.console = Console(WIDTH, HEIGHT)
-        self.err_code = None
+        self.exit_code = None
         self.running = False
         self.closed = False
         self.stdout_buffer = ""
+        self.reading_from_proc_output = False
 
         self.tk_init()
-        self.console.stdout_callback = self.print_on_screen
 
-    def print_on_screen(self, data):
-        try:
-            self._print_on_screen(data)
-        except tk.TclError:
-            pass
+    def print_on_screen(self):
+        data = self.console.read(1000, blocking=False).decode()
+        for char in data:
+            try:
+                self._print_on_screen(char)
+            except tk.TclError:
+                return None
+        if self.running or (len(data) > 0):
+            self.text.after(WAIT_NEXT_LOOP_MS, self.print_on_screen)
+        else:
+            self.reading_from_proc_output = False
 
     def _print_on_screen(self, data):
-        data = data.decode()
-        ######################################## print("Recieving:", repr(data))
         self.stdout_buffer += data
         buffer_repr = repr(self.stdout_buffer)[1:-1]
+        ################################# print("Buffer = \"%s\"" % buffer_repr)
         # Backspace
         if self.stdout_buffer == "\b":
             self.text.move_insert(0, -1)
@@ -160,38 +167,47 @@ class Terminal(tk.Frame):
             elif control == "m":
                 ######################### Needs Work ###########################
                 # Controls the colour/display modes
+                if data[0] not in "0123456789":
+                    number = 0
+                if number == 0:
+                    for i in range(1, 108):
+                        self.text.tag_remove("Colour-%i" % i, "insert", "end")
+                else:
+                    self.text.tag_add("Colour-%i" % number, "insert", "end")
                 self.stdout_buffer = ""
             elif control == "X":
-                ######################### Needs Work ###########################
-                # No idea what it does
+                # Replaces `number` of characters (with white spaces)
+                # to the right of `insert`
                 self.stdout_buffer = ""
+                for i in range(number):
+                    char_replaced = self.text.get("insert+%ic" % i,
+                                                  "insert+%ic" % (i+1))
+                    if char_replaced == "\n":
+                        break
+                    self.text.delete("insert+%ic" % i, "insert+%ic" % (i+1))
+                    self.text.insert("insert+%ic" % i, " ")
             elif control == "H":
                 # Move the cursor to (row, column)
                 if isinstance(number, int):
                     number = (number, 1)
                 row, column = number
                 self.text.moveto_insert(row, column-1)
-                # self.text.mark_set("insert", "%i.%i" % (row, column + 1))
                 self.stdout_buffer = ""
             elif control == "A":
                 # Up arrow
                 self.text.move_insert(-number, 0)
-                # self.text.mark_set("insert", "insert-%il" % number)
                 self.stdout_buffer = ""
             elif control == "B":
                 # Down arrow
                 self.text.move_insert(number, 0)
-                # self.text.mark_set("insert", "insert+%il" % number)
                 self.stdout_buffer = ""
             elif control == "C":
                 # Right arrow
                 self.text.move_insert(0, number)
-                # self.text.mark_set("insert", "insert+%ic" % number)
                 self.stdout_buffer = ""
             elif control == "D":
                 # Left arrow
                 self.text.move_insert(0, -number)
-                # self.text.mark_set("insert", "insert-%ic" % number)
                 self.stdout_buffer = ""
             elif control[0] == "l":
                 # if (number == 25) and (control == "l"): # Hide the cursor
@@ -237,8 +253,10 @@ class Terminal(tk.Frame):
                     self.text.delete("insert", "insert+1c")
             elif next_char != "":
                 self.text.delete("insert", "insert+1c")
+            tags = self.text.tag_names("insert")
             self.text.insert("insert", data)
-            self.text.see("insert")
+            for tag in tags:
+                self.text.tag_add(tag, "insert-1c", "insert")
             self.stdout_buffer = ""
         else:
             print("4Couldn't handle \"%s\"" % buffer_repr)
@@ -246,6 +264,8 @@ class Terminal(tk.Frame):
         while int(self.text.index("insert").split(".")[1]) > insert_col and \
               self.text.get("insert lineend", "insert lineend+1c") == " ":
             self.text.delete("insert", "insert+1c")
+        self.text.see("insert")
+        self.text.update()
 
     @staticmethod
     def split_ansi(data):
@@ -302,6 +322,35 @@ class Terminal(tk.Frame):
         self.text.bind("<ButtonRelease-1>", self.return_break)
         self.text.bind("<Motion>", self.return_break)
 
+        # Tags:
+        # 1  ✓ Bold or increased intensity
+        # 2  X  Faint, decreased intensity, or dim
+        # 3  X  Italic
+        # 4  X  Underline
+        # 5  X  Slow blink
+        # 6  X  Rapid blink
+        # 7  X  Reverse video or invert - Swap foreground and background colors
+        # 8  X  Conceal or hide
+        # 9  X  Crossed-out, or strike
+        self.text.tag_configure("Colour-1", font=self.text.cget("font")+" bold")
+
+        self.text.tag_configure("Colour-30", foreground="#000000")
+        self.text.tag_configure("Colour-31", foreground="#ff0000")
+        self.text.tag_configure("Colour-32", foreground="#00ff00")
+        self.text.tag_configure("Colour-33", foreground="#ffff00")
+        self.text.tag_configure("Colour-34", foreground="#0000ff")
+        self.text.tag_configure("Colour-35", foreground="#ff00ff")
+        self.text.tag_configure("Colour-36", foreground="#00ffff")
+        self.text.tag_configure("Colour-37", foreground="#ffffff")
+        self.text.tag_configure("Colour-90", foreground="#808080")
+        self.text.tag_configure("Colour-91", foreground="#ff0000")
+        self.text.tag_configure("Colour-92", foreground="#00ff00")
+        self.text.tag_configure("Colour-93", foreground="#ffff00")
+        self.text.tag_configure("Colour-94", foreground="#0000ff")
+        self.text.tag_configure("Colour-95", foreground="#ff00ff")
+        self.text.tag_configure("Colour-96", foreground="#00ffff")
+        self.text.tag_configure("Colour-97", foreground="#ffffff")
+
     def return_break(self, event):
         return "break"
 
@@ -351,24 +400,27 @@ class Terminal(tk.Frame):
 
     def run(self, command: str):
         self.running = True
+        self.reading_from_proc_output = True
+        self.text.after(WAIT_NEXT_LOOP_MS, self.print_on_screen)
+        self.exit_code = None
         self.stop_proc()
         self.console.run(command)
         self.text.after(100, self.check_proc_done)
 
     def check_proc_done(self):
-        err_code = self.console.poll()
-        if err_code is None:
+        exit_code = self.console.poll()
+        if exit_code is None:
             self.text.after(100, self.check_proc_done)
         else:
-            self.text.event_generate("<<FinishedProcess>>", when="tail")
             self.running = False
-            self.err_code = err_code
+            self.exit_code = exit_code
+            self.text.event_generate("<<FinishedProcess>>", when="tail")
 
     def clear(self):
         self.text.delete("0.0", "end")
 
     def get_exit_code(self):
-        return self.err_code
+        return self.exit_code
 
     def focus_force(self):
         self.text.focus_force()
@@ -378,6 +430,7 @@ class Terminal(tk.Frame):
 
     def stop_proc(self):
         self.console.close_proc()
+        self.exit_code = None
 
 
 class TerminalWindow:
@@ -414,12 +467,6 @@ class TerminalWindow:
     def get_exit_code(self):
         return self.term.get_exit_code()
 
-    def stdout_write(self, text, add_padding=False, end="\n"):
-        self.term.stdout_write(text, add_padding=add_padding, end=end)
-
-    def stderr_write(self, text, add_padding=False, end="\n"):
-        self.term.stderr_write(text, add_padding=add_padding, end=end)
-
     def mainloop(self):
         self.root.mainloop()
 
@@ -442,11 +489,19 @@ class TerminalWindow:
         return self.term.running
 
     @property
-    def err_code(self):
-        return self.term.err_code
+    def exit_code(self):
+        return self.term.exit_code
+
+    @exit_code.setter
+    def exit_code(self, value):
+        self.term.exit_code = value
+
+    @property
+    def reading_from_proc_output(self):
+        return self.term.reading_from_proc_output
 
     def stop_process(self):
-        self.term.stop_process()
+        self.term.stop_proc()
 
 
 if __name__ == "__main__":
@@ -454,6 +509,4 @@ if __name__ == "__main__":
     terminal = TerminalWindow()
     # terminal.run(r"compiled\ccarotmodule.exe")
     terminal.run("cmd")
-    # terminal.close()
-    # terminal.forever_cmd()
     terminal.mainloop()

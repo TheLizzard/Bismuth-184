@@ -158,7 +158,8 @@ class Console:
         self.last_exit_code = None
 
         # Start reading the proc output and save it into `self.output_buffer`
-        Thread(target=self.pipe_listener, daemon=True).start()
+        if not self.read_output:
+            Thread(target=self.pipe_listener, daemon=True).start()
 
         # Start the new process
         self.startup_info = _pseudoconsole.STARTUPINFOEX()
@@ -284,12 +285,12 @@ class Console:
                 data = os.read(self.console.read_fd, 1)
                 with self.lock:
                     self.output_buffer.append(data)
-                if self.stdout_callback is not None:
-                    try:
-                        self.stdout_callback(data)
-                    except Exception as error:
-                        if self.raise_callback_errors:
-                            raise error
+                    if self.stdout_callback is not None:
+                        try:
+                            self.stdout_callback(data)
+                        except Exception as error:
+                            if self.raise_callback_errors:
+                                raise error
             except OSError as error:
                 error_code = _pseudoconsole.GetLastError()
                 self.read_output = False

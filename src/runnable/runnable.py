@@ -7,7 +7,7 @@ import time
 import sys
 import os
 
-from terminal import TerminalWindow, WIDTH
+from terminal import TerminalWindow, WIDTH, BG_COLOUR, FG_COLOUR, FONT
 from constants.settings import settings
 
 
@@ -112,10 +112,14 @@ class RunnableText:
             self.terminal.close()
 
     def run(self, event=None, args=None):
+        self.procs.clear()
         if (self.terminal is None) or self.terminal.closed:
             self.terminal = TerminalWindow(self.text, _class=tk.Toplevel)
             self.terminal.bind("<<FinishedProcess>>", self.start_next_proc)
             self.start_next_proc()
+            self.label = tk.Label(self.terminal.root, text="", bg=BG_COLOUR,
+                                  fg=FG_COLOUR, font=FONT)
+            self.label.pack(fill="x")
         else:
             self.procs.clear()
             self.terminal.stop_process()
@@ -127,7 +131,7 @@ class RunnableText:
         work_saved = self.saved_text == self.text.get("0.0", "end").rstrip()
         if (not work_saved) or (self.file_name is None):
             msg = "You need to first save the file."
-            self.terminal.stderr_write(msg, add_padding=True)
+            self.label.config(text=self.add_padding(msg), fg="red")
             return None
 
         # Create the compile instuction
@@ -142,19 +146,36 @@ class RunnableText:
         self.procs.append((command, "Running the program"))
 
     def start_next_proc(self, event=None):
-        if not self.terminal.running:
-            if event is None:
+        if not self.terminal.reading_from_proc_output:
+            exit_code = self.terminal.exit_code
+            if exit_code is not None:
+                try:
+                    msg = "Process exit code: %s" % str(exit_code)
+                    self.label.config(text=self.add_padding(msg), fg=FG_COLOUR)
+                except tk.TclError:
+                    return None
+            if (exit_code != 0) and (exit_code is not None):
+                self.procs.clear()
+                return None
+            try:
                 if len(self.procs) > 0:
-                    command, run_msg = self.procs.pop(0)
-                    self.terminal.stdout_write(run_msg, add_padding=True)
+                    command, msg = self.procs.pop(0)
+                    self.label.config(text=self.add_padding(msg), fg=FG_COLOUR)
                     self.terminal.run(command)
-            else:
-                err_code = self.terminal.err_code
-                msg = "Process exit code: %s" % str(err_code)
-                self.terminal.stdout_write(msg, add_padding=True)
-                if err_code != 0:
-                    self.procs.clear()
+            except tk.TclError:
+                return None
         self.text.after(200, self.start_next_proc)
+
+    @staticmethod
+    def add_padding(text):
+        """
+        ============= Adds padding to the text to make it look good ============
+        """
+        text = " %s " % text
+        length = len(text)
+        p1 = "=" * int((WIDTH - length)/2 + 0.5)
+        p2 = "=" * int((WIDTH - length)/2)
+        return p1 + text + p2
 
     def save(self, event=None):
         if self.file_name is None:
