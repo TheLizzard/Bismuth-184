@@ -198,21 +198,19 @@ editor(block):
     notactivetitle_bg(colour) = grey20
     linenumbers_bg(colour) = black
     titlebar_size(int) = 0
-    linenumbers_width(int) = 35
+    linenumbers_width(int) = 50
     time_highlight_brackets_ms(int) = 1500
 
 terminal(block):
     font(tuple) = ("DejaVu Sans Mono", 11)
-    height(int) = 20
+    height(int) = 18
     width(int) = 80
     bg(colour) = black
-    fg(colour) = white
-    titlebar_colour(colour) = light grey
-    notactivetitle_bg(colour) = grey20
+    fg(colour) = light grey
     titlebar_size(int) = 1
-    wait_next_loop_ms(int) = 30
-    wait_stdin_read_ms(int) = 100
-    kill_proc(str) = taskkill /f /pid {pid} /t
+    notactivetitle_bg(colour) = grey20
+    titlebar_colour(colour) = cyan
+    wait_next_loop_ms(int) = 100
 
 compiler(block):
     win_path_executable(str) = {path}\..\compiled\ccarotmodule.exe

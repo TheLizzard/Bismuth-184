@@ -37,6 +37,7 @@ class Buffer:
         """
         with self.lock:
             self.data = b""
+    clear = reset
 
     def readall(self):
         """
@@ -140,6 +141,20 @@ class Console:
         self.stdout_callback = None
         self.raise_callback_errors = True
 
+    def discard_output(self) -> None:
+        """
+        Discards all of the contents of `self.output_buffer`
+
+        Note:
+            If there is no process running this function will return:
+                `"No process running"`
+        """
+        if not self.proc_alive:
+            return "No process running"
+
+        with self.lock:
+            self.output_buffer.clear()
+
     def __del__(self) -> None:
         self.close_console()
 
@@ -185,8 +200,14 @@ class Console:
         If `timeout_ms` is `None` then it will be converted to
         `_pseudoconsole.INFINITE`
 
-        NOTE: UNTESTED MIGHT CRASH YOUR LIFE
+        Notes:
+            UNTESTED MIGHT CRASH YOUR LIFE
+            If there is no process running this function will return:
+                `"No process running"`
         """
+        if not self.proc_alive:
+            return "No process running"
+
         if timeout_ms is None:
             timeout_ms = _pseudoconsole.INFINITE
         _pseudoconsole.WaitForSingleObject(self.proc_information.hThread,
@@ -200,11 +221,16 @@ class Console:
             int     if the process has ended and the int is the exit code
             None    if the process hasn't ended yet
 
-        Note:
+        Notes:
             This (mostly likely) can handle the process sending 259 as its
             error code even though that means `STILL_ACTIVE` in Windows API
             terms.
+            If there is no process running this function will return:
+                `"No process running"`
         """
+        if not self.proc_alive:
+            return "No process running"
+
         if self.last_exit_code is None:
             result = _pseudoconsole.DWORD()
             _pseudoconsole.GetExitCodeProcess(self.proc_handle,
@@ -360,7 +386,7 @@ if __name__ == "__main__":
     console.write(b"Hello\r")
     while console.poll() is None:
         sleep(0.2)
-    sleep(0.1)
+    sleep(1)
     print(console.read(10000).decode())
     print("Exit code =", console.poll())
     console.close_proc()

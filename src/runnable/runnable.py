@@ -116,7 +116,6 @@ class RunnableText:
         if (self.terminal is None) or self.terminal.closed:
             self.terminal = TerminalWindow(self.text, _class=tk.Toplevel)
             self.terminal.bind("<<FinishedProcess>>", self.start_next_proc)
-            self.start_next_proc()
             self.label = tk.Label(self.terminal.root, text="", bg=BG_COLOUR,
                                   fg=FG_COLOUR, font=FONT)
             self.label.pack(fill="x")
@@ -126,6 +125,7 @@ class RunnableText:
 
         self.terminal.clear()
         self.terminal.focus_force()
+        self.terminal.exit_code = None
 
         # Check if the file is saved
         work_saved = self.saved_text == self.text.get("0.0", "end").rstrip()
@@ -144,6 +144,7 @@ class RunnableText:
         else:
             command = RUN_COMMAND + " " + " ".join(args)
         self.procs.append((command, "Running the program"))
+        self.start_next_proc()
 
     def start_next_proc(self, event=None):
         if not self.terminal.reading_from_proc_output:

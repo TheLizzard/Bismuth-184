@@ -430,6 +430,7 @@ class Terminal(tk.Frame):
 
     def stop_proc(self):
         self.console.close_proc()
+        self.console.discard_output()
         self.exit_code = None
 
 
