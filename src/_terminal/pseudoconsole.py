@@ -200,14 +200,8 @@ class Console:
         If `timeout_ms` is `None` then it will be converted to
         `_pseudoconsole.INFINITE`
 
-        Notes:
-            UNTESTED MIGHT CRASH YOUR LIFE
-            If there is no process running this function will return:
-                `"No process running"`
+        Note: I have no idea what it does.
         """
-        if not self.proc_alive:
-            return "No process running"
-
         if timeout_ms is None:
             timeout_ms = _pseudoconsole.INFINITE
         _pseudoconsole.WaitForSingleObject(self.proc_information.hThread,
@@ -251,19 +245,20 @@ class Console:
         is successful. This can be called multiple times even if the
         process is already closed
         """
-        # If we are already dead skip
-        if not self.proc_alive:
-            return None
-        self.proc_alive = False
+        try:
+            self.proc_alive = False
 
-        # Close the process
-        _pseudoconsole.CloseHandle(self.proc_information.hThread)
-        _pseudoconsole.CloseHandle(self.proc_information.hProcess)
+            # Close the process
+            _pseudoconsole.CloseHandle(self.proc_information.hThread)
+            _pseudoconsole.CloseHandle(self.proc_information.hProcess)
 
-        # Delete the process' memory
-        _pseudoconsole.DeleteProcThreadAttributeList(
+            # Delete the process' memory
+            _pseudoconsole.DeleteProcThreadAttributeList(
                                               self.startup_info.lpAttributeList)
-        _pseudoconsole.HeapFree(_pseudoconsole.GetProcessHeap(), 0, self.mem)
+            _pseudoconsole.HeapFree(_pseudoconsole.GetProcessHeap(), 0,
+                                    self.mem)
+        except WindowsError:
+            pass
 
     def close_console(self) -> None:
         """
@@ -273,23 +268,24 @@ class Console:
         """
         # Make sure that ther is no process still here
         self.close_proc()
-        if not self.console_alive:
-            return None
-        self.console_alive = False
-        self.read_output = False
+        try:
+            self.console_alive = False
+            self.read_output = False
 
-        # Close the PseudoConsole
-        _pseudoconsole.ClosePseudoConsole(self.console)
+            # Close the PseudoConsole
+            _pseudoconsole.ClosePseudoConsole(self.console)
 
-        # Close the fds
-        os.close(self.console.read_fd)
-        os.close(self.console.write_fd)
-        # Tell the program that we are about to close its stdout
-        #_pseudoconsole.CancelIoEx(self.console.read_fd,
-        #                          _pseudoconsole.null_ptr)
-        # Close the handles
-        #_pseudoconsole.CloseHandle(self.console.write_handler)
-        #_pseudoconsole.CloseHandle(self.console.read_handler)
+            # Close the fds
+            os.close(self.console.read_fd)
+            os.close(self.console.write_fd)
+            # Tell the program that we are about to close its stdout
+            #_pseudoconsole.CancelIoEx(self.console.read_fd,
+            #                          _pseudoconsole.null_ptr)
+            # Close the handles
+            #_pseudoconsole.CloseHandle(self.console.write_handler)
+            #_pseudoconsole.CloseHandle(self.console.read_handler)
+        except WindowsError:
+            pass
 
     def pipe_listener(self, buffer_size:int=1) -> None:
         """
@@ -382,15 +378,14 @@ class Console:
 
 if __name__ == "__main__":
     console = Console(80, 24)
-    console.run("python -m tkinter")
-    console.write(b"Hello\r")
+    console.run("python -m cmd")
+    # console.write(b"print(\"hi\")\r")
     while console.poll() is None:
         sleep(0.2)
     sleep(1)
-    print(console.read(10000).decode())
+    print("Process output =", console.read(10000))
     print("Exit code =", console.poll())
     console.close_proc()
-    console.close_console()
     console.close_console()
 
 #pseudoconsole.py
