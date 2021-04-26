@@ -1,6 +1,3 @@
-from signal import CTRL_C_EVENT, SIGTERM, CTRL_BREAK_EVENT, SIGINT, SIGABRT, SIGBREAK
-#ping 8.8.8.8 -n 20
-
 from _tkinter import TclError
 from threading import Lock
 from time import sleep
@@ -113,17 +110,21 @@ class Terminal(tk.Frame):
             self.reading_from_proc_output = False
 
     def _print_on_screen(self, data):
+        ######################################## print(repr(data)[1:-1], end="")
         self.stdout_buffer += data
         buffer_repr = repr(self.stdout_buffer)[1:-1]
         ################################# print("Buffer = \"%s\"" % buffer_repr)
         # Backspace
         if self.stdout_buffer == "\b":
             self.text.move_insert(0, -1)
-            # self.text.mark_set("insert", "insert-1c")
             self.stdout_buffer = ""
         # Go to the front of the line
         elif self.stdout_buffer == "\r":
             self.text.mark_set("insert", "insert linestart")
+            self.stdout_buffer = ""
+        # Go down 1 line
+        elif self.stdout_buffer == "\n":
+            self.text.move_insert(1, 0)
             self.stdout_buffer = ""
         # Tab
         elif self.stdout_buffer == "\x09":
@@ -135,10 +136,6 @@ class Terminal(tk.Frame):
                 print("1Couldn't handle \"%s\"" % buffer_repr[0:-4])
                 self.stdout_buffer = "\x1b"
             return None
-        # Go down 1 line
-        elif self.stdout_buffer == "\n":
-            self.text.move_insert(1, 0)
-            self.stdout_buffer = ""
         elif self.stdout_buffer.startswith("\x1b"):
             data = self.stdout_buffer.lstrip("\x1b")
             if len(data) < 2:

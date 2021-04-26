@@ -132,6 +132,7 @@ class Console:
         self.console_alive = True
         self.read_output = False
         self.proc_alive = False
+        self.proc_information = None
         self.lock = Lock()
         self.width = width
         self.height = height
@@ -245,6 +246,8 @@ class Console:
         is successful. This can be called multiple times even if the
         process is already closed
         """
+        if self.proc_information is None:
+            return None
         try:
             self.proc_alive = False
 
@@ -257,6 +260,7 @@ class Console:
                                               self.startup_info.lpAttributeList)
             _pseudoconsole.HeapFree(_pseudoconsole.GetProcessHeap(), 0,
                                     self.mem)
+            self.proc_information = None
         except WindowsError:
             pass
 
