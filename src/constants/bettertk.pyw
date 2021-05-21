@@ -110,9 +110,6 @@ class FullScreenButton(tk.Button):
         else:
             self.fullscreen()
 
-    def register(self, callback):
-        self.callbacks.append(callback)
-
     def fullscreen(self):
         """
         Switches to full screen.
@@ -180,6 +177,80 @@ class CloseButton(tk.Button):
 
 
 class BetterTk(tk.Frame):
+    """
+    Attributes:
+        disable_north_west_resizing
+        *Buttons*
+            minimise_button
+            fullscreen_button
+            close_button
+        *List of all buttons*
+            buttons: [minimise_button, fullscreen_button, close_button, ...]
+
+    Methods:
+        *List of newly defined methods*
+            change_titlebar_bg(new_bg_colour) => None
+            protocol_generate(protocol) => None
+            #custom_buttons#
+            topmost() => None
+
+        *List of methods that act the same was as tkinter.Tk's methods*
+            title
+            config
+            protocol
+            geometry
+            focus_force
+            destroy
+            iconbitmap
+            resizable
+            attributes
+            withdraw
+            iconify
+            deiconify
+            maxsize
+            minsize
+            state
+            report_callback_exception
+
+
+    The buttons:
+        minimise_button:
+            minimise_window() => None
+            show(column) => None
+            hide() => None
+
+        fullscreen_button:
+            toggle_fullscreen() => None
+            fullscreen() => None
+            notfullscreen() => None
+            show(column) => None
+            hide() => None
+
+        close_button:
+            close_window_protocol() => None
+            show(column) => None
+            hide() => None
+        buttons: # It is a list of all of the buttons
+
+    The custom_buttons:
+        The proper way of using it is:
+            ```
+            root = BetterTk()
+
+            root.custom_buttons = {"name": "?",
+                                   "function": questionmark_pressed,
+                                   "column": 0}
+            questionmark_button = root.buttons[-1]
+
+            root.custom_buttons = {"name": "\u2263",
+                                   "function": three_lines_pressed,
+                                   "column": 2}
+            threelines_button = root.buttons[-1]
+            ```
+        You can call:
+            show(column) => None
+            hide() => None
+    """
     def __init__(self, Class=tk.Tk):
         self.root = Class()
         self.protocols = {"WM_DELETE_WINDOW": self.destroy}
@@ -409,9 +480,9 @@ class BetterTk(tk.Frame):
         self.root.update_idletasks()
         size = self.title_frame.winfo_height()
         img = Image.open(filename).resize((size, size), Image.LANCZOS)
-        self.icon = ImageTk.PhotoImage(img, master=self.root)
-        colour = self.title_label.cget("background")
-        self.icon_label = tk.Label(self.title_frame, image=self.icon, bg=colour)
+        self._tk_icon = ImageTk.PhotoImage(img, master=self.root)
+        bg = self.title_label.cget("background")
+        self.icon_label = tk.Label(self.title_frame, image=self._tk_icon, bg=bg)
         self.icon_label.grid(row=1, column=1, sticky="news")
 
     def resizable(self, width=None, height=None):
@@ -423,6 +494,30 @@ class BetterTk(tk.Frame):
 
     def attributes(self, *args, **kwargs):
         self.root.attributes(*args, **kwargs)
+
+    def withdraw(self):
+        self.minimise_button.minimise_window()
+        self.dummy_root.withdraw()
+
+    def iconify(self):
+        self.dummy_root.iconify()
+        self.minimise_button.minimise_window()
+
+    def deiconify(self):
+        self.dummy_root.deiconify()
+        self.dummy_root.focus_force()
+
+    def maxsize(self, *args, **kwargs):
+        self.root.maxsize(*args, **kwargs)
+
+    def minsize(self, *args, **kwargs):
+        self.root.minsize(*args, **kwargs)
+
+    def state(self, *args, **kwargs):
+        self.root.state(*args, **kwargs)
+
+    def report_callback_exception(self, *args, **kwargs):
+        self.root.report_callback_exception(*args, **kwargs)
 
 
 class ResizableWindow:
