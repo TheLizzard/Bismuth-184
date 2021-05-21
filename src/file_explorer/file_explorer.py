@@ -4,6 +4,7 @@ from itertools import chain
 from random import randint
 import tkinter as tk
 import shutil
+import sys
 import os
 
 
@@ -33,6 +34,8 @@ ILLEGAL_FILE_NAMES = ("$Mft", "$MftMirr", "$LogFile", "$Volume", "$AttrDef",
                       "LPT8", "LPT9", "LST", "KEYBD$", "SCREEN$", "$IDLE$",
                       "CONFIG$")
 ILLEGAL_FILE_CHARS = "\\/:*?\"<>|%" # \/:*?"<>|%
+
+IS_WINDOWS = "win" in sys.platform.lower()
 
 
 class GroupedCanvas(tk.Canvas):
@@ -556,9 +559,12 @@ class FileExplorer(tk.Frame):
             can be a tuple/iterator
         """
         output = []
-        data = os.walk("\\".join(path.split("\\")[:-1]))
+        dir = "\\".join(path.split("\\")[:-1])
+        if (not IS_WINDOWS) and (dir == ""):
+            dir = "."
+        data = os.walk(dir)
         for candidate_path, dirs, files in data:
-            if candidate_path == path:
+            if os.path.abspath(candidate_path) == path:
                 return dirs + files
 
     def redraw_tree(self):
