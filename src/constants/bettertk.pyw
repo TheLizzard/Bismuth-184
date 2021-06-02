@@ -117,7 +117,10 @@ class FullScreenButton(tk.Button):
         if self.betterroot.is_full_screen:
             return "error"
         super().config(command=self.notfullscreen)
-        self.betterroot.root.overrideredirect(False)
+        if USING_WINDOWS:
+            self.betterroot.root.overrideredirect(False)
+        else:
+            self.betterroot.root.attributes("-type", "normal")
         self.betterroot.root.attributes("-fullscreen", True)
         self.betterroot.is_full_screen = True
 
@@ -130,7 +133,10 @@ class FullScreenButton(tk.Button):
         # This toggles between the `fullscreen` and `notfullscreen` methods
         super().config(command=self.fullscreen)
         self.betterroot.root.attributes("-fullscreen", False)
-        self.betterroot.root.overrideredirect(True)
+        if USING_WINDOWS:
+            self.betterroot.root.overrideredirect(True)
+        else:
+            self.betterroot.root.attributes("-type", "splash")
         self.betterroot.is_full_screen = False
 
     def show(self, column=NUMBER_OF_CUSTOM_BUTTONS+3):
@@ -251,8 +257,13 @@ class BetterTk(tk.Frame):
             show(column) => None
             hide() => None
     """
-    def __init__(self, Class=tk.Tk):
-        self.root = Class()
+    def __init__(self, master=None, Class=tk.Tk):
+        if Class == tk.Toplevel:
+            self.root = tk.Toplevel(master)
+        elif Class == tk.Tk:
+            self.root = tk.Tk()
+        else:
+            raise ValueError("Invalid `Class` argument.")
         self.protocols = {"WM_DELETE_WINDOW": self.destroy}
         self.window_destroyed = False
         self.focused_widget = None
@@ -260,9 +271,10 @@ class BetterTk(tk.Frame):
 
         # Create the dummy window
         self.dummy_root = tk.Toplevel(self.root)
-        self.dummy_root.after(1, self.dummy_root.geometry, "1x1")
         self.dummy_root.bind("<FocusIn>", self.focus_main)
-        self.dummy_root.protocol("WM_DELETE_WINDOW", lambda: "break")
+        self.dummy_root.protocol("WM_DELETE_WINDOW", lambda: self.protocol_generate("WM_DELETE_WINDOW"))
+        self.root.update()
+        self.dummy_root.after(1, self.dummy_root.geometry, "1x1")
         geometry = "+%i+%i" % (self.root.winfo_x(), self.root.winfo_y())
         if USING_WINDOWS:
             self.root.overrideredirect(True)
@@ -399,12 +411,18 @@ class BetterTk(tk.Frame):
         # It checks its parent and its parent's parent and
         # its parent's parent's parent and ... until it finds
         # whether or not the widget clicked on is the title bar.
+
         while widget != self.root:
             if widget == self.buttons_frame:
                 # Don't allow moving the window when buttons are clicked
                 return False
             if widget == self.title_bar:
                 return True
+
+            # In some very rare cases `widget` can be `None`
+            # And widget.master will throw an error
+            if widget is None:
+                return False
             widget = widget.master
         return False
 
@@ -487,9 +505,9 @@ class BetterTk(tk.Frame):
 
     def resizable(self, width=None, height=None):
         if width is not None:
-            self.resizable_horizontal = width
+            self.resizable_window.resizable_horizontal = width
         if height is not None:
-            self.resizable_vertical = height
+            self.resizable_window.resizable_vertical = height
         return None
 
     def attributes(self, *args, **kwargs):
@@ -588,6 +606,7 @@ class ResizableWindow:
         if self.started_resizing:
             return None
         quadrant_resizing = self.get_quadrant_resizing()
+
         if quadrant_resizing == "":
             # Reset the cursor back to "arrow"
             self.frame.config(cursor="arrow")
