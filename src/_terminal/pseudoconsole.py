@@ -1,7 +1,11 @@
 from threading import Thread, Lock
 from time import sleep
-import _pseudoconsole
 import os
+
+try:
+    from . import _pseudoconsole
+except ImportError:
+    import _pseudoconsole
 
 
 class Buffer:
@@ -37,6 +41,7 @@ class Buffer:
         """
         with self.lock:
             self.data = b""
+    clear = reset
 
     def readall(self):
         """
@@ -78,10 +83,16 @@ class Console:
         resize(width:int=None, height:int=None) -> None
 
     Attributes:
-        proc_alive:bool=False    # Is the process alive
-        width:int                # The width of the console
-        height:int               # The height of the console
-        last_error:int=None      # The last windows api error code
+        proc_alive:bool=False            # Is the process alive
+        width:int                        # The width of the console
+        height:int                       # The height of the console
+        last_error:int=None              # The last windows api error code
+        stdout_callback:function=None    # The function to be called when
+                                         #   something is read from proc's
+                                         #   stdout
+        raise_callback_errors:bool=True  # Tells us if we should raise an error
+                                         #   if something goes wrong in the
+                                         #   callback
 
     Example (remove the `\` to add syntax highlighting):
         \"""
@@ -125,12 +136,29 @@ class Console:
         self.console_alive = True
         self.read_output = False
         self.proc_alive = False
+        self.proc_information = None
         self.lock = Lock()
         self.width = width
         self.height = height
 
         self.last_exit_code = None
         self.last_error = None
+        self.stdout_callback = None
+        self.raise_callback_errors = True
+
+    def discard_output(self) -> None:
+        """
+        Discards all of the contents of `self.output_buffer`
+
+        Note:
+            If there is no process running this function will return:
+                `"No process running"`
+        """
+        if not self.proc_alive:
+            return "No process running"
+
+        with self.lock:
+            self.output_buffer.clear()
 
     def __del__(self) -> None:
         self.close_console()
@@ -150,7 +178,8 @@ class Console:
         self.last_exit_code = None
 
         # Start reading the proc output and save it into `self.output_buffer`
-        Thread(target=self.pipe_listener, daemon=True).start()
+        if not self.read_output:
+            Thread(target=self.pipe_listener, daemon=True).start()
 
         # Start the new process
         self.startup_info = _pseudoconsole.STARTUPINFOEX()
@@ -176,7 +205,7 @@ class Console:
         If `timeout_ms` is `None` then it will be converted to
         `_pseudoconsole.INFINITE`
 
-        NOTE: UNTESTED MIGHT CRASH YOUR LIFE
+        Note: I have no idea what it does.
         """
         if timeout_ms is None:
             timeout_ms = _pseudoconsole.INFINITE
@@ -191,24 +220,30 @@ class Console:
             int     if the process has ended and the int is the exit code
             None    if the process hasn't ended yet
 
-        Note:
+        Notes:
             This (mostly likely) can handle the process sending 259 as its
             error code even though that means `STILL_ACTIVE` in Windows API
             terms.
+            If there is no process running this function will return:
+                `"No process running"`
         """
-        if self.last_exit_code is None:
-            result = _pseudoconsole.DWORD()
-            _pseudoconsole.GetExitCodeProcess(self.proc_handle,
-                                              _pseudoconsole.byref(result))
-            result_value = result.value
-            if result_value == _pseudoconsole.STILL_ACTIVE:
-                # Suggested here: https://stackoverflow.com/a/1591379/11106801
-                # by @Netherwire. I have no idea how/why it works
-                alive = _pseudoconsole.WaitForSingleObject(self.proc_handle, 0)
-                if alive != 0:
-                    return None
-            self.last_exit_code = result_value
-        return self.last_exit_code
+        if not self.proc_alive:
+            return "No process running"
+
+        if self.last_exit_code is not None:
+            return self.last_exit_code
+
+        # Suggested here: https://stackoverflow.com/a/1591379/11106801
+        # by @Netherwire (in the comments).
+        alive = _pseudoconsole.WaitForSingleObject(self.proc_handle, 0)
+        if alive != 0:
+            return None
+        result = _pseudoconsole.DWORD()
+        _pseudoconsole.GetExitCodeProcess(self.proc_handle,
+                                          _pseudoconsole.byref(result))
+        result_value = result.value
+        self.last_exit_code = result_value
+        return result_value # self.last_exit_code
 
     def close_proc(self) -> None:
         """
@@ -216,19 +251,23 @@ class Console:
         is successful. This can be called multiple times even if the
         process is already closed
         """
-        # If we are already dead skip
-        if not self.proc_alive:
+        if self.proc_information is None:
             return None
-        self.proc_alive = False
+        try:
+            self.proc_alive = False
 
-        # Close the process
-        _pseudoconsole.CloseHandle(self.proc_information.hThread)
-        _pseudoconsole.CloseHandle(self.proc_information.hProcess)
+            # Close the process
+            _pseudoconsole.CloseHandle(self.proc_information.hThread)
+            _pseudoconsole.CloseHandle(self.proc_information.hProcess)
 
-        # Delete the process' memory
-        _pseudoconsole.DeleteProcThreadAttributeList(
+            # Delete the process' memory
+            _pseudoconsole.DeleteProcThreadAttributeList(
                                               self.startup_info.lpAttributeList)
-        _pseudoconsole.HeapFree(_pseudoconsole.GetProcessHeap(), 0, self.mem)
+            _pseudoconsole.HeapFree(_pseudoconsole.GetProcessHeap(), 0,
+                                    self.mem)
+            self.proc_information = None
+        except WindowsError:
+            pass
 
     def close_console(self) -> None:
         """
@@ -238,21 +277,24 @@ class Console:
         """
         # Make sure that ther is no process still here
         self.close_proc()
-        if not self.console_alive:
-            return None
-        self.console_alive = False
-        self.read_output = False
+        try:
+            self.console_alive = False
+            self.read_output = False
 
-        # Tell the program that we are about to close its stdout
-        _pseudoconsole.CancelIoEx(self.console.read_handler,
-                                  _pseudoconsole.null_ptr)
+            # Close the PseudoConsole
+            _pseudoconsole.ClosePseudoConsole(self.console)
 
-        # Close the handles
-        _pseudoconsole.CloseHandle(self.console.write_handler)
-        _pseudoconsole.CloseHandle(self.console.read_handler)
-
-        # Close the PseudoConsole
-        _pseudoconsole.ClosePseudoConsole(self.console)
+            # Close the fds
+            os.close(self.console.read_fd)
+            os.close(self.console.write_fd)
+            # Tell the program that we are about to close its stdout
+            #_pseudoconsole.CancelIoEx(self.console.read_fd,
+            #                          _pseudoconsole.null_ptr)
+            # Close the handles
+            #_pseudoconsole.CloseHandle(self.console.write_handler)
+            #_pseudoconsole.CloseHandle(self.console.read_handler)
+        except WindowsError:
+            pass
 
     def pipe_listener(self, buffer_size:int=1) -> None:
         """
@@ -274,6 +316,12 @@ class Console:
                 data = os.read(self.console.read_fd, 1)
                 with self.lock:
                     self.output_buffer.append(data)
+                    if self.stdout_callback is not None:
+                        try:
+                            self.stdout_callback(data)
+                        except Exception as error:
+                            if self.raise_callback_errors:
+                                raise error
             except OSError as error:
                 error_code = _pseudoconsole.GetLastError()
                 self.read_output = False
@@ -339,14 +387,11 @@ class Console:
 
 if __name__ == "__main__":
     console = Console(80, 24)
-    console.run("python simple_input_req.py")
-    console.write(b"Hello\r")
+    console.run(r'''g++ -O3 -w "C:\Users\TheLizzard\Documents\GitHub\Bismuth-184\src\C++ programs\useless\test.cpp" -o "C:\Users\TheLizzard\Documents\GitHub\Bismuth-184\src\runnable\..\compiled\ccarotmodule.exe"''')
     while console.poll() is None:
         sleep(0.2)
-    sleep(0.1)
+    sleep(0.2)
     print(console.read(10000).decode())
     print("Exit code =", console.poll())
     console.close_proc()
     console.close_console()
-
-#pseudoconsole.py

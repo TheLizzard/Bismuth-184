@@ -1,287 +1,491 @@
-from signal import CTRL_C_EVENT, SIGTERM, CTRL_BREAK_EVENT, SIGINT, SIGABRT, SIGBREAK
-#ping 8.8.8.8 -n 20
-
-from _tkinter import TclError
+import tkinter.font as tkfont
 from threading import Lock
 from time import sleep
 import tkinter as tk
 import sys
 import os
 
-from _terminal.basic_terminal import BasicTerminal
+from _terminal.pseudoconsole import Console
 from _terminal.tag_negator import Range
 
-from basiceditor.text import ScrolledText, KEY_REPLACE_DICT
+from basiceditor.text import ScrolledText
 from constants.settings import settings
-from constants.bettertk import BetterTk
+from constants.bettertk import BetterTk, BetterTkSettings
 
+
+class ConsoleText(ScrolledText):
+    def move_insert(self, drow, dcolumn):
+        current_row, current_column = super().index("insert").split(".")
+        self._moveto_insert(int(current_row)+drow, int(current_column)+dcolumn)
+
+    def moveto_insert(self, row, column):
+        see_row = int(super().index("@0,0").split(".")[0]) - 1
+        self._moveto_insert(row+see_row, column)
+
+    def _moveto_insert(self, row, column):
+        # Try going to `(row, column)`
+        super().mark_set("insert", "%i.%i" % (row, column))
+
+        # See where we got up to as in the row
+        current_row = int(super().index("insert").split(".")[0])
+        # Calculate the number of new lines needed to reach `row`
+        number_of_newlines_needed = row - current_row
+        # If the number is +ve and not 0
+        if number_of_newlines_needed > 0:
+            # Add the new lines
+            super().insert("insert lineend", "\n"*number_of_newlines_needed)
+
+        # See where we got up to as in the column
+        current_column = int(super().index("insert").split(".")[1])
+        # Calculate the number of new lines needed to reach `column`
+        number_of_spaces_needed = column - current_column
+        # If the number is +ve and not 0
+        if number_of_spaces_needed > 0:
+            # Add the spaces
+            super().insert("insert lineend", " "*number_of_spaces_needed)
+
+        # We should be in the correct place so we don't need this:
+        # super().mark_set("insert", "%i.%i" % (row, column))
+
+
+WIDTH = settings.terminal.width.get()
+HEIGHT = settings.terminal.height.get()
 
 FONT = settings.terminal.font.get()
-HEIGHT = settings.terminal.height.get()
-WIDTH = settings.terminal.width.get()
 BG_COLOUR = settings.terminal.bg.get()
 FG_COLOUR = settings.terminal.fg.get()
 TITLEBAR_COLOUR = settings.terminal.titlebar_colour.get()
-TITLEBAR_SIZE = settings.terminal.titlebar_size.get()
-NOTACTIVETITLE_BG = settings.terminal.notactivetitle_bg.get()
+INACTIVETITLE_BG = settings.terminal.inactivetitle_bg.get()
 
-WAIT_NEXT_LOOP = settings.terminal.wait_next_loop_ms.get()
-WAIT_STDIN_READ = settings.terminal.wait_stdin_read_ms.get()
-KILL_PROCESS = settings.terminal.kill_proc.get()
+WAIT_NEXT_LOOP_MS = settings.terminal.wait_next_loop_ms.get()
 
 
-class Buffer:
-    def __init__(self):
-        self.data = []
-
-    def write(self, data, flag):
-        if len(data) != 0:
-            self.data.append((data.decode().replace("\r", ""), flag))
-
-    def read_all(self):
-        result, self.data = self.data, []
-        return result
-
-    def reset(self):
-        self.data.clear()
+DO_NOT_WRITE_STDIN = ("Control_L", "Control_R", "Win_L", "Win_R", "Alt_L",
+                      "Alt_R", "Caps_Lock", "Escape", "Shift_L", "Shift_R",
+                      "Num_Lock")
 
 
-class STDINHandle:
-    def __init__(self, read_handle, write_handle):
-        self.handled_write = False
-        self.working = Lock()
-        self.write_handle = write_handle
-        self.read_handle = read_handle
+STR_TO_CHR_DICT = {"Return": "\r",
+                   "BackSpace": "\b",
+                   "Bell": "\a",
+                   "Tab": "\t",
 
-    def check_child_reading(self):
-        with self.working:
-            self.handled_write = True
-            self.write_handle.write("\r")
-            thread = Thread(target=self.try_read)
-            thread.start()
-            sleep(WAIT_STDIN_READ/1000)
-            if self.handled_write:
-                self.write_handle.write("\r"*10)
-                return True
-            return False
-
-    def try_read(self):
-        data = self.read_handle.read(1)
-        self.handled_write = False
-
-    def write(self, text):
-        self.write_handle.write(text)
+                   "Home": "<esc>[1~",
+                   "Insert": "\x1b[2~",
+                   "Delete": "\x1b[3~",
+                   "End": "\x1b[4~",
+                   "Prior": "\x1b[5~",
+                   "Next": "\x1b[6~",
+                   "Home": "\x1b[7~",
+                   "Up": "\x1b[A",
+                   "Down": "\x1b[B",
+                   "Right": "\x1b[C",
+                   "Left": "\x1b[D",
+                   "Clear": "\x1b[G"}
 
 
 class Terminal(tk.Frame):
-    def __init__(self, master):
+    def __init__(self, master, input_allowed=True):
         super().__init__(master, bd=0, highlightthickness=0)
-        self.term = BasicTerminal(KILL_PROCESS, callback=self.update)
-        self.fds = self.term.get_std_parent()
-        self.stdin_working = Lock()
-        self.err_code = None
+        self.console = Console(WIDTH, HEIGHT)
+        self.input_allowed = input_allowed
+        self.exit_code = None
         self.running = False
         self.closed = False
-
-        self.output_buffer = Buffer()
+        self.stdout_buffer = ""
+        self.resize_after_id = None
+        self.reading_from_proc_output = False
 
         self.tk_init()
 
+    def print_on_screen(self):
+        data = self.console.read(1000, blocking=False).decode()
+        for char in data:
+            try:
+                self._print_on_screen(char)
+            except tk.TclError:
+                return None
+        if self.running or (len(data) > 0):
+            self.text.after(WAIT_NEXT_LOOP_MS, self.print_on_screen)
+        else:
+            self.reading_from_proc_output = False
+
+    def _print_on_screen(self, data):
+        ######################################## print(repr(data)[1:-1], end="")
+        self.stdout_buffer += data
+        buffer_repr = repr(self.stdout_buffer)[1:-1]
+        ################################# print("Buffer = \"%s\"" % buffer_repr)
+        # Backspace
+        if self.stdout_buffer == "\b":
+            self.text.move_insert(0, -1)
+            self.stdout_buffer = ""
+        # Go to the front of the line
+        elif self.stdout_buffer == "\r":
+            self.text.mark_set("insert", "insert linestart")
+            self.stdout_buffer = ""
+        # Go down 1 line
+        elif self.stdout_buffer == "\n":
+            self.text.move_insert(1, 0)
+            self.stdout_buffer = ""
+        # Tab
+        elif self.stdout_buffer == "\x09":
+            self.text.insert("insert", "\t")
+            self.stdout_buffer = ""
+        # Escape
+        elif data == "\x1b":
+            if self.stdout_buffer != "\x1b":
+                print("1Couldn't handle \"%s\"" % buffer_repr[0:-4])
+                self.stdout_buffer = "\x1b"
+            return None
+        elif self.stdout_buffer.startswith("\x1b"):
+            data = self.stdout_buffer.lstrip("\x1b")
+            if len(data) < 2:
+                return None
+            escape_char, *data = data
+            data = "".join(data)
+            number, control, add_data = self.split_ansi(data)
+            if control is None:
+                return None
+            if escape_char == "]":
+                ######################### Needs Work ###########################
+                if add_data[-1:] == "\a":
+                    number = number[0]
+                    # `if number == 0`  # Set Icon and Window Title
+                    # `if number == 2`  # Window Title
+                    if number == 0:
+                        ico = add_data[:-1]
+                        # Set the icon to `ico`. `ico` is a filepath to *.exe
+                        # or *.ico or ...
+                    if (number == 2) or (number == 0):
+                        title = add_data[:-1]
+                        # Set the title to whatever is in `title`
+                    if (number != 0) and (number != 2):
+                        print("5Couldn't handle \"%s\"" % buffer_repr)
+                    self.stdout_buffer = ""
+            elif control == "m":
+                ######################### Needs Work ###########################
+                # Controls the colour/display modes
+                if data[0] not in "0123456789":
+                    number = 0
+                if number == 0:
+                    for i in range(1, 108):
+                        self.text.tag_remove("Colour-%i" % i, "insert", "end")
+                else:
+                    self.text.tag_add("Colour-%i" % number, "insert", "end")
+                self.stdout_buffer = ""
+            elif control == "X":
+                # Replaces `number` of characters (with white spaces)
+                # to the right of `insert`
+                self.stdout_buffer = ""
+                for i in range(number):
+                    char_replaced = self.text.get("insert+%ic" % i,
+                                                  "insert+%ic" % (i+1))
+                    if char_replaced == "\n":
+                        break
+                    self.text.delete("insert+%ic" % i, "insert+%ic" % (i+1))
+                    self.text.insert("insert+%ic" % i, " ")
+            elif control == "H":
+                # Move the cursor to (row, column)
+                if isinstance(number, int):
+                    number = (number, 1)
+                row, column = number
+                self.text.moveto_insert(row, column-1)
+                self.stdout_buffer = ""
+            elif control == "A":
+                # Up arrow
+                self.text.move_insert(-number, 0)
+                self.stdout_buffer = ""
+            elif control == "B":
+                # Down arrow
+                self.text.move_insert(number, 0)
+                self.stdout_buffer = ""
+            elif control == "C":
+                # Right arrow
+                self.text.move_insert(0, number)
+                self.stdout_buffer = ""
+            elif control == "D":
+                # Left arrow
+                self.text.move_insert(0, -number)
+                self.stdout_buffer = ""
+            elif control[0] == "l":
+                # if (number == 25) and (control == "l"): # Hide the cursor
+                self.stdout_buffer = ""
+            elif control[0] == "?":
+                # if (number == 25) and (control == "?h"): # Shows the cursor
+                self.stdout_buffer = ""
+            elif control == "J":
+                # Erase in Display
+                if data[0] not in "0123":
+                    number = 0
+                if number == 0:
+                    self.text.delete("insert", "end")
+                elif number == 1:
+                    self.text.delete("0.0", "insert")
+                elif number == 2:
+                    self.text.delete("0.0", "end")
+                elif number == 3:
+                    self.text.delete("0.0", "end")
+                else:
+                    print("2Couldn't handle \"%s\"" % buffer_repr)
+                self.stdout_buffer = ""
+            elif control == "K":
+                # Erase in Line
+                if data[0] not in "0123":
+                    number = 0
+                if number == 0:
+                    self.text.delete("insert", "insert lineend")
+                elif number == 1:
+                    self.text.delete("insert", "insert linestart")
+                elif number == 2:
+                    self.text.delete("insert linestart", "insert lineend")
+                else:
+                    print("2Couldn't handle \"%s\"" % buffer_repr)
+                self.stdout_buffer = ""
+            else:
+                print("3Couldn't handle \"%s\"" % buffer_repr)
+                self.stdout_buffer = ""
+        elif self.stdout_buffer.isprintable():
+            next_char = self.text.get("insert", "insert+1c")
+            if next_char == "\n":
+                if data == "\n":
+                    self.text.delete("insert", "insert+1c")
+            elif next_char != "":
+                self.text.delete("insert", "insert+1c")
+            tags = self.text.tag_names("insert")
+            self.text.insert("insert", data)
+            for tag in tags:
+                self.text.tag_add(tag, "insert-1c", "insert")
+            self.stdout_buffer = ""
+        else:
+            print("4Couldn't handle \"%s\"" % buffer_repr)
+        insert_col = int(self.text.index("insert").split(".")[1])
+        while int(self.text.index("insert").split(".")[1]) > insert_col and \
+              self.text.get("insert lineend", "insert lineend+1c") == " ":
+            self.text.delete("insert", "insert+1c")
+        self.text.see("insert")
+        self.text.update()
+
+    @staticmethod
+    def split_ansi(data):
+        # Returns `(number, control, add_data)`
+        # Make sure that there is enough data
+        if len(data) == 0:
+            return None, None, None
+        if data[0] == "?":
+            data = data[1:]
+            control_addon = "?"
+            if len(data) == 0:
+                return None, None, None
+        else:
+            control_addon = ""
+        data = list(data)
+        number = Terminal.get_number_from_ansi(data)
+        if len(data) == 0:
+            return number, None, None
+        return number, control_addon+data[0], "".join(data[1:])
+
+    @staticmethod
+    def get_number_from_ansi(data:list):
+        # Get the number from the ansi sequece
+        # NOTE CHANGES `data`
+        number = ""
+        while (len(data) != 0) and (data[0] in "0123456789"):
+            number += data.pop(0)
+        if number == "":
+            number = "1"
+        number = int(number)
+        if (len(data) != 0) and (data[0] == ";"):
+            data.pop(0)
+            return (number, Terminal.get_number_from_ansi(data))
+        return number
+
     def tk_init(self):
-        self.text = ScrolledText(self, bg=BG_COLOUR, fg=FG_COLOUR, font=FONT,
-                                 height=HEIGHT, width=WIDTH, undo=False,
-                                 call_init=False)
+        self.text = ConsoleText(self, bg=BG_COLOUR, fg=FG_COLOUR, font=FONT,
+                                height=HEIGHT, width=WIDTH, undo=False,
+                                call_init=False)
         self.text.pack(fill="both", expand=True)
-        self.text.tag_config("readonly", foreground="white")
-        self.text.tag_config("error", foreground="red")
-        self.text.bind("<Key>", self.check_stdin_read_ony)
-        # self.text.bind("<Control-Shift-KeyPress-C>", self.send_interupt)
+        # The interupts
+        self.text.bind("<Control-Shift-KeyPress-C>", self.send_interupt)
         self.text.bind("<Control-Delete>", self.send_kill_proc)
-        self.text.bind("<BackSpace>", self.check_stdin_read_ony, add=True)
-        self.text.bind("<Delete>", self.check_stdin_read_ony, add=True)
-        self.text.bind("<Return>", self.tk_send_to_stdin)
+        # Writting to stdin
+        self.text.bind("<Key>", self.write_to_proc)
+        self.text.bind("<Return>", self.write_to_proc)
+        self.text.bind("<BackSpace>", self.write_to_proc, add=True)
+        self.text.bind("<Delete>", self.write_to_proc, add=True)
         self.text.init()
         self.text.focus()
 
-        self.tk_mainloop()
+        # Clicking on the terminal isn't supported right now.
+        self.text.bind("<Button-1>", self.return_break)
+        self.text.bind("<ButtonRelease-1>", self.return_break)
+        self.text.bind("<Motion>", self.return_break)
+        # Needs to work but it doesn't:
+        # self.text.bind("<Double-ButtonPress-1>", self.return_break)
 
-    def send_interupt(self, event): # Not working
-        from ctypes import WinError
-        print("sending ctrl-c")
-        if self.term.pid is not None:
-            try:
-                # CTRL_BREAK_EVENT # SIGINT # CTRL_C_EVENT
-                os.kill(self.term.pid, CTRL_BREAK_EVENT)
-            except Exception as error:
-                print(WinError())
-                print(error)
+        # Tags:
+        # 1  ✓ Bold or increased intensity
+        # 2  X  Faint, decreased intensity, or dim
+        # 3  X  Italic
+        # 4  X  Underline
+        # 5  X  Slow blink
+        # 6  X  Rapid blink
+        # 7  X  Reverse video or invert - Swap foreground and background colors
+        # 8  X  Conceal or hide
+        # 9  X  Crossed-out, or strike
+        self.text.tag_configure("Colour-1", font=self.text.cget("font")+" bold")
 
-    def send_kill_proc(self, event):
-        if self.term.pid is not None:
-            self.term.proc.send_signal(SIGTERM)
-            # os.kill(self.term.pid, SIGTERM)
+        self.text.tag_configure("Colour-30", foreground="#000000")
+        self.text.tag_configure("Colour-31", foreground="#ff0000")
+        self.text.tag_configure("Colour-32", foreground="#00ff00")
+        self.text.tag_configure("Colour-33", foreground="#ffff00")
+        self.text.tag_configure("Colour-34", foreground="#0000ff")
+        self.text.tag_configure("Colour-35", foreground="#ff00ff")
+        self.text.tag_configure("Colour-36", foreground="#00ffff")
+        self.text.tag_configure("Colour-37", foreground="#ffffff")
+        self.text.tag_configure("Colour-90", foreground="#808080")
+        self.text.tag_configure("Colour-91", foreground="#ff0000")
+        self.text.tag_configure("Colour-92", foreground="#00ff00")
+        self.text.tag_configure("Colour-93", foreground="#ffff00")
+        self.text.tag_configure("Colour-94", foreground="#0000ff")
+        self.text.tag_configure("Colour-95", foreground="#ff00ff")
+        self.text.tag_configure("Colour-96", foreground="#00ffff")
+        self.text.tag_configure("Colour-97", foreground="#ffffff")
 
-    def check_stdin_read_ony(self, event):
-        disallow_write = "readonly" in self.text.tag_names("insert")
-        disallow_backspace = "readonly" in self.text.tag_names("insert-1c")
+        self.text.bind("<Configure>", self.text_resized)
 
-        char = event.char
-        state = self.text.get_state(event)
-        if "Control" in state:
-            return None
+    def text_resized(self, event:tk.Event=None) -> None:
+        if self.resize_after_id is not None:
+            self.text.after_cancel(self.resize_after_id)
+        self.resize_after_id = self.text.after(1000, self._text_resized)
 
-        # If the key isn't printable make it a word like:
-        #     "Left"/"Right"/"BackSpace"
-        if (not char.isprintable()) or (char == ""):
-            char = event.keysym
+    def _text_resized(self) -> None:
+        self.resize_after_id = None
+        width_pixels = self.text.winfo_width()
+        height_pixels = self.text.winfo_height()
+        if isinstance(FONT, (tuple, list)) and len(FONT) > 1:
+            family, size, *other = FONT
+            if len(other) == 0:
+                other.append("normal")
+            font = tkfont.Font(self.text, family=family, size=size, weight=other[0])
+            m_len = font.measure("m", displayof=self.text)
+            width = width_pixels // m_len
 
-        # Replace all of the words that can be expressed with 1 character
-        if char in KEY_REPLACE_DICT:
-            char = KEY_REPLACE_DICT[char]
+            i = 1
+            last_index = f"100.{width}"
+            while self.text.compare(last_index, "!=", f"{i}.{width}"):
+                self.text.delete(f"{i}.{width}", f"{i}.{width} lineend")
+                last_index = f"{i}.{width}"
+                i += 1
 
-        # White listed:
-        if char in ("Up", "Down", "Left", "Right"):
-            return None
+            self.console.resize(int(width), None)
 
-        if disallow_write:
-            if (len(char) == 1) or (char == "Tab") or (char == "Delete"):
-                return "break"
-        if disallow_backspace and (char == "BackSpace"):
-            return "break"
-        if self.text.tag_ranges("sel"):
-            tags = self.text.tag_names("sel.first")
-            if "readonly" in tags:
-                return "break"
-
-    def tk_mainloop(self):
-        for text, flag in self.output_buffer.read_all():
-            end = self.text.index("end-1c")
-            self.text.insert("end", text)
-            self.text.tag_add("readonly", end, "end-1c")
-            if flag == "e":
-                self.text.tag_add("error", end, "end-1c")
-            self.text.see("insert")
-
-        self.text.after(WAIT_NEXT_LOOP, self.tk_mainloop)
-
-    def _tk_send_to_stdin(self):
-        with self.stdin_working:
-            mark_for_readonly_range = []
-            text = ""
-            # Get the ranges
-            ranges_readonly = self.text.tag_ranges("readonly")
-            ranges_sent = self.text.tag_ranges("sent_for_checking")
-            _range = Range(self.text)
-
-            # Subtract them from the whole thing:
-            for i in range(0, len(ranges_readonly), 2):
-                _range.subtract_range(ranges_readonly[i], ranges_readonly[i+1])
-            for i in range(0, len(ranges_sent), 2):
-                _range.subtract_range(ranges_sent[i], ranges_sent[i+1])
-
-            for start, end in _range.tolist():
-                text += self.text.get(start, end)
-                if "\n" in text:
-                    chars = text.index("\n")+1
-                    end = start+"+%ic" % chars
-                    mark_for_readonly_range.append((start, end))
-                    self.text.tag_add("sent_for_checking", start, end)
-                    text = text[:chars]
-                    break
-                mark_for_readonly_range.append((start, end))
-
-            if text[-1:] == "\n":
-                self.fds["stdin"].write(text.encode())
-                for start, end in mark_for_readonly_range:
-                    self.text.tag_add("readonly", start, end)
-                    self.text.tag_remove("sent_for_checking", "0.0", "end")
-
-    def tk_send_to_stdin(self, event):
-        self.text.mark_set("insert", "end")
-        # First handle the "\n" comming in
-        self.text.insert("insert", "\n")
-        self.text.see_insert()
-        if self.term.std._in.is_waiting(WAIT_STDIN_READ):
-            self._tk_send_to_stdin()
+    def return_break(self, event:tk.Event=None) -> str:
         return "break"
 
-    def stdout_stderr_read(self):
-        if self.running:
-            self.text.after(1, self.stdout_stderr_read)
-        stdout_data = self.fds["stdout"].read(1024)
-        stderr_data = self.fds["stderr"].read(1024)
-        self.output_buffer.write(stdout_data, flag="o")
-        self.output_buffer.write(stderr_data, flag="e")
+    def return_none(self, event:tk.Event) -> None:
+        return None
 
-    def close(self):
+    def send_interupt(self, event):
+        self.console.write(b"\x03")
+
+    def send_kill_proc(self, event):
+        self.console.close_proc()
+
+    def get_char_from_event(self, event):
+        char = event.char
+        state = self.text.get_state(event)
+        if ("Control" in state) or ("Alt" in state):
+            return ""
+
+        if (not char.isprintable()) or (char == ""):
+            char = self.str_to_char(event.keysym)
+
+        return char
+
+    def str_to_char(self, char):
+        # Turns "BackSpace" into "\b".
+        # Turns "\n" into "\r"
+        if char == "Return":
+            return "\r"
+        if char in DO_NOT_WRITE_STDIN:
+            return ""
+        if char in STR_TO_CHR_DICT:
+            return STR_TO_CHR_DICT[char]
+        print("Unable to write:", repr(char))
+        return ""
+
+    def write_to_proc(self, event:tk.Event) -> str:
+        if not self.input_allowed:
+            return "break"
+        char = self.get_char_from_event(event)
+        if char == "":
+            return "break"
+        ########################################## print("Sending:", repr(char))
+        self.console.write(char.encode())
+        return "break"
+
+    def close(self) -> None:
         self.forver_cmd_running = False
-        self.term.stop_process()
+        self.stop_proc()
+        self.console.close_console()
         self.running = False
         self.closed = True
 
-    def run(self, command: str):
+    def run(self, command:str) -> None:
         self.running = True
-        self.text.after(1, self.stdout_stderr_read)
-        self.output_buffer.reset()
-        self.term.stop_process()
-        self.term.run_no_wait(command)
+        self.reading_from_proc_output = True
+        self.text.after(WAIT_NEXT_LOOP_MS, self.print_on_screen)
+        self.exit_code = None
+        self.stop_proc()
+        self.console.run(command)
         self.text.after(100, self.check_proc_done)
+        super().mainloop()
 
     def check_proc_done(self):
-        err_code = self.term.poll()
-        if err_code is None:
+        exit_code = self.console.poll()
+        if exit_code is None:
             self.text.after(100, self.check_proc_done)
         else:
-            self.text.event_generate("<<FinishedProcess>>", when="tail")
             self.running = False
-            self.err_code = err_code
+            self.exit_code = exit_code
+            super().quit()
 
     def clear(self):
         self.text.delete("0.0", "end")
 
     def get_exit_code(self):
-        return self.err_code
-
-    def stdout_write(self, text, add_padding=False, end="\n"):
-        self.term.stdout_write(text, add_padding=add_padding, end=end)
-
-    def stderr_write(self, text, add_padding=False, end="\n"):
-        self.term.stderr_write(text, add_padding=add_padding, end=end)
+        return self.exit_code
 
     def focus_force(self):
         self.text.focus_force()
+    focus = focus_force
 
-    def focus(self):
-        self.focus_force()
-
-    def stop_process(self):
-        self.term.stop_process()
+    def stop_proc(self):
+        self.console.close_proc()
+        self.console.discard_output()
+        self.exit_code = None
+        if self.running:
+            super().quit()
 
 
 class TerminalWindow:
-    def __init__(self, master=None, _class=tk.Tk):
-        if _class == tk.Tk:
-            self.root = BetterTk(titlebar_bg=BG_COLOUR,
-                                 titlebar_fg=TITLEBAR_COLOUR,
-                                 titlebar_sep_colour=FG_COLOUR, _class=_class,
-                                 titlebar_size=TITLEBAR_SIZE,
-                                 notactivetitle_bg=NOTACTIVETITLE_BG)
-        else:
-            self.root = BetterTk(master=master, titlebar_bg=BG_COLOUR,
-                                 titlebar_fg=TITLEBAR_COLOUR,
-                                 titlebar_sep_colour=FG_COLOUR, _class=_class,
-                                 titlebar_size=TITLEBAR_SIZE,
-                                 notactivetitle_bg=NOTACTIVETITLE_BG)
+    def __init__(self, master=None):
+        settings = BetterTkSettings(theme="dark")
+        settings.config(active_titlebar_bg=BG_COLOUR, bg=BG_COLOUR,
+                        active_titlebar_fg=TITLEBAR_COLOUR,
+                        separator_colour=FG_COLOUR,
+                        inactive_titlebar_bg=INACTIVETITLE_BG)
+        self.root = BetterTk(master=master, settings=settings)
         self.root.title("Terminal")
         self.root.iconbitmap("logo/logo2.ico")
-        self.root.buttons["X"].config(command=self.close)
+        self.root.close_button.config(command=self.close)
 
         self.term = Terminal(self.root)
         self.term.pack(fill="both", expand=True)
 
     def close(self):
         self.term.close()
-        self.root.close()
+        self.root.destroy()
 
     def clear(self):
         self.term.clear()
@@ -291,12 +495,6 @@ class TerminalWindow:
 
     def get_exit_code(self):
         return self.term.get_exit_code()
-
-    def stdout_write(self, text, add_padding=False, end="\n"):
-        self.term.stdout_write(text, add_padding=add_padding, end=end)
-
-    def stderr_write(self, text, add_padding=False, end="\n"):
-        self.term.stderr_write(text, add_padding=add_padding, end=end)
 
     def mainloop(self):
         self.root.mainloop()
@@ -320,11 +518,15 @@ class TerminalWindow:
         return self.term.running
 
     @property
-    def err_code(self):
-        return self.term.err_code
+    def exit_code(self):
+        return self.term.exit_code
+
+    @property
+    def reading_from_proc_output(self):
+        return self.term.reading_from_proc_output
 
     def stop_process(self):
-        self.term.stop_process()
+        self.term.stop_proc()
 
 
 if __name__ == "__main__":
@@ -332,6 +534,4 @@ if __name__ == "__main__":
     terminal = TerminalWindow()
     # terminal.run(r"compiled\ccarotmodule.exe")
     terminal.run("cmd")
-    # terminal.close()
-    # terminal.forever_cmd()
-    terminal.mainloop()
+    # terminal.mainloop()
