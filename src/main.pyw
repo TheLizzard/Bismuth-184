@@ -1,3 +1,5 @@
+# Add "C:\MinGW\bin" to path
+
 from tkinter.filedialog import askdirectory
 from tkinter import messagebox
 import tkinter as tk
@@ -5,7 +7,7 @@ import pickle
 
 from constants.settings import settings, ChangeSettings
 from runnable.runnable import RunnableText
-from constants.bettertk import BetterTk
+from constants.bettertk import BetterTk, BetterTkSettings
 from constants.cpptext import CPPText
 from constants.notebook import Notebook
 from file_explorer.file_explorer import FileExplorer
@@ -29,20 +31,21 @@ WIDTH = settings.editor.width.get()
 BG_COLOUR = settings.editor.bg.get()
 FG_COLOUR = settings.editor.fg.get()
 TITLEBAR_COLOUR = settings.editor.titlebar_colour.get()
-TITLEBAR_SIZE = settings.editor.titlebar_size.get()
-NOTACTIVETITLE_BG = settings.editor.notactivetitle_bg.get()
+INACTIVETITLE_BG = settings.editor.inactivetitle_bg.get()
 
 
 class App:
     def __init__(self):
-        self.root = BetterTk(titlebar_bg=BG_COLOUR, titlebar_fg=TITLEBAR_COLOUR,
-                             titlebar_sep_colour=FG_COLOUR,
-                             titlebar_size=TITLEBAR_SIZE,
-                             notactivetitle_bg=NOTACTIVETITLE_BG)
+        settings = BetterTkSettings(theme="dark")
+        settings.config(active_titlebar_bg=BG_COLOUR, bg=BG_COLOUR,
+                        active_titlebar_fg=TITLEBAR_COLOUR,
+                        separator_colour=FG_COLOUR,
+                        inactive_titlebar_bg=INACTIVETITLE_BG)
+        self.root = BetterTk(settings=settings)
         self.root.iconbitmap("logo/logo1.ico")
         self.root.bind_all("<F1>", self.change_settings)
         self.root.title("Bismuth 184")
-        self.root.buttons["X"].config(command=self.close_app)
+        self.root.close_button.config(command=self.close_app)
 
         pannedwindow = tk.PanedWindow(self.root, sashwidth=4,
                                       orient="horizontal")
@@ -163,7 +166,7 @@ class App:
 
         # Close the notebook and root
         self.notebook.destroy()
-        self.root.close()
+        self.root.destroy()
 
     def open_app(self, state):
         this_state = state.pop("this")

@@ -2,9 +2,9 @@ from functools import partial
 from time import perf_counter
 import tkinter as tk
 
-from .scrollbar import AutoScrollbar
 from .linenumbers import LineNumbers
 from constants.settings import settings
+from constants.bettertk import ScrolledText as BasicScrolledText
 
 
 FG_COLOUR = settings.editor.fg.get()
@@ -20,7 +20,7 @@ IGNORE_KEYS = ("Shift_L", "Shift_R", "Control_L", "Control_R", "Alt_L",
                "Clear", "Next", "Prior", "BackSpace", "Delete")
 
 
-class BasicText(tk.Text):
+class BasicText(BasicScrolledText):
     def __init__(self, master, wrap="none", undo=True, insertbackground=None,
                  call_init=True, **kwargs):
         if (insertbackground is None) and ("fg" in kwargs):
@@ -310,7 +310,6 @@ class BasicText(tk.Text):
             last_char = super().get(left, right)
 
             if last_char in "'\"(){}[]\n":
-                #chars_skipped -= 1
                 break
         return chars_skipped
 
@@ -440,40 +439,8 @@ class LinedText(BasicText):
         self.linenumbers.redraw(event)
 
 
-class ScrolledLinedText(LinedText):
-    def __init__(self, master, **kwargs):
-        self.scollframe = tk.Frame(master, bd=0)
-        self.text_frame = tk.Frame(self.scollframe, bd=0)
-        self.text_frame.pack(side="top")
-
-        super().__init__(self.text_frame, bd=0, **kwargs)
-        command = partial(self.generate_change_event, super().xview)
-        self.xscrollbar = AutoScrollbar(self.scollframe, self, command=command,
-                                        orient="horizontal")
-        command = partial(self.generate_change_event, super().yview)
-        self.yscrollbar = AutoScrollbar(self.text_frame, self, command=command,
-                                        orient="vertical")
-        xcommand = partial(self.generate_change_event, self.xscrollbar.set)
-        ycommand = partial(self.generate_change_event, self.yscrollbar.set)
-        super().config(xscrollcommand=xcommand,
-                       yscrollcommand=ycommand)
-        self.yscrollbar.pack(fill="y", side="right")
-        super().pack(fill="both", expand=True, side="left")
-        self.text_frame.pack(fill="both", side="top", expand=True)
-        self.xscrollbar.pack(fill="x", side="bottom")
-
-    def pack(self, **kwargs):
-        self.scollframe.pack(**kwargs)
-
-    def grid(self, **kwargs):
-        self.scollframe.grid(**kwargs)
-
-    def place(self, **kwargs):
-        self.scollframe.place(**kwargs)
-
-    def generate_change_event(self, function, *args):
-        super().event_generate("<<Changed>>", when="tail")
-        function(*args)
+ScrolledLinedText = LinedText
+ScrolledText = BasicText
 
 
 class BarredScrolledLinedText(ScrolledLinedText):
@@ -512,42 +479,6 @@ class BarredScrolledLinedText(ScrolledLinedText):
 
     def place(self, **kwargs):
         self.barredframe.place(**kwargs)
-
-
-class ScrolledText(BasicText):
-    def __init__(self, master, **kwargs):
-        self.scollframe = tk.Frame(master, bd=0)
-        self.text_frame = tk.Frame(self.scollframe, bd=0)
-        self.text_frame.pack(side="top")
-
-        super().__init__(self.text_frame, bd=0, **kwargs)
-        command = partial(self.generate_change_event, super().xview)
-        self.xscrollbar = AutoScrollbar(self.scollframe, self, command=command,
-                                        orient="horizontal")
-        command = partial(self.generate_change_event, super().yview)
-        self.yscrollbar = AutoScrollbar(self.text_frame, self, command=command,
-                                        orient="vertical")
-        xcommand = partial(self.generate_change_event, self.xscrollbar.set)
-        ycommand = partial(self.generate_change_event, self.yscrollbar.set)
-        super().config(xscrollcommand=xcommand,
-                       yscrollcommand=ycommand)
-        self.yscrollbar.pack(fill="y", side="right")
-        super().pack(fill="both", expand=True, side="left")
-        self.text_frame.pack(fill="both", side="top", expand=True)
-        self.xscrollbar.pack(fill="x", side="bottom")
-
-    def pack(self, **kwargs):
-        self.scollframe.pack(**kwargs)
-
-    def grid(self, **kwargs):
-        self.scollframe.grid(**kwargs)
-
-    def place(self, **kwargs):
-        self.scollframe.place(**kwargs)
-
-    def generate_change_event(self, function, *args):
-        super().event_generate("<<Changed>>", when="tail")
-        function(*args)
 
 
 if __name__ == "__main__":

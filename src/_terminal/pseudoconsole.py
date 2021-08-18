@@ -1,7 +1,11 @@
 from threading import Thread, Lock
 from time import sleep
-from . import _pseudoconsole
 import os
+
+try:
+    from . import _pseudoconsole
+except ImportError:
+    import _pseudoconsole
 
 
 class Buffer:
@@ -226,19 +230,20 @@ class Console:
         if not self.proc_alive:
             return "No process running"
 
-        if self.last_exit_code is None:
-            result = _pseudoconsole.DWORD()
-            _pseudoconsole.GetExitCodeProcess(self.proc_handle,
-                                              _pseudoconsole.byref(result))
-            result_value = result.value
-            if result_value == _pseudoconsole.STILL_ACTIVE:
-                # Suggested here: https://stackoverflow.com/a/1591379/11106801
-                # by @Netherwire. I have no idea how/why it works
-                alive = _pseudoconsole.WaitForSingleObject(self.proc_handle, 0)
-                if alive != 0:
-                    return None
-            self.last_exit_code = result_value
-        return self.last_exit_code
+        if self.last_exit_code is not None:
+            return self.last_exit_code
+
+        # Suggested here: https://stackoverflow.com/a/1591379/11106801
+        # by @Netherwire (in the comments).
+        alive = _pseudoconsole.WaitForSingleObject(self.proc_handle, 0)
+        if alive != 0:
+            return None
+        result = _pseudoconsole.DWORD()
+        _pseudoconsole.GetExitCodeProcess(self.proc_handle,
+                                          _pseudoconsole.byref(result))
+        result_value = result.value
+        self.last_exit_code = result_value
+        return result_value # self.last_exit_code
 
     def close_proc(self) -> None:
         """
@@ -382,14 +387,11 @@ class Console:
 
 if __name__ == "__main__":
     console = Console(80, 24)
-    console.run("python -m cmd")
-    # console.write(b"print(\"hi\")\r")
+    console.run(r'''g++ -O3 -w "C:\Users\TheLizzard\Documents\GitHub\Bismuth-184\src\C++ programs\useless\test.cpp" -o "C:\Users\TheLizzard\Documents\GitHub\Bismuth-184\src\runnable\..\compiled\ccarotmodule.exe"''')
     while console.poll() is None:
         sleep(0.2)
-    sleep(1)
-    print("Process output =", console.read(10000))
+    sleep(0.2)
+    print(console.read(10000).decode())
     print("Exit code =", console.poll())
     console.close_proc()
     console.close_console()
-
-#pseudoconsole.py

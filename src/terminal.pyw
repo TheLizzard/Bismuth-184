@@ -1,4 +1,4 @@
-from _tkinter import TclError
+import tkinter.font as tkfont
 from threading import Lock
 from time import sleep
 import tkinter as tk
@@ -10,7 +10,7 @@ from _terminal.tag_negator import Range
 
 from basiceditor.text import ScrolledText
 from constants.settings import settings
-from constants.bettertk import BetterTk
+from constants.bettertk import BetterTk, BetterTkSettings
 
 
 class ConsoleText(ScrolledText):
@@ -55,8 +55,7 @@ FONT = settings.terminal.font.get()
 BG_COLOUR = settings.terminal.bg.get()
 FG_COLOUR = settings.terminal.fg.get()
 TITLEBAR_COLOUR = settings.terminal.titlebar_colour.get()
-TITLEBAR_SIZE = settings.terminal.titlebar_size.get()
-NOTACTIVETITLE_BG = settings.terminal.notactivetitle_bg.get()
+INACTIVETITLE_BG = settings.terminal.inactivetitle_bg.get()
 
 WAIT_NEXT_LOOP_MS = settings.terminal.wait_next_loop_ms.get()
 
@@ -86,13 +85,15 @@ STR_TO_CHR_DICT = {"Return": "\r",
 
 
 class Terminal(tk.Frame):
-    def __init__(self, master):
+    def __init__(self, master, input_allowed=True):
         super().__init__(master, bd=0, highlightthickness=0)
         self.console = Console(WIDTH, HEIGHT)
+        self.input_allowed = input_allowed
         self.exit_code = None
         self.running = False
         self.closed = False
         self.stdout_buffer = ""
+        self.resize_after_id = None
         self.reading_from_proc_output = False
 
         self.tk_init()
@@ -318,6 +319,8 @@ class Terminal(tk.Frame):
         self.text.bind("<Button-1>", self.return_break)
         self.text.bind("<ButtonRelease-1>", self.return_break)
         self.text.bind("<Motion>", self.return_break)
+        # Needs to work but it doesn't:
+        # self.text.bind("<Double-ButtonPress-1>", self.return_break)
 
         # Tags:
         # 1  ✓ Bold or increased intensity
@@ -348,8 +351,39 @@ class Terminal(tk.Frame):
         self.text.tag_configure("Colour-96", foreground="#00ffff")
         self.text.tag_configure("Colour-97", foreground="#ffffff")
 
-    def return_break(self, event):
+        self.text.bind("<Configure>", self.text_resized)
+
+    def text_resized(self, event:tk.Event=None) -> None:
+        if self.resize_after_id is not None:
+            self.text.after_cancel(self.resize_after_id)
+        self.resize_after_id = self.text.after(1000, self._text_resized)
+
+    def _text_resized(self) -> None:
+        self.resize_after_id = None
+        width_pixels = self.text.winfo_width()
+        height_pixels = self.text.winfo_height()
+        if isinstance(FONT, (tuple, list)) and len(FONT) > 1:
+            family, size, *other = FONT
+            if len(other) == 0:
+                other.append("normal")
+            font = tkfont.Font(self.text, family=family, size=size, weight=other[0])
+            m_len = font.measure("m", displayof=self.text)
+            width = width_pixels // m_len
+
+            i = 1
+            last_index = f"100.{width}"
+            while self.text.compare(last_index, "!=", f"{i}.{width}"):
+                self.text.delete(f"{i}.{width}", f"{i}.{width} lineend")
+                last_index = f"{i}.{width}"
+                i += 1
+
+            self.console.resize(int(width), None)
+
+    def return_break(self, event:tk.Event=None) -> str:
         return "break"
+
+    def return_none(self, event:tk.Event) -> None:
+        return None
 
     def send_interupt(self, event):
         self.console.write(b"\x03")
@@ -380,7 +414,9 @@ class Terminal(tk.Frame):
         print("Unable to write:", repr(char))
         return ""
 
-    def write_to_proc(self, event):
+    def write_to_proc(self, event:tk.Event) -> str:
+        if not self.input_allowed:
+            return "break"
         char = self.get_char_from_event(event)
         if char == "":
             return "break"
@@ -388,14 +424,14 @@ class Terminal(tk.Frame):
         self.console.write(char.encode())
         return "break"
 
-    def close(self):
+    def close(self) -> None:
         self.forver_cmd_running = False
         self.stop_proc()
         self.console.close_console()
         self.running = False
         self.closed = True
 
-    def run(self, command: str):
+    def run(self, command:str) -> None:
         self.running = True
         self.reading_from_proc_output = True
         self.text.after(WAIT_NEXT_LOOP_MS, self.print_on_screen)
@@ -403,6 +439,7 @@ class Terminal(tk.Frame):
         self.stop_proc()
         self.console.run(command)
         self.text.after(100, self.check_proc_done)
+        super().mainloop()
 
     def check_proc_done(self):
         exit_code = self.console.poll()
@@ -411,7 +448,7 @@ class Terminal(tk.Frame):
         else:
             self.running = False
             self.exit_code = exit_code
-            self.text.event_generate("<<FinishedProcess>>", when="tail")
+            super().quit()
 
     def clear(self):
         self.text.delete("0.0", "end")
@@ -421,40 +458,34 @@ class Terminal(tk.Frame):
 
     def focus_force(self):
         self.text.focus_force()
-
-    def focus(self):
-        self.focus_force()
+    focus = focus_force
 
     def stop_proc(self):
         self.console.close_proc()
         self.console.discard_output()
         self.exit_code = None
+        if self.running:
+            super().quit()
 
 
 class TerminalWindow:
-    def __init__(self, master=None, _class=tk.Tk):
-        if _class == tk.Tk:
-            self.root = BetterTk(titlebar_bg=BG_COLOUR,
-                                 titlebar_fg=TITLEBAR_COLOUR,
-                                 titlebar_sep_colour=FG_COLOUR, _class=_class,
-                                 titlebar_size=TITLEBAR_SIZE,
-                                 notactivetitle_bg=NOTACTIVETITLE_BG)
-        else:
-            self.root = BetterTk(master=master, titlebar_bg=BG_COLOUR,
-                                 titlebar_fg=TITLEBAR_COLOUR,
-                                 titlebar_sep_colour=FG_COLOUR, _class=_class,
-                                 titlebar_size=TITLEBAR_SIZE,
-                                 notactivetitle_bg=NOTACTIVETITLE_BG)
+    def __init__(self, master=None):
+        settings = BetterTkSettings(theme="dark")
+        settings.config(active_titlebar_bg=BG_COLOUR, bg=BG_COLOUR,
+                        active_titlebar_fg=TITLEBAR_COLOUR,
+                        separator_colour=FG_COLOUR,
+                        inactive_titlebar_bg=INACTIVETITLE_BG)
+        self.root = BetterTk(master=master, settings=settings)
         self.root.title("Terminal")
         self.root.iconbitmap("logo/logo2.ico")
-        self.root.buttons["X"].config(command=self.close)
+        self.root.close_button.config(command=self.close)
 
         self.term = Terminal(self.root)
         self.term.pack(fill="both", expand=True)
 
     def close(self):
         self.term.close()
-        self.root.close()
+        self.root.destroy()
 
     def clear(self):
         self.term.clear()
@@ -490,10 +521,6 @@ class TerminalWindow:
     def exit_code(self):
         return self.term.exit_code
 
-    @exit_code.setter
-    def exit_code(self, value):
-        self.term.exit_code = value
-
     @property
     def reading_from_proc_output(self):
         return self.term.reading_from_proc_output
@@ -507,4 +534,4 @@ if __name__ == "__main__":
     terminal = TerminalWindow()
     # terminal.run(r"compiled\ccarotmodule.exe")
     terminal.run("cmd")
-    terminal.mainloop()
+    # terminal.mainloop()

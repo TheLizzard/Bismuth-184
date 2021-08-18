@@ -1,32 +1,120 @@
 from PIL import Image, ImageTk
 import tkinter as tk
 
-import sys
-USING_WINDOWS = ("win" in sys.platform)
 
 THEME_OPTIONS = ("light", "dark")
-THEME = "dark"
 
-if THEME == "dark":
-    THEME_BG = "black"
-    THEME_FG = "white"
-    THEME_SEP_COLOUR = "grey"
-    THEME_HIGHLIGHT = "grey"
-    THEME_ACTIVE_TITLEBAR_BG = "black"
-    THEME_INACTIVE_TITLEBAR_BG = "grey17"
-elif THEME == "light":
-    THEME_BG = "#f0f0ed"
-    THEME_FG = "black"
-    THEME_SEP_COLOUR = "grey"
-    THEME_HIGHLIGHT = "grey"
-    THEME_ACTIVE_TITLEBAR_BG = "white"
-    THEME_INACTIVE_TITLEBAR_BG = "grey80"
+# Unchangable settings:
+NUMBER_OF_CUSTOM_BUTTONS = 10 # The number of custom buttons allowed at 1 time
+MIN_WIDTH = 240 # The minimum width to hide the dummy window
+MIN_HEIGHT = 80 # The minimum height to hide the dummy window
 
-SNAP_THRESHOLD = 200
-SEPARATOR_SIZE = 1
-NUMBER_OF_CUSTOM_BUTTONS = 5
 
-USE_UNICODE = False
+__author__ = "TheLizzard"
+
+
+class BetterTkSettings:
+    def __init__(self, theme="dark", use_unicode=False, snap_threshold=200,
+                 separator_size=1, bd=3, use_shadow=False):
+        self.SNAP_THRESHOLD = snap_threshold
+        self.SEPARATOR_SIZE = separator_size
+        self.BORDER_WIDTH = bd
+        self.USE_SHADOW = use_shadow
+
+        self.USE_UNICODE = use_unicode
+
+        if theme == "dark":
+            self.BG = "black"
+            self.SEP_COLOUR = "grey"
+            self.HIGHLIGHT = "grey"
+            self.ACTIVE_TITLEBAR_BG = "black"
+            self.ACTIVE_TITLEBAR_FG = "white"
+            self.INACTIVE_TITLEBAR_BG = "grey17"
+            self.INACTIVE_TITLEBAR_FG = "white"
+        elif theme == "light":
+            self.BG = "#f0f0ed"
+            self.SEP_COLOUR = "grey"
+            self.HIGHLIGHT = "grey"
+            self.ACTIVE_TITLEBAR_BG = "white"
+            self.ACTIVE_TITLEBAR_FG = "black"
+            self.INACTIVE_TITLEBAR_BG = "grey80"
+            self.INACTIVE_TITLEBAR_FG = "black"
+        else:
+            raise ValueError("Invalid theme option.")
+
+        # Keep track of the number of BetterTk windows attached to this
+        self.bettertk_users = 0
+
+    def started_using(self) -> None:
+        self.bettertk_users += 1
+
+    def stoped_using(self) -> None:
+        self.bettertk_users -= 1
+
+    def config(self, bg=None, separator_colour=None, hightlight_colour=None,
+               active_titlebar_bg=None, active_titlebar_fg=None,
+               inactive_titlebar_bg=None, inactive_titlebar_fg=None, bd=None,
+               use_unicode=None, snap_threshold=None, separator_size=None,
+               use_shadow=None):
+        """
+        Possible settings:
+            bg:str                    The window's background colour
+            separator_colour:str      The separator's colour that is between
+                                      the titlebar and your widgets
+            hightlight_colour:str     The colour of the window's edges
+            active_titlebar_bg:str
+            active_titlebar_fg:str
+            inactive_titlebar_bg:str
+            inactive_titlebar_fg:str
+
+            use_unicode:bool          If the window should use unicode
+                                      characters for the buttons
+            snap_threshold:int        Explained in `BetterTkSettings.__doc__`
+            separator_size:int        The separator's height that is between
+                                      the titlebar and your widgets
+                                      (Best to keep it around 1)
+            bd:int                    The boarder width of the window
+            use_shadow:int            Should the window use a semi transparent
+                                      border. If `False` the boarder isn't
+                                      transparent.
+
+        Notes:
+            You can't change the settings while there is a BetterTk window
+            attached to this object. If you want to change the background of
+            the window use `<BetterTk>.config(bg=...)`
+        """
+        if self.bettertk_users != 0:
+            raise Exception("It isn't safe to change the settings while " \
+                            "the window is running.")
+        if bg is not None:
+            self.BG = bg
+        if separator_colour is not None:
+            self.SEP_COLOUR = separator_colour
+        if hightlight_colour is not None:
+            self.HIGHLIGHT = hightlight_colour
+        if active_titlebar_bg is not None:
+            self.ACTIVE_TITLEBAR_BG = active_titlebar_bg
+        if active_titlebar_fg is not None:
+            self.ACTIVE_TITLEBAR_FG = active_titlebar_fg
+        if inactive_titlebar_bg is not None:
+            self.INACTIVE_TITLEBAR_BG = inactive_titlebar_bg
+        if inactive_titlebar_fg is not None:
+            self.INACTIVE_TITLEBAR_FG = inactive_titlebar_fg
+        if bd is not None:
+            self.BORDER_WIDTH = bd
+        if use_shadow is not None:
+            self.USE_SHADOW = use_shadow
+        if use_unicode is not None:
+            self.USE_UNICODE = use_unicode
+        if snap_threshold is not None:
+            self.SNAP_THRESHOLD = snap_threshold
+        if separator_size is not None:
+            self.SEPARATOR_SIZE = separator_size
+    configure = config
+
+
+DEFAULT_SETTINGS = BetterTkSettings()
+DEFAULT_SETTINGS.started_using()
 
 
 class CustomButton(tk.Button):
@@ -36,9 +124,17 @@ class CustomButton(tk.Button):
             self.callback = lambda: None
         else:
             self.callback = function
-        super().__init__(master, text=name, relief="flat", bg=THEME_BG,
-                         fg=THEME_FG, command=lambda: self.callback())
+        super().__init__(master, text=name, relief="flat", takefocus=False,
+                         command=lambda: self.callback())
         self.column = column
+
+        active_bg = self.betterroot.settings.ACTIVE_TITLEBAR_BG
+        active_fg = self.betterroot.settings.ACTIVE_TITLEBAR_FG
+        inactive_bg = self.betterroot.settings.INACTIVE_TITLEBAR_BG
+        inactive_fg = self.betterroot.settings.INACTIVE_TITLEBAR_FG
+        super().config(bg=inactive_bg, activebackground=active_bg,
+                       fg=inactive_fg, activeforeground=active_fg)
+        self.show()
 
     def show(self, column=None):
         """
@@ -46,56 +142,63 @@ class CustomButton(tk.Button):
         """
         if column is None:
             column = self.column
+        self.shown = True
         super().grid(row=1, column=column)
 
     def hide(self):
         """
         Hides the button from the screen
         """
+        self.shown = False
         super().grid_forget()
 
 
 class MinimiseButton(tk.Button):
-    def __init__(self, master, betterroot):
+    def __init__(self, master, betterroot, settings:BetterTkSettings):
         self.betterroot = betterroot
-        if USE_UNICODE:
+        if settings.USE_UNICODE:
             text = "\u2014"
         else:
             text = "_"
-        super().__init__(master, text=text, relief="flat", bg=THEME_BG,
-                         fg=THEME_FG, command=self.minimise_window)
+        super().__init__(master, text=text, relief="flat", takefocus=False,
+                         command=self.minimise_window)
+        self.show()
 
-    def minimise_window(self):
+    def minimise_window(self) -> None:
         """
         Minimises the window
         """
         self.betterroot.dummy_root.iconify()
         self.betterroot.root.withdraw()
 
-    def show(self, column=NUMBER_OF_CUSTOM_BUTTONS+2):
+    def show(self, column:int=NUMBER_OF_CUSTOM_BUTTONS+2) -> None:
         """
         Shows the button on the screen
         """
+        self.shown = True
         super().grid(row=1, column=column)
 
-    def hide(self):
+    def hide(self) -> None:
         """
         Hides the button from the screen
         """
+        self.shown = False
         super().grid_forget()
 
 
 class FullScreenButton(tk.Button):
-    def __init__(self, master, betterroot):
+    def __init__(self, master, betterroot, settings:BetterTkSettings):
         self.betterroot = betterroot
-        if USE_UNICODE:
+        if settings.USE_UNICODE:
             text = "\u2610"
         else:
             text = "[]"
-        super().__init__(master, text=text, relief="flat", bg=THEME_BG,
-                         fg=THEME_FG, command=self.toggle_fullscreen)
+        super().__init__(master, text=text, relief="flat", takefocus=False,
+                         command=self.toggle_fullscreen)
+        self.show()
+        self.old_geometry = None
 
-    def toggle_fullscreen(self, event=None):
+    def toggle_fullscreen(self, event:tk.Event=None) -> None:
         """
         Toggles fullscreen.
         """
@@ -110,21 +213,29 @@ class FullScreenButton(tk.Button):
         else:
             self.fullscreen()
 
-    def fullscreen(self):
+    def fullscreen(self) -> None:
         """
         Switches to full screen.
         """
+        super().update()
+        self.old_geometry = self.betterroot.geometry()
         if self.betterroot.is_full_screen:
             return "error"
+        if not (self.betterroot.resizable_window.resizable_vertical and \
+                self.betterroot.resizable_window.resizable_horizontal):
+            return "can't"
         super().config(command=self.notfullscreen)
-        if USING_WINDOWS:
-            self.betterroot.root.overrideredirect(False)
-        else:
-            self.betterroot.root.attributes("-type", "normal")
+        self.betterroot.show_titlebar()
         self.betterroot.root.attributes("-fullscreen", True)
+        self.betterroot.hide_titlebar()
         self.betterroot.is_full_screen = True
 
-    def notfullscreen(self):
+        geometry = f"{self.betterroot.root.winfo_width()}x"\
+                   f"{self.betterroot.root.winfo_height()}"
+        for function in self.betterroot.geometry_bindings:
+            function(geometry)
+
+    def notfullscreen(self) -> None:
         """
         Switches to back to normal (not full) screen.
         """
@@ -132,53 +243,59 @@ class FullScreenButton(tk.Button):
             return "error"
         # This toggles between the `fullscreen` and `notfullscreen` methods
         super().config(command=self.fullscreen)
+        self.betterroot.show_titlebar()
         self.betterroot.root.attributes("-fullscreen", False)
-        if USING_WINDOWS:
-            self.betterroot.root.overrideredirect(True)
-        else:
-            self.betterroot.root.attributes("-type", "splash")
+        self.betterroot.hide_titlebar()
         self.betterroot.is_full_screen = False
 
-    def show(self, column=NUMBER_OF_CUSTOM_BUTTONS+3):
+        if self.old_geometry is not None:
+            self.betterroot.geometry(self.old_geometry)
+
+    def show(self, column:int=NUMBER_OF_CUSTOM_BUTTONS+3) -> None:
         """
         Shows the button on the screen
         """
+        self.shown = True
         super().grid(row=1, column=column)
 
-    def hide(self):
+    def hide(self) -> None:
         """
         Hides the button from the screen
         """
+        self.shown = False
         super().grid_forget()
 
 
 class CloseButton(tk.Button):
-    def __init__(self, master, betterroot):
+    def __init__(self, master, betterroot, settings:BetterTkSettings):
         self.betterroot = betterroot
-        if USE_UNICODE:
+        if settings.USE_UNICODE:
             text = "\u26cc"
         else:
             text = "X"
-        super().__init__(master, text=text, relief="flat", bg=THEME_BG,
-                         fg=THEME_FG, command=self.close_window_protocol)
+        super().__init__(master, text=text, relief="flat", takefocus=False,
+                         command=self.close_window_protocol)
+        self.show()
 
-    def close_window_protocol(self):
+    def close_window_protocol(self) -> None:
         """
         Generates a `WM_DELETE_WINDOW` protocol request.
         If unhandled it will automatically go to `root.destroy()`
         """
         self.betterroot.protocol_generate("WM_DELETE_WINDOW")
 
-    def show(self, column=NUMBER_OF_CUSTOM_BUTTONS+4):
+    def show(self, column:int=NUMBER_OF_CUSTOM_BUTTONS+4) -> None:
         """
         Shows the button on the screen
         """
+        self.shown = True
         super().grid(row=1, column=column)
 
-    def hide(self):
+    def hide(self) -> None:
         """
         Hides the button from the screen
         """
+        self.shown = False
         super().grid_forget()
 
 
@@ -195,10 +312,10 @@ class BetterTk(tk.Frame):
 
     Methods:
         *List of newly defined methods*
-            change_titlebar_bg(new_bg_colour) => None
-            protocol_generate(protocol) => None
+            __init__(master=None, settings:BetterTkSettings=DEFAULT_SETTINGS)
+            protocol_generate(protocol:str) -> None
+            topmost() -> None
             #custom_buttons#
-            topmost() => None
 
         *List of methods that act the same was as tkinter.Tk's methods*
             title
@@ -257,17 +374,22 @@ class BetterTk(tk.Frame):
             show(column) => None
             hide() => None
     """
-    def __init__(self, master=None, Class=tk.Tk):
-        if Class == tk.Toplevel:
-            self.root = tk.Toplevel(master)
-        elif Class == tk.Tk:
+    def __init__(self, master=None, settings:BetterTkSettings=DEFAULT_SETTINGS):
+        self.settings = settings
+        self.settings.started_using()
+
+        if master is None:
             self.root = tk.Tk()
+        elif isinstance(master, tk.Misc):
+            self.root = tk.Toplevel(master)
         else:
-            raise ValueError("Invalid `Class` argument.")
+            raise ValueError("Invalid `master` argument. It must be " \
+                             "`None` or a class that inherits from `tk.Misc`")
         self.protocols = {"WM_DELETE_WINDOW": self.destroy}
         self.window_destroyed = False
         self.focused_widget = None
         self.is_full_screen = False
+        self.geometry_bindings = []
 
         # Create the dummy window
         self.dummy_root = tk.Toplevel(self.root)
@@ -276,53 +398,58 @@ class BetterTk(tk.Frame):
         self.root.update()
         self.dummy_root.after(1, self.dummy_root.geometry, "1x1")
         geometry = "+%i+%i" % (self.root.winfo_x(), self.root.winfo_y())
-        if USING_WINDOWS:
-            self.root.overrideredirect(True)
-        else:
-            self.root.attributes("-type", "splash")
+        self.hide_titlebar()
         self.geometry(geometry)
+        self.root.minsize(MIN_WIDTH, MIN_HEIGHT)
         self.root.bind("<FocusIn>", self.window_focused)
         self.root.bind("<FocusOut>", self.window_unfocused)
 
+        bd = 0
+        if not self.settings.USE_SHADOW:
+            bd = self.settings.BORDER_WIDTH
         # Master frame so that I can add a grey border around the window
-        self.master_frame = tk.Frame(self.root, highlightthickness=3, bd=0,
-                                     highlightbackground=THEME_HIGHLIGHT)
+        self.master_frame = tk.Frame(self.root, bd=0, highlightthickness=bd,
+                                     highlightbackground=self.settings.HIGHLIGHT)
         self.master_frame.pack(expand=True, fill="both")
-        self.resizable_window = ResizableWindow(self.master_frame, self)
+        if not self.settings.USE_SHADOW:
+            self.resizable_window = ResizableWindow(self.master_frame, self)
 
         # The actual <tk.Frame> where you can put your widgets
-        super().__init__(self.master_frame, bd=0, bg=THEME_BG, cursor="arrow")
-        super().pack(expand=True, side="bottom", fill="both")
+        super().__init__(self.master_frame, bd=0, bg=self.settings.BG,
+                         cursor="arrow")
 
         # Set up the title bar frame
-        self.title_bar = tk.Frame(self.master_frame, bg=THEME_BG, bd=0,
-                                  cursor="arrow")
+        self.title_bar = tk.Frame(self.master_frame, bd=0, cursor="arrow")
         self.title_bar.pack(side="top", fill="x")
         self.draggable_window = DraggableWindow(self.title_bar, self)
 
+        # Needs to packed after `self.title_bar`.
+        super().pack(expand=True, side="bottom", fill="both")
+
         # Add a separator
-        self.separator = tk.Frame(self.master_frame, bg=THEME_SEP_COLOUR,
-                                  height=SEPARATOR_SIZE, bd=0, cursor="arrow")
+        self.separator = tk.Frame(self.master_frame, bd=0, cursor="arrow",
+                                  bg=self.settings.SEP_COLOUR,
+                                  height=self.settings.SEPARATOR_SIZE)
         self.separator.pack(fill="x")
 
         # For the titlebar frame
-        self.title_frame = tk.Frame(self.title_bar, bg=THEME_BG)
+        self.title_frame = tk.Frame(self.title_bar, bd=0)
         self.title_frame.pack(expand=True, side="left", anchor="w", padx=5)
 
-        self.buttons_frame = tk.Frame(self.title_bar, bg=THEME_BG)
+        self.buttons_frame = tk.Frame(self.title_bar, bd=0)
         self.buttons_frame.pack(expand=True, side="right", anchor="e")
 
         self.title_label = tk.Label(self.title_frame, text="Better Tk",
-                                    bg=THEME_BG, fg=THEME_FG)
+                                    bg=self.settings.ACTIVE_TITLEBAR_BG,
+                                    fg=self.settings.ACTIVE_TITLEBAR_FG)
         self.title_label.grid(row=1, column=2, sticky="news")
         self.icon_label = None
 
-        self.minimise_button = MinimiseButton(self.buttons_frame, self)
-        self.minimise_button.show()
-        self.fullscreen_button = FullScreenButton(self.buttons_frame, self)
-        self.fullscreen_button.show()
-        self.close_button = CloseButton(self.buttons_frame, self)
-        self.close_button.show()
+        self.minimise_button = MinimiseButton(self.buttons_frame, self,
+                                              self.settings)
+        self.fullscreen_button = FullScreenButton(self.buttons_frame, self,
+                                                  self.settings)
+        self.close_button = CloseButton(self.buttons_frame, self, self.settings)
 
         # When the user double clicks on the titlebar
         self.title_bar.bind_all("<Double-Button-1>",
@@ -333,7 +460,24 @@ class BetterTk(tk.Frame):
         self.buttons = [self.minimise_button, self.fullscreen_button,
                         self.close_button]
 
-    def snap_to_side(self, event):
+        bg = self.settings.ACTIVE_TITLEBAR_BG
+        fg = self.settings.ACTIVE_TITLEBAR_FG
+        for button in self.buttons:
+            button.config(activebackground=bg, activeforeground=fg)
+
+        self.window_unfocused()
+
+        if self.settings.USE_SHADOW:
+            self.shadow = Shadow(self, settings)
+            self.resizable_window = ResizableWindow(self.shadow, self)
+
+    def hide_titlebar(self) -> None:
+        self.root.attributes("-type", "splash")
+
+    def show_titlebar(self) -> None:
+        self.root.attributes("-type", "normal")
+
+    def snap_to_side(self, event:tk.Event=None) -> None:
         """
         Moves the window to the side that it's close to.
         """
@@ -347,17 +491,17 @@ class BetterTk(tk.Frame):
 
         geometry = [rootx, rooty]
 
-        if rootx < SNAP_THRESHOLD:
+        if rootx < self.settings.SNAP_THRESHOLD:
             geometry[0] = 0
-        if rooty < SNAP_THRESHOLD:
+        if rooty < self.settings.SNAP_THRESHOLD:
             geometry[1] = 0
-        if screen_width - (rootx + width) < SNAP_THRESHOLD:
+        if screen_width - (rootx + width) < self.settings.SNAP_THRESHOLD:
             geometry[0] = screen_width - width
-        if screen_height - (rooty + height) < SNAP_THRESHOLD:
+        if screen_height - (rooty + height) < self.settings.SNAP_THRESHOLD:
             geometry[1] = screen_height - height
         self.geometry("+%i+%i" % tuple(geometry))
 
-    def focus_main(self, event=None):
+    def focus_main(self, event:tk.Event=None) -> None:
         """
         When the dummy window gets focused it passes the focus to the main
         window. It also focuses the last focused widget.
@@ -369,22 +513,26 @@ class BetterTk(tk.Frame):
         else:
             self.focused_widget.focus_force()
 
-    def get_focused_widget(self, event=None):
+    def get_focused_widget(self, event:tk.Event=None) -> None:
+        """
+        Get's the focused widget so that later we can refocus it.
+        """
         widget = self.root.focus_get()
-        if not ((widget == self.root) or (widget == None)):
+        if widget not in (self.root, self.dummy_root, None):
             self.focused_widget = widget
 
-    def window_focused(self, event):
+    def window_focused(self, event:tk.Event=None) -> None:
         self.get_focused_widget()
-        self.change_titlebar_bg(THEME_ACTIVE_TITLEBAR_BG)
+        self.change_titlebar_bg(self.settings.ACTIVE_TITLEBAR_BG)
+        self.change_titlebar_fg(self.settings.ACTIVE_TITLEBAR_FG)
 
-    def window_unfocused(self, event):
-        self.get_focused_widget()
-        self.change_titlebar_bg(THEME_INACTIVE_TITLEBAR_BG)
+    def window_unfocused(self, event:tk.Event=None) -> None:
+        self.change_titlebar_bg(self.settings.INACTIVE_TITLEBAR_BG)
+        self.change_titlebar_fg(self.settings.INACTIVE_TITLEBAR_FG)
 
-    def change_titlebar_bg(self, colour):
+    def change_titlebar_bg(self, colour:str) -> None:
         """
-        Changes the bg of the root.
+        Changes the titlebar's background colour.
         """
         items = (self.title_bar, self.buttons_frame, self.title_label)
         items += tuple(self.buttons)
@@ -393,18 +541,25 @@ class BetterTk(tk.Frame):
         for item in items:
             item.config(background=colour)
 
-    def protocol_generate(self, protocol):
+    def change_titlebar_fg(self, colour:str) -> None:
+        """
+        Changes the titlebar's foreground colour.
+        """
+        items = (self.title_label, )
+        items += tuple(self.buttons)
+        for item in items:
+            item.config(foreground=colour)
+
+    def protocol_generate(self, protocol:str) -> None:
         """
         Generates a protocol.
         """
         try:
-            function = self.protocols[protocol]
-            function()
+            self.protocols[protocol]()
         except KeyError:
-            raise tk.TclError("Tried generating unknown protocol: \"%s\"" %
-                              protocol)
+            raise tk.TclError(f"Unknown protocol: \"{protocol}\"")
 
-    def check_parent_titlebar(self, event):
+    def check_parent_titlebar(self, event:tk.Event) -> bool:
         # Get the widget that was pressed:
         widget = event.widget
         # Check if it is part of the title bar or something else
@@ -427,47 +582,55 @@ class BetterTk(tk.Frame):
         return False
 
     @property
-    def custom_buttons(self):
-        return None
+    def custom_buttons(self) -> [CustomButton, CustomButton, ...]:
+        return self.buttons[3:]
 
     @custom_buttons.setter
-    def custom_buttons(self, value):
+    def custom_buttons(self, value:dict()) -> None:
         self.custom_button = CustomButton(self.buttons_frame, self, **value)
-        self.custom_button.show()
         self.buttons.append(self.custom_button)
 
     @property
-    def disable_north_west_resizing(self):
+    def disable_north_west_resizing(self) -> bool:
         return self.resizable_window.disable_north_west_resizing
 
     @disable_north_west_resizing.setter
-    def disable_north_west_resizing(self, value):
+    def disable_north_west_resizing(self, value:bool) -> None:
         self.resizable_window.disable_north_west_resizing = value
 
     # Normal <tk.Tk> methods:
-    def title(self, title):
+    def title(self, title:str=None) -> str:
         # Changing the title of the window
         # Note the name will aways be shows and the window can't be resized
         # to cover it up.
+        if title is None:
+            return self.root.title()
         self.title_label.config(text=title)
         self.root.title(title)
         self.dummy_root.title(title)
 
-    def config(self, bg=None, **kwargs):
+    def config(self, bg:str=None, **kwargs) -> dict:
         if bg is not None:
             super().config(bg=bg)
-        self.root.config(**kwargs)
+        return self.root.config(**kwargs)
 
-    def protocol(self, protocol, function):
+    def protocol(self, protocol:str=None, function=None) -> tuple:
         """
         Binds a function to a protocol.
         """
+        if protocol is None:
+            return tuple(self.protocols.keys())
+        if function is None:
+            return self.protocols[protocol]
         self.protocols.update({protocol: function})
 
-    def topmost(self):
+    def topmost(self) -> None:
         self.attributes("-topmost", True)
 
-    def geometry(self, geometry):
+    def geometry(self, geometry:str=None) -> str:
+        if geometry is None:
+            return self.root.geometry()
+
         if not isinstance(geometry, str):
             raise ValueError("The geometry must be a string")
         if geometry.count("+") not in (0, 2):
@@ -478,64 +641,87 @@ class BetterTk(tk.Frame):
             dummy_geometry = "+%i+%i" % (int(posx) + 75, int(posy) + 20)
         self.root.geometry(geometry)
         self.dummy_root.geometry(dummy_geometry)
+        for function in self.geometry_bindings:
+            function(geometry)
 
-    def focus_force(self):
+    def focus_force(self) -> None:
         self.root.deiconify()
         self.root.focus_force()
 
-    def destroy(self):
+    def destroy(self) -> None:
+        self.settings.stoped_using()
         if self.window_destroyed:
             super().destroy()
         else:
             self.window_destroyed = True
             self.root.destroy()
 
-    def iconbitmap(self, filename):
-        if self.icon_label is not None:
-            self.icon_label.destroy()
+    def iconbitmap(self, filename:str=None) -> ImageTk.PhotoImage:
+        if filename is None:
+            return self._tk_icon
+        bg = self.title_label.cget("background")
+        if self.icon_label is None:
+            self.icon_label = tk.Label(self.title_frame, bg=bg)
+            self.icon_label.grid(row=1, column=1, sticky="news")
         self.dummy_root.iconbitmap(filename)
         self.root.lift()
         self.root.update_idletasks()
-        size = self.title_frame.winfo_height()
+        # The 4 is because of the label's border
+        size = self.title_frame.winfo_height() - 4
         img = Image.open(filename).resize((size, size), Image.LANCZOS)
         self._tk_icon = ImageTk.PhotoImage(img, master=self.root)
-        bg = self.title_label.cget("background")
-        self.icon_label = tk.Label(self.title_frame, image=self._tk_icon, bg=bg)
-        self.icon_label.grid(row=1, column=1, sticky="news")
+        self.icon_label.config(image=self._tk_icon)
 
-    def resizable(self, width=None, height=None):
+    def resizable(self, width:int=None, height:int=None) -> (bool, bool):
         if width is not None:
             self.resizable_window.resizable_horizontal = width
         if height is not None:
             self.resizable_window.resizable_vertical = height
+
+        if (width is None) and (height is None):
+            return (self.resizable_window.resizable_horizontal,
+                    self.resizable_window.resizable_vertical)
+
+        if self.resizable_window.resizable_horizontal and \
+           self.resizable_window.resizable_vertical:
+            if self.fullscreen_button.shown:
+                self.fullscreen_button.show()
+        else:
+            self.fullscreen_button.grid_forget()
         return None
 
     def attributes(self, *args, **kwargs):
-        self.root.attributes(*args, **kwargs)
+        return self.root.attributes(*args, **kwargs)
 
-    def withdraw(self):
+    def withdraw(self) -> None:
         self.minimise_button.minimise_window()
         self.dummy_root.withdraw()
 
-    def iconify(self):
+    def iconify(self) -> None:
         self.dummy_root.iconify()
         self.minimise_button.minimise_window()
 
-    def deiconify(self):
+    def deiconify(self) -> None:
         self.dummy_root.deiconify()
         self.dummy_root.focus_force()
 
     def maxsize(self, *args, **kwargs):
-        self.root.maxsize(*args, **kwargs)
+        return self.root.maxsize(*args, **kwargs)
 
     def minsize(self, *args, **kwargs):
-        self.root.minsize(*args, **kwargs)
+        return self.root.minsize(*args, **kwargs)
 
     def state(self, *args, **kwargs):
-        self.root.state(*args, **kwargs)
+        return self.root.state(*args, **kwargs)
 
     def report_callback_exception(self, *args, **kwargs):
-        self.root.report_callback_exception(*args, **kwargs)
+        return self.root.report_callback_exception(*args, **kwargs)
+
+    # This method has problems. I am looking for a solution but...
+    # def bind_all(self, *args, **kwargs):
+    #     raise NotImplementedError("This is the only method that hasn't been "\
+    #                               "implemented. Please try to use another "\
+    #                               "method.")
 
 
 class ResizableWindow:
@@ -557,14 +743,15 @@ class ResizableWindow:
         self.frame.bind("<Enter>", self.change_cursor_resizing)
         self.frame.bind("<Motion>", self.change_cursor_resizing)
 
-        frame.bind("<Button-1>", self.mouse_press)
-        frame.bind("<B1-Motion>", self.mouse_motion)
-        frame.bind("<ButtonRelease-1>", self.mouse_release)
+        self.frame.bind("<Button-1>", self.mouse_press)
+        self.frame.bind("<B1-Motion>", self.mouse_motion)
+        self.frame.bind("<ButtonRelease-1>", self.mouse_release)
 
         self.started_resizing = False
 
-    def mouse_motion(self, event):
+    def mouse_motion(self, event:tk.Event) -> None:
         if self.started_resizing:
+            # Must be a list for `self.update_resizing_params` to change it
             new_params = [self.current_width, self.current_height,
                           self.currentx, self.currenty]
 
@@ -582,7 +769,7 @@ class ResizableWindow:
     def mouse_release(self, event):
         self.started_resizing = False
 
-    def mouse_press(self, event):
+    def mouse_press(self, event:tk.Event) -> None:
         if self.betterroot.is_full_screen:
             return None
         # Resizing the window:
@@ -599,7 +786,7 @@ class ResizableWindow:
                 self.quadrant_resizing = quadrant_resizing
 
     # For resizing:
-    def change_cursor_resizing(self, event):
+    def change_cursor_resizing(self, event) -> None:
         if self.betterroot.is_full_screen:
             self.frame.config(cursor="arrow")
             return None
@@ -611,25 +798,15 @@ class ResizableWindow:
             # Reset the cursor back to "arrow"
             self.frame.config(cursor="arrow")
         elif (quadrant_resizing == "ne") or (quadrant_resizing == "sw"):
-            if USING_WINDOWS:
-                # Available on Windows
-                self.frame.config(cursor="size_ne_sw")
+            if quadrant_resizing == "nw":
+                self.frame.config(cursor="bottom_left_corner")
             else:
-                # Available on Linux
-                if quadrant_resizing == "nw":
-                    self.frame.config(cursor="bottom_left_corner")
-                else:
-                    self.frame.config(cursor="top_right_corner")
+                self.frame.config(cursor="top_right_corner")
         elif (quadrant_resizing == "nw") or (quadrant_resizing == "se"):
-            if USING_WINDOWS:
-                # Available on Windows
-                self.frame.config(cursor="size_nw_se")
+            if quadrant_resizing == "nw":
+                self.frame.config(cursor="top_left_corner")
             else:
-                # Available on Linux
-                if quadrant_resizing == "nw":
-                    self.frame.config(cursor="top_left_corner")
-                else:
-                    self.frame.config(cursor="bottom_right_corner")
+                self.frame.config(cursor="bottom_right_corner")
         elif (quadrant_resizing == "n") or (quadrant_resizing == "s"):
             # Available on Windows/Linux
             self.frame.config(cursor="sb_v_double_arrow")
@@ -637,7 +814,7 @@ class ResizableWindow:
             # Available on Windows/Linux
             self.frame.config(cursor="sb_h_double_arrow")
 
-    def get_quadrant_resizing(self):
+    def get_quadrant_resizing(self) -> str:
         x, y = self.betterroot.root.winfo_pointerx(), self.betterroot.root.winfo_pointery()
         width, height = self.betterroot.root.winfo_width(), self.betterroot.root.winfo_height()
 
@@ -658,37 +835,41 @@ class ResizableWindow:
                     quadrant_resizing += "w"
         return quadrant_resizing
 
-    def resize_east(self):
+    def resize_east(self) -> (int, int, int, int):
         x = self.betterroot.root.winfo_pointerx()
         new_width = x - self.currentx
-        if new_width < 240:
-            new_width = 240
+        if new_width < MIN_WIDTH:
+            new_width = MIN_WIDTH
         return new_width, None, None, None
 
-    def resize_south(self):
-        y = self.betterroot.root.winfo_pointery()
-        new_height = y - self.currenty
-        if new_height < 80:
-            new_height = 80
-        return None, new_height, None, None
-
-    def resize_north(self):
-        y = self.betterroot.root.winfo_pointery()
-        dy = self.currenty - y
-        if dy < 80 - self.current_height:
-            dy = 80 - self.current_height
-        new_height = self.current_height + dy
-        return None, new_height, None, self.currenty - dy
-
-    def resize_west(self):
+    def resize_west(self) -> (int, int, int, int):
         x = self.betterroot.root.winfo_pointerx()
         dx = self.currentx - x
-        if dx < 240 - self.current_width:
-            dx = 240 - self.current_width
+        if dx < MIN_WIDTH - self.current_width:
+            dx = MIN_WIDTH - self.current_width
         new_width = self.current_width + dx
         return new_width, None, self.currentx - dx, None
 
-    def update_resizing_params(self, _list, _tuple):
+    def resize_south(self) -> (int, int, int, int):
+        y = self.betterroot.root.winfo_pointery()
+        new_height = y - self.currenty
+        if new_height < MIN_HEIGHT:
+            new_height = MIN_HEIGHT
+        return None, new_height, None, None
+
+    def resize_north(self) -> (int, int, int, int):
+        y = self.betterroot.root.winfo_pointery()
+        dy = self.currenty - y
+        if dy < MIN_HEIGHT - self.current_height:
+            dy = MIN_HEIGHT - self.current_height
+        new_height = self.current_height + dy
+        return None, new_height, None, self.currenty - dy
+
+    def update_resizing_params(self, _list:list, _tuple:tuple):
+        """
+        Changes each element of `_list` to the corresponding on in `_tuple`
+        if that element is not `None`. If it is, ignore it.
+        """
         for i in range(len(_tuple)):
             element = _tuple[i]
             if element is not None:
@@ -730,19 +911,53 @@ class DraggableWindow:
                         self.betterroot.root.winfo_rooty() + event.y
 
 
+# Example 1:
 if __name__ == "__main__":
-    def questionmark_pressed():
-        print("\"?\" was pressed")
-    def three_lines_pressed():
-        print("\"\u2263\" was pressed")
-
     root = BetterTk()
-    root.custom_buttons = {"name": "?",
-                           "function": questionmark_pressed,
-                           "column": 0}
-    root.custom_buttons = {"name": "\u2263",
-                           "function": three_lines_pressed,
-                           "column": 2}
+    root.title("Example 1")
     root.geometry("400x400")
-    root.minimise_button.hide()
+
+    # Adding a custom button:
+    root.custom_buttons = {"name": "?",
+                           "function": lambda: print("\"?\" was pressed"),
+                           "column": 0}
+
+    # Adding another custom button:
+    root.custom_buttons = {"name": "\u2263",
+                           "function": lambda: print("\"\u2263\" was pressed"),
+                           "column": 2}
+
+    # root.minimise_button.hide()
+    # root.fullscreen_button.hide()
+    # root.close_button.hide()
+
+    root.mainloop()
+
+
+# Example 2
+if __name__ == "__main__":
+    settings = BetterTkSettings(theme="light")
+    settings.config(separator_colour="red", use_unicode=True,
+                    active_titlebar_bg="#00ff00",
+                    inactive_titlebar_bg="#009900",
+                    active_titlebar_fg="white",
+                    inactive_titlebar_fg="white",
+                    hightlight_colour="cyan")
+
+    root = BetterTk(settings=settings)
+    root.geometry("400x400")
+    root.title("Example 2")
+
+    # Adding a custom button:
+    root.custom_buttons = {"name": "?",
+                           "function": lambda: print("\"?\" was pressed"),
+                           "column": 0}
+    button = root.buttons[-1]
+    button.config(command=lambda: print("New command set"))
+
+    label = tk.Label(root, text="This is just to show how to change the " \
+                                "window's settings.\nI know it looks bad.",
+                     justify="left")
+    label.pack(anchor="w")
+
     root.mainloop()

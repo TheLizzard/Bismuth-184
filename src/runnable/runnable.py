@@ -55,7 +55,7 @@ class RunnableText:
         self.saved_text = None
         self.file_name = None
         self.terminal = None
-        self.procs = []
+        self.commands = []
         self.idx = idx
         self.set_up_bindings()
 
@@ -112,20 +112,17 @@ class RunnableText:
             self.terminal.close()
 
     def run(self, event=None, args=None):
-        self.procs.clear()
+        self.commands.clear()
         if (self.terminal is None) or self.terminal.closed:
-            self.terminal = TerminalWindow(self.text, _class=tk.Toplevel)
-            self.terminal.bind("<<FinishedProcess>>", self.start_next_proc)
+            self.terminal = TerminalWindow(self.text)
             self.label = tk.Label(self.terminal.root, text="", bg=BG_COLOUR,
                                   fg=FG_COLOUR, font=FONT)
             self.label.pack(fill="x")
         else:
-            self.procs.clear()
             self.terminal.stop_process()
 
         self.terminal.clear()
         self.terminal.focus_force()
-        self.terminal.exit_code = None
 
         # Check if the file is saved
         work_saved = self.saved_text == self.text.get("0.0", "end").rstrip()
@@ -136,36 +133,33 @@ class RunnableText:
 
         # Create the compile instuction
         command = COMPILE_COMMAND.format(_in=self.file_name)
-        self.procs.append((command, "Compiling the program"))
+        self.commands.append((command, "Compiling the program"))
 
         # Run the program if compiled
         if args is None:
             command = RUN_COMMAND
         else:
             command = RUN_COMMAND + " " + " ".join(args)
-        self.procs.append((command, "Running the program"))
-        self.start_next_proc()
+        self.commands.append((command, "Running the program"))
 
-    def start_next_proc(self, event=None):
-        if not self.terminal.reading_from_proc_output:
-            exit_code = self.terminal.exit_code
-            if exit_code is not None:
-                try:
-                    msg = "Process exit code: %s" % str(exit_code)
-                    self.label.config(text=self.add_padding(msg), fg=FG_COLOUR)
-                except tk.TclError:
-                    return None
-            if (exit_code != 0) and (exit_code is not None):
-                self.procs.clear()
-                return None
-            try:
-                if len(self.procs) > 0:
-                    command, msg = self.procs.pop(0)
-                    self.label.config(text=self.add_padding(msg), fg=FG_COLOUR)
-                    self.terminal.run(command)
-            except tk.TclError:
-                return None
-        self.text.after(200, self.start_next_proc)
+        self.run_procs()
+
+    def run_procs(self) -> None:
+        try:
+            for command, text in self.commands:
+                self.label.config(text=self.add_padding(text), fg=FG_COLOUR,
+                                  bg=BG_COLOUR)
+                self.terminal.run(command)
+
+                exit_code = self.terminal.exit_code
+                msg = "Process exit code: %s" % str(exit_code)
+                self.label.config(text=self.add_padding(msg), fg=FG_COLOUR,
+                                  bg=BG_COLOUR)
+
+                if exit_code != 0:
+                    break
+        except tk.TclError:
+            pass
 
     @staticmethod
     def add_padding(text):
