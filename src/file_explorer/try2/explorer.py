@@ -1,4 +1,3 @@
-from time import perf_counter
 import tkinter as tk
 
 import images
@@ -7,56 +6,62 @@ import base_explorer
 
 INDENTATION = 25
 PADX = 5
-PADY = 5
+PADY = 5 # Not honoured
 
 
-class Explorer(tk.Frame):
-    def __init__(self, master, bg:str="black", fg:str="white",
-                 selected_bg:str="blue", selected_fg:str=None, **kwargs):
+class Explorer:
+    def __init__(self, master, fg:str="white", selected_bg:str="blue",
+                 bg:str="black", selected_fg:str=None):
         self.bg = bg
         self.fg = fg
         self.selected_bg = selected_bg
         self.selected_fg = selected_fg
-        super().__init__(master, bg=bg, highlightthickness=0, bd=0, **kwargs)
-        super().grid_propagate(False)
+        self.master = master
+        self.master.grid_propagate(False)
         self.tree = base_explorer.BaseExplorer()
 
         self.shown_items = []
         self.item_to_idx = {}
-        self.last_taken_row = -1
         self.selected = None # The currently selected `tk.Frame`
         self.mouse_down = False
         self.temp_holder = None
         self.dragging_file = False
-        self.last_opened = perf_counter()
+        self.renaming = False
+
+        self.framey = lambda y: y
+        if hasattr(self.master, "framey"):
+            self.framey = self.master.framey
 
         self.set_up()
-        super().bind_all("<Motion>", self.mouse_moved)
-        super().bind_all("<ButtonPress-1>", self.mouse_pressed)
-        super().bind_all("<ButtonRelease-1>", self.mouse_released)
-        super().grid_columnconfigure(0, weight=1)
+        self.master.bind_all("<Motion>", self.mouse_moved)
+        self.master.bind_all("<ButtonPress-1>", self.mouse_pressed)
+        self.master.bind_all("<ButtonRelease-1>", self.mouse_released)
+        self.master.grid_columnconfigure(0, weight=1)
 
     def mouse_pressed(self, event:tk.Event) -> None:
         frame = self.get_frame_from_event(event)
-        if frame == self:
+        if frame == self.master:
+            return None
+        # https://stackoverflow.com/a/58525580/11106801
+        if not str(frame).startswith(str(self.master)):
             return None
         idx = self.item_to_idx[frame.item]
-        self.temp_holder = tk.Frame(self, bg=self.bg, highlightthickness=0,
-                                    bd=0, width=frame.winfo_width(),
-                                    height=frame.winfo_height())
+        self.temp_holder = tk.Frame(self.master, highlightthickness=0,
+                                    height=frame.winfo_height(), bd=0,
+                                    width=frame.winfo_width(), bg=self.bg)
         self.temp_holder.grid(row=idx, column=0)
         frame.lift()
 
         self.mouse_down = True
-        self.offset_x = super().winfo_pointerx() - frame.winfo_x()
-        self.offset_y = super().winfo_pointery() - frame.winfo_y()
+        self.offset_x = self.master.winfo_pointerx() - frame.winfo_x()
+        self.offset_y = self.framey(self.master.winfo_pointery()) - frame.winfo_y()
 
     def mouse_moved(self, event:tk.Event) -> None:
         if self.mouse_down and (self.selected is not None):
             self.dragging_file = True
-            x = super().winfo_pointerx() - self.offset_x
-            y = super().winfo_pointery() - self.offset_y
-            self.selected.place(x=x, y=y, width=self.winfo_width())
+            x = self.master.winfo_pointerx() - self.offset_x
+            y = self.framey(self.master.winfo_pointery()) - self.offset_y
+            self.selected.place(x=x, y=y, width=self.master.winfo_width())
 
     def mouse_released(self, event:tk.Event) -> None:
         if self.mouse_down:
@@ -69,7 +74,7 @@ class Explorer(tk.Frame):
             self.temp_holder = None
 
     def get_frame_from_mouse(self, without:tk.Frame=None) -> tk.Frame:
-        y = super().winfo_pointery() - self.offset_y + \
+        y = self.framey(self.master.winfo_pointery()) - self.offset_y + \
             self.selected.winfo_height() // 2
         for target in self.shown_items:
             if (target != without) and self.y_in_frame(y, target):
@@ -79,7 +84,7 @@ class Explorer(tk.Frame):
                 return self.temp_holder
 
     def get_frame_from_immediate_mouse(self) -> tk.Frame:
-        y = super().winfo_pointery() - super().winfo_rooty()
+        y = self.framey(self.master.winfo_pointery()) - self.master.winfo_rooty()
         for target in self.shown_items:
             if self.y_in_frame(y, target):
                 return target
@@ -115,7 +120,11 @@ class Explorer(tk.Frame):
         self._frame_moved(frame)
 
     def _frame_moved(self, frame:tk.Frame) -> None:
-        new_idx, _ = self.slow_item_to_idx(frame.item)
+        new_idx, found = self.slow_item_to_idx(frame.item)
+        if not found:
+            raise ValueError(f"self.slow_item_to_idx({frame.item}) => " \
+                             f"{new_idx}, False\tThat means " \
+                             "`slow_item_to_idx` didn't find the item")
         to_add = []
         to_move = [frame.item]
         while len(to_move) > 0:
@@ -167,12 +176,14 @@ class Explorer(tk.Frame):
     def set_up(self) -> None:
         self.images = {}
         for extension in ("txt", "cpp", "file", "py"):
-            image = tk.PhotoImage(file=f"images/.{extension}.png", master=self)
+            image = tk.PhotoImage(file=f"images/.{extension}.png",
+                                  master=self.master)
             self.images.update({extension: image})
 
     def add(self, folder:str) -> None:
         self.tree.add(folder)
-        self.display(self.tree)
+        self._update()
+        self.master.event_generate("<<HeightChanged>>", when="tail")
 
     def remove(self, folder:str) -> None:
         self.tree.remove(folder)
@@ -182,7 +193,15 @@ class Explorer(tk.Frame):
             if item.garbage_collect:
                 self.delete(item)
 
+    def _update(self) -> None:
+        self.tree._update()
+        self.check_add_new_items(self.tree, clean_up=True)
+        self.clean_up()
+
     def delete(self, item) -> None:
+        if self.selected is not None:
+            if self.selected.item == item:
+                self.select(None)
         idx = self.item_to_idx[item]
         if not item.isfile:
             for child in item.children:
@@ -190,7 +209,7 @@ class Explorer(tk.Frame):
         del self.item_to_idx[item]
         self.shown_items[idx].destroy()
         del self.shown_items[idx]
-        self.last_taken_row -= 1
+        item.destroy()
         self.fix_item_to_idx()
 
     def fix_item_to_idx(self) -> None:
@@ -225,39 +244,50 @@ class Explorer(tk.Frame):
                 widget.config(fg=fg)
             widget.config(bg=bg)
 
-    def display(self, tree:base_explorer.Folder, idx:int=None) -> int:
-        items_draw = 0
-        for item in tree:
-            self.show(item, idx)
-            if (not item.isfile) and item.expanded:
-                items_draw += self.display(item, idx)
-            items_draw += 1
-        return items_draw
-    draw = display
+    def check_add_new_items(self, tree, clean_up:bool=False) -> None:
+        master = tree
+        for child in master:
+            if child.new:
+                idx = self._add_new_item(child)
+                if (child.master is not None) and (not child.master.expanded):
+                    self.shown_items[idx].grid_forget()
+            if not child.isfile:
+                self.check_add_new_items(child, clean_up=False)
+        if clean_up:
+            self.fix_item_to_idx()
 
-    def show(self, item, idx:int=None) -> None:
+    def add_new_item(self, item, clean_up:bool=False) -> None:
+        self._add_new_item()
+        if clean_up:
+            self.fix_item_to_idx()
+
+    def _add_new_item(self, child) -> int:
+        idx, found = self.slow_item_to_idx(child)
+        if not found:
+            raise ValueError(f"self.slow_item_to_idx({frame.item}) => " \
+                             f"{new_idx}, False\tThat means " \
+                             "`slow_item_to_idx` didn't find the item")
+        frame = self.show(child, idx)
+        return idx
+
+    def show(self, item, row:int) -> None:
         if item in self.item_to_idx:
             # Already shown
             return None
 
-        self.last_taken_row += 1
-        frame = tk.Frame(self, bg=self.bg, highlightthickness=0, bd=0)
-        if idx is None:
-            row = self.last_taken_row
-        else:
-            row = idx
+        frame = tk.Frame(self.master, bg=self.bg, highlightthickness=0, bd=0)
         frame.grid(row=row, column=0, sticky="ew")
 
         indentation = tk.Frame(frame, width=self.get_indentation(item),
                                bg=self.bg)
-        indentation.pack(side="left")
+        indentation.grid(row=0, column=0)
 
         if item.isfile:
             tk_icon = self.images[item.extension]
             icon = tk.Canvas(frame, bg=self.bg, bd=0, highlightthickness=0,
                              width=tk_icon.width(), height=tk_icon.height())
             icon.create_image(0, 0, anchor="nw", image=tk_icon)
-            icon.pack(side="left")
+            icon.grid(row=0, column=1)
             frame.icon = icon
         else:
             if item.expanded:
@@ -266,19 +296,21 @@ class Explorer(tk.Frame):
                 text = "+"
             expandeder = tk.Label(frame, text=text, bg=self.bg, fg=self.fg,
                                   font=("DejaVu Sans Mono", 9))
-            expandeder.pack(side="left")
+            expandeder.grid(row=0, column=1)
             frame.expandeder = expandeder
 
         name = tk.Label(frame, text=item.name, bg=self.bg, fg=self.fg,
                         anchor="w")
-        name.pack(side="left")
+        name.grid(row=0, column=2)
 
         frame.item = item
         frame.name = name
         frame.indentation = indentation
 
+        # These functions must `return "break"`:
         frame.bind_all("<ButtonPress-1>", self.user_selected, add=True)
         frame.bind_all("<Double-Button-1>", self.user_opened, add=True)
+        frame.bind_all("<ButtonPress-3>", self.right_clicked, add=True)
 
         self.shown_items.insert(row, frame)
         self.item_to_idx.update({item: row})
@@ -288,37 +320,40 @@ class Explorer(tk.Frame):
 
     def user_selected(self, event:tk.Event) -> str:
         frame = self.get_frame_from_event(event)
+        # User clicked at the end to remove selection
         if frame not in self.shown_items:
-            self._select(None)
+            self.select(None)
             return "break"
         item = frame.item
         if item.isfile:
+            # User clicked on the same item again (not a double click)
             if self.selected == frame:
-                return None
+                return "break"
             frame.event_generate("<<SelectedFile>>", when="tail")
         else:
             if frame.expandeder == event.widget:
                 return self.user_opened(event)
             if self.selected == frame:
-                return None
+                return "break"
             frame.event_generate("<<SelectedFolder>>", when="tail")
-        self._select(frame)
+        self.select(frame)
         return "break"
 
-    def _select(self, frame:tk.Frame) -> None:
+    def select(self, frame:tk.Frame) -> None:
         if self.selected is not None:
-            explorer.change_colour(bg=self.bg, frame=self.selected,
-                                   fg=self.fg)
+            self.change_colour(bg=self.bg, frame=self.selected,
+                               fg=self.fg)
         self.selected = frame
         if self.selected is not None:
-            explorer.change_colour(bg=self.selected_bg, frame=frame,
-                                   fg=self.selected_fg)
+            self.change_colour(bg=self.selected_bg, frame=frame,
+                               fg=self.selected_fg)
 
     def user_opened(self, event:tk.Event) -> str:
-        if perf_counter() - self.last_opened < 0.1:
+        if self.renaming:
             return "break"
-        self.last_opened = perf_counter()
         frame = self.get_frame_from_event(event)
+        if frame not in self.shown_items:
+            return "break"
         item = frame.item
         if item.isfile:
             frame.event_generate("<<OpenedFile>>", when="tail")
@@ -327,19 +362,19 @@ class Explorer(tk.Frame):
                 self.collapse_folder(item)
             else:
                 self.expand_folder(item)
+            self.master.event_generate("<<HeightChanged>>", when="tail")
         return "break"
 
     def collapse_folder(self, item:base_explorer.Folder, draw:bool=True):
         for child in item.children:
             frame = self.shown_items[self.item_to_idx[child]]
             self.call_grid_forget(frame)
-            if not child.isfile:
+            if (not child.isfile) and child.expanded:
                 self.collapse_folder(child, False)
         if draw:
             frame = self.shown_items[self.item_to_idx[item]]
             frame.expandeder.config(text="+")
             item.expanded = False
-            # self.draw(item)
 
     def expand_folder(self, item:base_explorer.Folder, draw:bool=True) -> None:
         for child in item.children:
@@ -353,30 +388,31 @@ class Explorer(tk.Frame):
             frame = self.shown_items[idx]
             frame.expandeder.config(text="-")
             item.expanded = True
-            # self.draw(item)
 
     def call_grid_forget(self, frame:tk.Frame) -> None:
         if frame == self.selected:
-            self._select(None)
+            self.select(None)
         frame.grid_forget()
+
+    def right_clicked(self, event:tk.Event) -> str:
+        return "break"
 
 
 def test_delete_file_1():
     global root, explorer
     root = tk.Tk()
-    root.title("Test 1")
 
-    explorer = Explorer(root, width=180, height=240)
-    explorer.pack(fill="both", expand=True)
+    explorer_frame = tk.Frame(root, highlightthickness=0, bd=0, width=180,
+                              height=260)
+    explorer_frame.pack(fill="both", expand=True)
+
+    explorer = Explorer(explorer_frame)
     explorer.add(".")
 
     explorer.tree.children[0].children[1].garbage_collect = True
     del explorer.tree.children[0].children[1]
-    explorer.clean_up()
+    explorer._update()
 
-    explorer.draw(explorer.tree)
-
-    assert explorer.last_taken_row == 8
     assert str([i.item for i in explorer.shown_items]) == "[Folder(try2), Folder(images), File(.cpp.png), File(.file.png), File(.folder.png), File(.py.png), File(.txt.png), File(explorer.py), File(images.py)]"
     assert str([(i, j) for i, j in explorer.item_to_idx.items()]) == "[(Folder(try2), 0), (Folder(images), 1), (File(.cpp.png), 2), (File(.file.png), 3), (File(.folder.png), 4), (File(.py.png), 5), (File(.txt.png), 6), (File(explorer.py), 7), (File(images.py), 8)]"
 
@@ -386,19 +422,18 @@ def test_delete_file_1():
 def test_delete_file_2():
     global root, explorer
     root = tk.Tk()
-    root.title("Test 1")
 
-    explorer = Explorer(root, width=180, height=240)
-    explorer.pack(fill="both", expand=True)
+    explorer_frame = tk.Frame(root, highlightthickness=0, bd=0, width=180,
+                              height=260)
+    explorer_frame.pack(fill="both", expand=True)
+
+    explorer = Explorer(explorer_frame)
     explorer.add(".")
 
     explorer.tree.children[0].children[0].garbage_collect = True
     del explorer.tree.children[0].children[0]
-    explorer.clean_up()
+    explorer._update()
 
-    explorer.draw(explorer.tree)
-
-    assert explorer.last_taken_row == 3
     assert str([i.item for i in explorer.shown_items]) == "[Folder(try2), File(base_explorer.py), File(explorer.py), File(images.py)]"
     assert str([(i, j) for i, j in explorer.item_to_idx.items()]) == "[(Folder(try2), 0), (File(base_explorer.py), 1), (File(explorer.py), 2), (File(images.py), 3)]"
 
@@ -416,21 +451,22 @@ def test_move_file_1():
         .file.png
         .folder.png
         .txt.png
+    .py.png
     base_explorer.py
     explorer.py
     images.py
-    .py.png
 """[1:-1]
         assert explorer.tree.to_string() == correct_tree
-        assert explorer.last_taken_row == 9
-        assert str([i.item for i in explorer.shown_items]) == "[Folder(try2), Folder(images), File(.cpp.png), File(.file.png), File(.folder.png), File(.txt.png), File(base_explorer.py), File(explorer.py), File(images.py), File(.py.png)]"
-        assert str([(i, j) for i, j in explorer.item_to_idx.items()]) == "[(Folder(try2), 0), (Folder(images), 1), (File(.cpp.png), 2), (File(.file.png), 3), (File(.folder.png), 4), (File(.txt.png), 5), (File(base_explorer.py), 6), (File(explorer.py), 7), (File(images.py), 8), (File(.py.png), 9)]"
+        assert str([i.item for i in explorer.shown_items]) == "[Folder(try2), Folder(images), File(.cpp.png), File(.file.png), File(.folder.png), File(.txt.png), File(.py.png), File(base_explorer.py), File(explorer.py), File(images.py)]"
+        assert str([(i, j) for i, j in explorer.item_to_idx.items()]) == "[(Folder(try2), 0), (Folder(images), 1), (File(.cpp.png), 2), (File(.file.png), 3), (File(.folder.png), 4), (File(.txt.png), 5), (File(.py.png), 6), (File(base_explorer.py), 7), (File(explorer.py), 8), (File(images.py), 9)]"
         root.destroy()
 
     def test():
         explorer.temp_holder = tk.Frame()
         explorer.selected = explorer.shown_items[5]
         explorer.dragging_file = True
+        explorer.mouse_down = True
+        explorer.offset_x = 0
         explorer.offset_y = 0
         explorer.event_generate("<Motion>", warp=True, x=100, y=162)
         explorer.mouse_released("Event")
@@ -439,14 +475,18 @@ def test_move_file_1():
 
     root = tk.Tk()
 
-    explorer = Explorer(root, width=180, height=240)
-    explorer.pack(fill="both", expand=True)
+    explorer_frame = tk.Frame(root, highlightthickness=0, bd=0, width=180,
+                              height=260)
+    explorer_frame.pack(fill="both", expand=True)
+
+    explorer = Explorer(explorer_frame)
     explorer.add(".")
 
     root.after(100, test)
 
     root.bind("a", lambda e: print("="*80+"\n"+explorer.tree.to_string()+"\n"+"="*80))
     root.mainloop()
+
 
 if __name__ == "__main__":
     from sys import stderr
@@ -455,8 +495,14 @@ if __name__ == "__main__":
         test_delete_file_2()
         test_move_file_1()
     except:
-        root.destroy()
+        # raise
+        try:
+            root.destroy()
+        except tk.TclError:
+            pass
         stderr.write("Tests failed\n")
+    else:
+        stderr.write("Tests passed\n")
 
     def selected_file(event):
         print("[Debug]: Selected", event.widget.item)
@@ -466,12 +512,15 @@ if __name__ == "__main__":
 
     root = tk.Tk()
 
-    explorer = Explorer(root, width=180, height=240)
-    explorer.pack(fill="both", expand=True)
+    explorer_frame = tk.Frame(root, highlightthickness=0, bd=0, width=180,
+                              height=260)
+    explorer_frame.pack(fill="both", expand=True)
+
+    explorer = Explorer(explorer_frame)
     explorer.add(".")
 
-    explorer.bind_all("<<OpenedFile>>", opened_file)
-    explorer.bind_all("<<SelectedFile>>", selected_file)
+    explorer_frame.bind_all("<<OpenedFile>>", opened_file)
+    explorer_frame.bind_all("<<SelectedFile>>", selected_file)
 
     # root.mainloop()
     root.bind("a", lambda e: print("="*80+"\n"+explorer.tree.to_string()+"\n"+"="*80))

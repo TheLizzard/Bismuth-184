@@ -11,6 +11,7 @@ class Item:
         self.master = master
         self.name = name
         self.garbage_collect = False
+        self.new = True
         if master is not None:
             self.full_path = master.full_path + "/" + name
 
@@ -18,6 +19,10 @@ class Item:
             self.indentation = 0
         else:
             self.indentation = self.master.indentation + 1
+
+    def destroy(self) -> None:
+        if not self.garbage_collect:
+            self.master.children.remove(self)
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.name})"
@@ -32,7 +37,9 @@ class Item:
         self.master = target
         target.children.append(self)
         target.sort_children()
-        # Fix the intentation:
+        self.fix_indentation()
+
+    def fix_indentation(self) -> None:
         fix_indentation_list = [self]
         while len(fix_indentation_list) != 0:
             item = fix_indentation_list.pop(0)
@@ -46,9 +53,18 @@ class Item:
         # Sort the list so that folders are first
         self.children.sort(key=lambda item: item.isfile)
 
+    def rename(self, new_name:str) -> None:
+        #if self.master is None:
+        #    self.full_path = self.full_path.rstrip(self.name) + new_name
+        #else:
+        self.full_path = self.master.full_path + "/" + new_name
+        self.name = new_name
+        if self.isfile:
+            self.set_extension()
+
 
 class Folder(Item):
-    def __init__(self, name:str=None, master=None, expanded:bool=True):
+    def __init__(self, name:str=None, master=None, expanded:bool=False):
         self.expanded = expanded
         self.children = []
         self.isfile = False
@@ -95,9 +111,6 @@ class Folder(Item):
             if name in current_children_names:
                 idx = current_children_names.index(name)
                 item = old_children[idx]
-                #if item.garbage_collect:
-                #    item = item.__class__(name, master=self)
-                #else:
                 item._update()
             else:
                 full_path = self.full_path + "/" + name
@@ -136,16 +149,36 @@ class Folder(Item):
                 output = output.strip("\n") + "\n"
         return output[:-1]
 
+    def add_item(self, item) -> None:
+        if not isinstance(item, Item):
+            raise ValueError(f"`item` must be a `File/Folder` not {type(item)}")
+        self.children.append(item)
+        item.master = self
+        item.fix_indentation()
+
+    def add_folder(self, folder:str) -> None:
+        if not isinstance(item, str):
+            raise ValueError(f"`folder` must be a `str` not {type(item)}")
+        self.add_item(Folder(folder))
+
+    def add_file(self, file:str) -> None:
+        if not isinstance(item, str):
+            raise ValueError(f"`file` must be a `str` not {type(item)}")
+        self.add_item(File(file))
+
 
 class File(Item):
     def __init__(self, name:str, master:Folder):
         super().__init__(name, master)
-        extension = name.split(".")[-1]
+        self.isfile = True
+        self.set_extension()
+
+    def set_extension(self) -> None:
+        extension = self.name.split(".")[-1]
         if extension in KNOWN_EXT:
             self.extension = extension
         else:
             self.extension = "file"
-        self.isfile = True
 
 
 class BaseExplorer(Folder):
@@ -236,4 +269,14 @@ explorer.event_generate("<Motion>", warp=True, x=146, y=162)
 explorer.last_taken_row
 [i.item for i in explorer.shown_items]
 [(i, j) for i, j in explorer.item_to_idx.items()]
+"""
+
+
+"""
+slow_item_to_idx
+slow_item_to_frame
+fix_item_to_idx
+item_to_idx
+
+self.shown_items
 """
