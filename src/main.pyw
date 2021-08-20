@@ -10,7 +10,7 @@ from runnable.runnable import RunnableText
 from constants.bettertk import BetterTk, BetterTkSettings
 from constants.cpptext import CPPText
 from constants.notebook import Notebook
-from file_explorer.file_explorer import FileExplorer
+from file_explorer import Explorer
 
 
 SAMPLE_CODE = """
@@ -42,7 +42,7 @@ class App:
                         separator_colour=FG_COLOUR,
                         inactive_titlebar_bg=INACTIVETITLE_BG)
         self.root = BetterTk(settings=settings)
-        self.root.iconbitmap("logo/logo1.ico")
+        self.root.iconbitmap("sprites/logo/logo1.ico")
         self.root.bind_all("<F1>", self.change_settings)
         self.root.title("Bismuth 184")
         self.root.close_button.config(command=self.close_app)
@@ -55,9 +55,11 @@ class App:
                                         highlightthickness=0)
         # self.explorer_window.pack(fill="both", expand=True, side="left")
 
-        self.explorer = FileExplorer(self.explorer_window, width=200)
+        self.explorer = Explorer(self.explorer_window, width=200,
+                                 height=2600)
         self.explorer.pack(fill="both", expand=True, side="bottom")
-        self.explorer.bind("<<FileOpened>>", self.open_file_explorer)
+        self.explorer.resize("fit_width")
+        self.explorer.bind_all("<<OpenedFile>>", self.open_file_explorer)
 
         self.explorer_buttons_frame = tk.Frame(self.explorer_window, bd=0,
                                                highlightthickness=0)
@@ -82,24 +84,25 @@ class App:
             self.add_tab()
 
     def open_file_explorer(self, event):
-        idx = self.explorer.shown_files_dict[self.explorer.selected_file][0]
-        full_path = self.explorer.idx_to_full_path[idx]
+        file = event.widget.item
         idx = self.add_tab()
         wrapper = self.tabs[idx][1]
-        wrapper._open(full_path)
+        wrapper._open(file.full_path)
         wrapper.text.update_idletasks()
         wrapper.text.after(500, wrapper.text.see_insert)
 
     def add_folder_explorer(self):
-        full_path = askdirectory()
+        full_path = askdirectory(master=self.root)
         # Check if user canceled
         if len(full_path) > 0:
-            *parent, folder = full_path.split("/")
-            parent = "\\".join(parent)
-            self.explorer.add_dir(parent, folder)
+            self.explorer.add(full_path)
 
     def remove_folder_explorer(self):
-        self.explorer.remove_selected()
+        selected = self.eplorer.explorer.selected
+        if selected is not None:
+            if selected in self.explorer.explorer.tree.children:
+                self.explorer.explorer.remove(selected)
+        self.explorer.select(None)
 
     def populate_explorer_buttons(self):
         b1 = tk.Button(self.explorer_buttons_frame, bg=BG_COLOUR, fg=FG_COLOUR,
@@ -175,15 +178,15 @@ class App:
             self.add_tab(state=value)
 
     def get_state(self):
-        return {"explorer": self.explorer.caller_added_folders}
+        return {"explorer": self.explorer.get_state(),
+                "explorer_width": self.explorer.master_frame.winfo_width()}
 
     def set_state(self, state):
-        caller_added_folders = state.pop("explorer")
-        for args in caller_added_folders:
-            try:
-                self.explorer.add_dir(*args[:-1])
-            except:
-                pass
+        explorer_state = state.pop("explorer")
+        self.explorer.set_state(explorer_state)
+        width = state.pop("explorer_width", 200)
+        self.explorer.config(width=width)
+        self.explorer.resize("fit_width")
         if len(state) > 0:
             print("[App] Didn't handle this part of `state`:", state)
 
@@ -194,5 +197,6 @@ class App:
         self.root.mainloop()
 
 
-app = App()
-app.mainloop()
+if __name__ == "__main__":
+    app = App()
+    app.mainloop()

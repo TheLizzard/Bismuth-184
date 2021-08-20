@@ -12,7 +12,7 @@ from constants.bettertk import BetterScrollBarHorizontal, BetterFrame, \
 
 class Explorer(BetterFrame):
     def __init__(self, master, width:int, height:int, bg:str="black", **kwargs):
-        super().__init__(root, hscroll=True, vscroll=True, **kwargs,
+        super().__init__(master, hscroll=True, vscroll=True, **kwargs,
                          VScrollBarClass=BetterScrollBarVertical,
                          HScrollBarClass=BetterScrollBarHorizontal, bg=bg)
 
@@ -27,17 +27,36 @@ class Explorer(BetterFrame):
 
     def update_height(self, event:tk.Event=None) -> None:
         super().update()
-        slaves = self.explorer.shown_items
-        if len(slaves) == 0:
+        items = self.explorer.shown_items
+        if len(items) == 0:
             return None
-        last_slave = slaves[-1]
-        height = last_slave.winfo_height() + last_slave.winfo_y()
+        last_frame = items[-1].frame
+        height = last_frame.winfo_height() + last_frame.winfo_y()
         super().config(height=height)
+
+    def get_state(self) -> dict:
+        folders = self.explorer.tree.children
+        return {"folders": tuple(folder.full_path for folder in folders)}
+
+    def set_state(self, state:dict) -> None:
+        caller_added_folders = state.pop("folders", [])
+        for folder in caller_added_folders:
+            try:
+                self.explorer.add(folder)
+            except:
+                pass
+        if len(state) > 0:
+            print("[FileExplorer] Didn't handle this part of `state`:", state)
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
+    from constants.bettertk import BetterTk
+    root = BetterTk()
+    # root.geometry("180x200")
 
     explorer = Explorer(root, width=180, height=2600)
-    explorer.pack(fill="both", expand=True)
-    explorer.add(".")
+    explorer.pack(fill="y", expand=True, side="left")
+    explorer.add("old")
+
+    text = tk.Text(root, bg="black", fg="white")
+    text.pack(fill="both", expand=True, side="right")

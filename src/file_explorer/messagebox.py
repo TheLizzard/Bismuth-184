@@ -4,8 +4,7 @@ import os.path
 from constants.bettertk import BetterTk
 
 
-filepath = os.path.dirname(__file__).replace("\\", "/") + "/"
-ICON_TO_FILENAME = {"warning": filepath+"images/warning.png"}
+ICON_TO_FILENAME = {"warning": "sprites/warning.png"}
 ICON_TO_FILENAME[None] = ICON_TO_FILENAME["warning"]
 
 
@@ -80,14 +79,15 @@ class YesNoQuestion:
 
 
 def askyesno(**kwargs) -> bool:
-    question = YesNoQuestion(**kwargs)
-    return question.get()
+    return YesNoQuestion(**kwargs).get()
 
 
 if __name__ == "__main__":
     root = tk.Tk()
     root.withdraw()
+
     msg = "Are you sure you want to delete \"Hi.txt\"?"
     result = askyesno(title="Delete file?", message=msg, icon="warning")
     print(result)
+
     root.destroy()

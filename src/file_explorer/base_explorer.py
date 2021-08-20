@@ -1,3 +1,4 @@
+from __future__ import annotations
 import os
 
 
@@ -149,22 +150,23 @@ class Folder(Item):
                 output = output.strip("\n") + "\n"
         return output[:-1]
 
-    def add_item(self, item) -> None:
+    def add_item(self, item):
         if not isinstance(item, Item):
             raise ValueError(f"`item` must be a `File/Folder` not {type(item)}")
         self.children.append(item)
         item.master = self
         item.fix_indentation()
+        return item
 
-    def add_folder(self, folder:str) -> None:
-        if not isinstance(item, str):
+    def new_folder(self, folder:str) -> Folder:
+        if not isinstance(folder, str):
             raise ValueError(f"`folder` must be a `str` not {type(item)}")
-        self.add_item(Folder(folder))
+        return self.add_item(Folder(folder, master=self))
 
-    def add_file(self, file:str) -> None:
-        if not isinstance(item, str):
+    def new_file(self, file:str) -> File:
+        if not isinstance(file, str):
             raise ValueError(f"`file` must be a `str` not {type(item)}")
-        self.add_item(File(file))
+        return self.add_item(File(file, master=self))
 
 
 class File(Item):
@@ -185,14 +187,15 @@ class BaseExplorer(Folder):
     def __init__(self):
         super().__init__()
 
-    def add(self, folder:str) -> None:
+    def add(self, folder_name:str) -> Folder:
         """
         Adds a folder to the list of fodlers to be displayed. Please
         note that the input must be a folder.
         """
-        full_path = os.path.abspath(folder).replace("\\", "/")
+        full_path = os.path.abspath(folder_name).replace("\\", "/")
         folder = Folder(full_path)
         self.children.append(folder)
+        return folder
 
     def remove(self, folder:str) -> None:
         """

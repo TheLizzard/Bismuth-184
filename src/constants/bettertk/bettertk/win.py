@@ -374,26 +374,34 @@ class BetterTk(tk.Frame):
         # Needs to packed after `self.title_bar`.
         super().pack(expand=True, side="bottom", fill="both")
 
-        # Add a separator
+        # Separator
         self.separator = tk.Frame(self.master_frame, bd=0, cursor="arrow",
                                   bg=self.settings.SEP_COLOUR,
                                   height=self.settings.SEPARATOR_SIZE)
         self.separator.pack(fill="x")
 
-        # For the titlebar frame
+        # Titlebar frame
         self.title_frame = tk.Frame(self.title_bar, bd=0)
         self.title_frame.pack(expand=True, side="left", anchor="w", padx=5)
 
+        # Buttons frame
         self.buttons_frame = tk.Frame(self.title_bar, bd=0)
         self.buttons_frame.pack(expand=True, side="right", anchor="e")
 
+        # Icon
+        self._tk_icon = None
+        self.icon_label = tk.Label(self.title_frame,
+                                   bg=self.settings.ACTIVE_TITLEBAR_BG)
+        self.icon_label.grid(row=1, column=1, sticky="news")
+
+        # Title text
         self.title_label = tk.Label(self.title_frame, text="",
                                     bg=self.settings.ACTIVE_TITLEBAR_BG,
                                     fg=self.settings.ACTIVE_TITLEBAR_FG)
         self.title("Better Tk")
         self.title_label.grid(row=1, column=2, sticky="news")
-        self.icon_label = None
 
+        # Buttons
         self.minimise_button = MinimiseButton(self.buttons_frame, self,
                                               self.settings)
         self.fullscreen_button = FullScreenButton(self.buttons_frame, self,
@@ -401,11 +409,10 @@ class BetterTk(tk.Frame):
         self.close_button = CloseButton(self.buttons_frame, self, self.settings)
 
         # When the user double clicks on the titlebar
-        self.title_bar.bind_all("<Double-Button-1>",
-                                self.fullscreen_button.toggle_fullscreen,
-                                add=True)
+        self.bind_titlebar("<Double-Button-1>",
+                           self.fullscreen_button.toggle_fullscreen)
         # When the user middle clicks on the titlebar
-        self.title_bar.bind_all("<Button-2>", self.snap_to_side, add=True)
+        self.bind_titlebar("<Button-2>", self.snap_to_side)
 
         self.buttons = [self.minimise_button, self.fullscreen_button,
                         self.close_button]
@@ -421,6 +428,13 @@ class BetterTk(tk.Frame):
             self.window_focused()
         self.root.bind("<FocusIn>", self.window_focused, add=True)
         self.root.bind("<FocusOut>", self.window_unfocused, add=True)
+
+    def bind_titlebar(self, sequence:str=None, func=None, add:bool=None):
+        to_bind = [self.title_bar]
+        while len(to_bind) > 0:
+            widget = to_bind.pop()
+            widget.bind(sequence, func, add=add)
+            to_bind.extend(widget.winfo_children())
 
     def fullscreen(self) -> None:
         self.root.fullscreen()
@@ -481,10 +495,8 @@ class BetterTk(tk.Frame):
         """
         Changes the titlebar's background colour.
         """
-        items = (self.title_bar, self.buttons_frame, self.title_label)
-        items += tuple(self.buttons)
-        if self.icon_label is not None:
-            items += (self.icon_label, )
+        items = (self.title_bar, self.buttons_frame, self.title_label,
+                 self.icon_label) + tuple(self.buttons)
         for item in items:
             item.config(background=colour)
 
@@ -507,6 +519,8 @@ class BetterTk(tk.Frame):
             raise tk.TclError(f"Unknown protocol: \"{protocol}\"")
 
     def check_parent_titlebar(self, event:tk.Event) -> bool:
+        return event.widget not in self.buttons
+        """
         # Get the widget that was pressed:
         widget = event.widget
         # Check if it is part of the title bar or something else
@@ -532,6 +546,7 @@ class BetterTk(tk.Frame):
 
             widget = widget.master
         return False
+        """
 
     @property
     def custom_buttons(self) -> [CustomButton, CustomButton, ...]:
@@ -608,10 +623,6 @@ class BetterTk(tk.Frame):
         if filename is None:
             return self._tk_icon
         self.root.update()
-        bg = self.title_label.cget("background")
-        if self.icon_label is None:
-            self.icon_label = tk.Label(self.title_frame, bg=bg)
-            self.icon_label.grid(row=1, column=1, sticky="news")
         # The 4 is because of the label's border
         size = self.title_frame.winfo_height() - 4
         img = Image.open(filename).resize((size, size), Image.LANCZOS)
@@ -686,12 +697,12 @@ class ResizableWindow:
         self.resizable_horizontal = True
         self.resizable_vertical = True
 
-        self.frame.bind("<Enter>", self.change_cursor_resizing, add=True)
-        self.frame.bind("<Motion>", self.change_cursor_resizing, add=True)
+        self.frame.bind("<Enter>", self.change_cursor_resizing)
+        self.frame.bind("<Motion>", self.change_cursor_resizing)
 
-        self.frame.bind("<Button-1>", self.mouse_press, add=True)
-        self.frame.bind("<B1-Motion>", self.mouse_motion, add=True)
-        self.frame.bind("<ButtonRelease-1>", self.mouse_release, add=True)
+        self.frame.bind("<Button-1>", self.mouse_press)
+        self.frame.bind("<B1-Motion>", self.mouse_motion)
+        self.frame.bind("<ButtonRelease-1>", self.mouse_release)
 
         self.started_resizing = False
 
@@ -817,7 +828,7 @@ class ResizableWindow:
 
 
 class DraggableWindow:
-    def __init__(self, frame, betterroot):
+    def __init__(self, frame:tk.Frame, betterroot:BetterTk):
         # Makes the frame draggable like a window
         self.frame = frame
         self.geometry = betterroot.geometry
@@ -826,9 +837,12 @@ class DraggableWindow:
         self.dragging = False
         self._offsetx = 0
         self._offsety = 0
-        self.frame.bind_all("<Button-1>", self.clickwin, add=True)
-        self.frame.bind_all("<B1-Motion>", self.dragwin, add=True)
-        self.frame.bind_all("<ButtonRelease-1>", self.stopdragwin, add=True)
+        frame.after(100, self.set_up_bindings, betterroot)
+
+    def set_up_bindings(self, betterroot:BetterTk) -> None:
+        betterroot.bind_titlebar("<Button-1>", self.clickwin)
+        betterroot.bind_titlebar("<B1-Motion>", self.dragwin)
+        betterroot.bind_titlebar("<ButtonRelease-1>", self.stopdragwin)
 
     def stopdragwin(self, event):
         self.dragging = False

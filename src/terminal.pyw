@@ -477,7 +477,7 @@ class TerminalWindow:
                         inactive_titlebar_bg=INACTIVETITLE_BG)
         self.root = BetterTk(master=master, settings=settings)
         self.root.title("Terminal")
-        self.root.iconbitmap("logo/logo2.ico")
+        self.root.iconbitmap("sprites/logo/logo2.ico")
         self.root.close_button.config(command=self.close)
 
         self.term = Terminal(self.root)
