@@ -1,285 +1,696 @@
 from __future__ import annotations
+from itertools import repeat, filterfalse
+from random import shuffle, seed, randint
+import shutil
+import stat
 import os
+seed(42)
+
+try:
+    from .idxgiver import Idx, IdxGiver
+except ImportError:
+    from idxgiver import Idx, IdxGiver
 
 
-MAX_FILES_PER_FOLDER = 10
-SHOW_MAX_FILES_PER_FOLDER = 0
-KNOWN_EXT = ("cpp", "file", "py", "txt")
+KNOWN_EXT:tuple[str] = ("cpp", "file", "py", "txt", "h", "c++", "java")
+NEW_ITEM_NAME:str = "a-placeholder-name-21544329271124491949"
+SPACES_PER_INDENTATION:int = 8 # cli only
+DEBUG:bool = False
+TEST:bool = False
+WARNINGS:bool = True
+
+
+def isfolder(item:Item, followsym:bool=False) -> bool:
+    return isinstance(item, Folder)
+
+def isfile(item:Item) -> bool:
+    return isinstance(item, File)
+
+def first(iterable:Iterable[T]) -> T:
+    return next(iter(iterable))
+
+
+class Error:
+    __slots__ = ("error",)
+
+    def __init__(self, error:str|None=None) -> Error:
+        assert isinstance(error, str|None), "TypeError"
+        self.error:str = error
+
+    def __bool__(self) -> bool:
+        return (self.error is not None)
+
+    def __repr__(self) -> str:
+        if self.error is None:
+            return f"NoError"
+        else:
+            return f'Error("{self.error}")'
+
+
+class FileSystem:
+    def rename(self, fullpath:str, newname:str) -> Error:
+        return self.move(fullpath, self.join(self.dirname(fullpath), newname))
+
+    def move(self, source:str, destination:str) -> Error:
+        if not self.exists(source):
+            return Error("Source doesn't exist")
+        if self.exists(destination):
+            return Error("Newpath already exists")
+        shutil.move(source, destination)
+        return Error()
+
+    def _delete(self, path:str) -> None:
+        if self.isfile(path) or self.islink(path):
+            os.unlink(path)
+        else:
+            shutil.rmtree(path)
+
+    def delete(self, path:str, force:bool=False) -> Error:
+        assert TEST or (not force), "Force only works with TEST:bool=True"
+        if not force:
+            if input(f'Delete "{path}"? [y/n]:').lower() != "y":
+                return Error("Canceled by user")
+        self._delete(self.abspath(path))
+        return Error()
+
+    def clean(self, path:str, *, force:bool=False) -> Error:
+        """
+        Deletes everything inside the path but leaves path untouched.
+        """
+        assert TEST and force, "Program this if needed"
+        root:str = self.abspath(path)
+        files_folders, error = self.listdir(root)
+        if not error:
+            for filename, _ in files_folders:
+                self._delete(self.join(root, filename))
+        return error
+
+    def makedirs(self, path:str) -> Error:
+        os.makedirs(path, exist_ok=True)
+        return Error()
+
+    def newfolder(self, path:str) -> Error:
+        try:
+            os.mkdir(path)
+            if not os.path.exists(path):
+                raise NotADirectoryError()
+        except FileExistsError:
+            return Error(f'FileExistsError("{path}")')
+        except NotADirectoryError:
+            return Error(f'IllegalCharactersError("{path}")')
+        return Error()
+
+    def newfile(self, path:str) -> Error:
+        if self.isfolder(path):
+            return Error("IsADirectoryError")
+        if self.exists(path):
+            return Error("Path already exists.")
+        try:
+            with open(path, "w") as file: ...
+        except Exception as error:
+            return Error(f"Couldn't create file because: {error.__class__}")
+        return Error()
+
+    def chdir(self, path:str) -> Error:
+        if not self.exists(path):
+            return Error("Path doesn't exist.")
+        os.chdir(path)
+        return Error()
+
+    def listdir(self, path:str) -> tuple[tuple[str, str], Error]:
+        try:
+            try:
+                root, folders, files = next(os.walk(path))
+            except StopIteration:
+                root, folders, files = path, (), ()
+            # Skip all real filesystem files named NEW_ITEM_NAME
+            files:tuple[str] = filterfalse(NEW_ITEM_NAME.__eq__, files)
+            folders:tuple[str] = filterfalse(NEW_ITEM_NAME.__eq__, folders)
+            return tuple(zip(sorted(folders), repeat("folder"))) + \
+                   tuple(zip(sorted(files), repeat("file"))), Error()
+        except PermissionError:
+            return (), Error("PermissionError")
+
+    def access(self, path:str) -> tuple[bool, bool, bool]:
+        st:int = os.stat(path).st_mode
+        read:bool = (st&stat.S_IRGRP > 0)
+        write:bool = (st&stat.S_IWGRP > 0)
+        exec:bool = (st&stat.S_IXGRP > 0)
+        return (read, write, exec)
+
+    def exists(self, path:str) -> bool:
+        return os.path.exists(path)
+
+    def abspath(self, path:str) -> str:
+        return os.path.abspath(path)
+
+    def join(self, *paths:tuple[str]) -> str:
+        return os.path.join(*paths)
+
+    def dirname(self, path:str) -> str:
+        return os.path.dirname(path)
+
+    def filename(self, path:str) -> str:
+        return os.path.split(path)[-1]
+
+    def isfile(self, path:str) -> bool:
+        return os.path.isfile(path)
+
+    def isfolder(self, path:str) -> bool:
+        return os.path.isdir(path)
+
+    def islink(self, path:str) -> bool:
+        return os.path.islink(path)
+
+
+class ProvidedFileSystem(FileSystem):
+    def __init__(self, files_folders):
+        self.files_folders:list[tuple[str,str]] = list(files_folders)
+        shuffle(self.files_folders)
+    def move(self, oldpath:str, newpath:str) -> Error:
+        return Error()
+    def delete(self, fullpath:str) -> Error:
+        return Error()
+    def newfolder(self, fullpath:str, name:str) -> Error:
+        return Error()
+    def newfile(self, fullpath:str, name:str) -> Error:
+        return Error()
+    def listdir(self, path:str) -> tuple[tuple[str, str], Error]:
+        output:tuple[str, str] = []
+        for name, type in self.files_folders:
+            if name.startswith(path+"/"):
+                relpath:str = name[len(path)+1:]
+                if "/" not in relpath:
+                    output.append((relpath, type))
+        return output, Error()
+    def access(self, path:str) -> tuple[bool, bool, bool]:
+        return (True, True, True)
 
 
 class Item:
-    def __init__(self, name:str, master=None):
-        self.master = master
-        self.name = name
-        self.garbage_collect = False
-        self.new = True
-        if master is not None:
-            self.full_path = master.full_path + "/" + name
+    __slots__ = "master", "name", "indentation", "idx", "root", "perms"
 
-        if self.master is None:
-            self.indentation = 0
-        else:
-            self.indentation = self.master.indentation + 1
+    def __init__(self, name:str, root:Root, master:Item=None) -> Item:
+        assert isinstance(master, Item|None), "TypeError"
+        assert isinstance(root, Root), "TypeError"
+        assert isinstance(name, str|None), "TypeError"
+        if name is None:
+            assert master is None, "ValueError"
+        self.master:Item = master
+        self.indentation:int = 0
+        self.root:Root = root
+        self.name:str = name
+        self.idx:Idx = None
+        self.perms:int = 0
+        if (name is not None) and (name != NEW_ITEM_NAME):
+            self.update_perms()
 
-    def destroy(self) -> None:
-        if not self.garbage_collect:
-            self.master.children.remove(self)
+    def update_perms(self) -> None:
+        r, w, x = self.root.filesystem.access(self.fullpath)
+        self.perms:int = (x<<2) | (w<<1) | r
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}({self.name})"
 
-    def _update(self) -> None:
-        return None
+    @property
+    def fullpath(self) -> str:
+        return self.root.filesystem.join(self.master.fullpath, self.name)
 
-    def move_to(self, target) -> None:
-        if target.isfile:
-            raise ValueError("Target must be a folder not file.")
-        self.master.children.remove(self)
-        self.master = target
-        target.children.append(self)
-        target.sort_children()
-        self.fix_indentation()
+    @property
+    def purename(self) -> str:
+        assert self.master is not None, "Root doesn't have a purename"
+        if self.master.master is None:
+            return self.root.filesystem.filename(self.name)
+        if self.name == NEW_ITEM_NAME:
+            return ""
+        return self.name
 
     def fix_indentation(self) -> None:
-        fix_indentation_list = [self]
-        while len(fix_indentation_list) != 0:
-            item = fix_indentation_list.pop(0)
-            if not item.isfile:
-                fix_indentation_list.extend(item.children)
-            item.indentation = item.master.indentation + 1
+        """
+        Fix my + my children's indentation flags.
+        """
+        self.indentation:int = 0
+        withself:bool = self.master is not None
+        for item, shown in self.recurse_children(withself=withself):
+            item.indentation:int = item.master.indentation + 1
 
-    def sort_children(self) -> None:
-        # Sort the list by name
-        self.children.sort(key=lambda item: item.name)
-        # Sort the list so that folders are first
-        self.children.sort(key=lambda item: item.isfile)
+    def recurse_children(self, *, withself:bool, only_shown:bool=False) \
+                                                  -> Iterator[tuple[Item,bool]]:
+        """
+        Return all of my children recursively with shown flags. The flag
+          tells you if the corresponding item should be shown or not.
+        NOTE: It assumes that "self" is shown.
+        """
+        shown_top:bool = True
+        stack:list[tuple[Item,bool]] = [(self, shown_top)]
+        while len(stack) > 0:
+            item, shown = stack.pop()
+            if only_shown and (not shown):
+                continue
+            if isfolder(item, followsym=False):
+                stack.extend(zip(reversed(self.sorted(item.children)),
+                                 repeat(item.expanded & shown)))
+            if (item is self) and (not withself):
+                continue
+            yield item, shown
 
-    def rename(self, new_name:str) -> None:
-        #if self.master is None:
-        #    self.full_path = self.full_path.rstrip(self.name) + new_name
-        #else:
-        self.full_path = self.master.full_path + "/" + new_name
-        self.name = new_name
-        if self.isfile:
-            self.set_extension()
+    def move(self, target:Folder, apply_filesystem:bool=True) -> Error:
+        """
+        Move self to another folder
+        """
+        if target.name == NEW_ITEM_NAME:
+            return Error("Placeholder name not allowed")
+        if self.name == NEW_ITEM_NAME:
+            return Error("Placeholder name not allowed")
+        if isfile(target):
+            return Error("Target must be a folder.")
+        if self.master is None:
+            return Error("Don't even try to move/delete/rename the base root.")
+        if self.master.master is None:
+            return Error("Can't move roots")
+        if target.master is None:
+            return Error("Can't move to virtual root")
+        if target.fullpath.startswith(self.fullpath):
+            return Error("Can't move folder inside itself")
+        if self.master == target:
+            return Error("Nop???") # Can cause bugs. DO NOT ALLOW
+
+        oldpath, oldmaster = self.fullpath, self.master
+        newpath:str = self.root.filesystem.join(target.fullpath, self.name)
+        if apply_filesystem:
+            error:Error = self.root.filesystem.move(oldpath, newpath)
+            if error:
+                if WARNINGS: print(f"[WARNING]: Handled error in move: {error}")
+                return error
+
+        assert self in self.master.children, "SanityCheck"
+        assert self not in target.children, "SanityCheck"
+        self.master.children.remove(self)
+        target.children.append(self)
+        self.master:Item = target
+        self.fix_indentation() # Fix indentation
+        self.correct_idx() # Fix idxs
+        assert self.fullpath == newpath, "SanityCheck" # fullpath is correct
+        if DEBUG: print(f"[DEBUG]: Moved {self} => {target}")
+        return Error()
+
+    def rename(self, newname:str) -> Error:
+        """
+        Rename self
+        If we have a placeholder name, then we automatically get touched.
+        """
+        if newname == self.name:
+            return Error("Same name rename")
+        if newname == NEW_ITEM_NAME:
+            return Error("Placeholder name not allowed")
+        if self.master is None:
+            return Error("Don't even try to move/delete/rename the base root")
+        if self.master.master is None:
+            parent_name:str = self.root.filesystem.dirname(self.name)
+            new_name:str = self.root.filesystem.join(parent_name, newname)
+        # Now new_name is just a name with no "/"s
+        is_new:bool = (self.name == NEW_ITEM_NAME)
+        if newname in tuple(item.name for item in self.master.children):
+            return Error("Name already exists")
+        if is_new:
+            if DEBUG: print(f"[DEBUG]: Touching {self}")
+            error:Error = self.touch(newname)
+            if error:
+                if WARNINGS: print(f"[WARNING]: Handled touch error in rename: {error}")
+                return error
+        else:
+            error:Error = self.root.filesystem.rename(self.fullpath, newname)
+            if error:
+                if WARNINGS: print(f"[WARNING]: Handled error in rename: {error}")
+                return error
+            if DEBUG: print(f'[DEBUG]: Renamed "{self.name}" => "{newname}"')
+            self.name:str = newname
+        self.correct_idx() # Fix idxs
+        return Error()
+
+    def delete(self, *, apply_filesystem:bool=True) -> Error:
+        """
+        Deletes self and self.children recursively
+        """
+        if self.name == NEW_ITEM_NAME:
+            if apply_filesystem:
+                return Error("Placeholder name not allowed")
+        if self.master is None:
+            return Error("Don't even try to move/delete/rename the base root")
+        if apply_filesystem:
+            error:Error = self.root.filesystem.delete(self.fullpath)
+            if error:
+                if WARNINGS: print(f"[WARNING]: Handled error in delete: {error}")
+                return error
+        self.master.children.remove(self)
+        for item, shown in self.recurse_children(withself=True):
+            self.root.igiver.remove_item(item)
+            if DEBUG: print(f"[DEBUG]: Mark deleted {item}")
+        return Error()
+
+    def touch(self, name:str) -> Error:
+        assert self.name == NEW_ITEM_NAME, "Please don't rename me first."
+        self.name:str = name
+        if isfile(self):
+            error:Error = self.root.filesystem.newfile(self.fullpath)
+        elif isfolder(self):
+            error:Error = self.root.filesystem.newfolder(self.fullpath)
+        else:
+            raise NotImplementedError("self not file nor folder.")
+        if error:
+            # Undo the `self.name:str = name`
+            self.name:str = NEW_ITEM_NAME
+            return error
+        self.update_perms()
+        self.correct_idx() # Fix idxs
+        return Error()
+
+    def correct_idx(self) -> None:
+        assert self.master is not None, "Root(None) has no idx"
+        # Even if self.idx hasn't changed, indentation might have changed
+        self.idx.dirty:bool = True
+        _newidx:int = self.master.get_idx_insert(self)
+        if self.idx.value == _newidx:
+            return None
+        if self.idx.value < _newidx:
+            correction:int = self.get_idx_size()
+            _newidx -= correction
+            if DEBUG: print(f"[DEBUG]: {self.idx}-[{correction=}]")
+        # Calculate delta
+        delta:int = self.idx.value - _newidx
+        if delta == 0:
+            return
+        # Apply delta to all objects
+        children = list(self.recurse_children(withself=True))
+        if delta < 0:
+            children:list[tuple[Item,bool]] = reversed(children)
+        for subitem, shown in children:
+            self.root.igiver.moveup(subitem, delta)
+            if DEBUG: print(f"[DEBUG]: Moving {subitem} {delta=}")
+        assert self.idx.value == _newidx, "SanityCheck"
+
+    def get_idx_size(self) -> int:
+        """
+        Returns the size of self. Must be 1 if isfile. Must be >=1 if isfolder.
+        """
+        raise NotImplementedError("Override this method")
+
+    def update(self, fullsync:bool=False) -> None:
+        """
+        Look at filesystem for any changes to self
+        """
+        raise NotImplementedError("Override this method")
 
 
 class Folder(Item):
-    def __init__(self, name:str=None, master=None, expanded:bool=False):
-        self.expanded = expanded
-        self.children = []
-        self.isfile = False
-        # `name` is `None` only when this class is being inherited by BaseExplorer
-        if name == None:
-            self.master = None
-            self.name = ""
-            self.expanded = True
-        else:
-            # Calculate the 
-            if master is None:
-                self.full_path = name
-                name = name.split("/")[-1]
-            else:
-                self.full_path = master.full_path + "/" + name
+    __slots__ = "expanded", "children"
 
-            super().__init__(name, master)
-            self._update()
+    def __init__(self, name, root:Root, master:Item):
+        super().__init__(name, root=root, master=master)
+        self.expanded:bool = root.autoexpand
+        self.children:list[Item] = []
+        if self.master is None:
+            self.fix_indentation()
 
-    def __iter__(self):
-        return iter(self.children)
-
-    def _update(self) -> None:
+    def update(self, fullsync:bool=False) -> None:
         """
         Updates `self.children` with a new list with the new files/folders.
         """
-        # Get the current children names:
-        current_children_names = tuple(item.name for item in self.children)
-        old_children = self.children.copy()
-        self.children.clear()
-        # Get a list of the files+folders in the folder
-        try:
-            names = os.listdir(self.full_path)
-        except PermissionError:
-            names = []
-        # If there are too many files, add a file called "..."
-        if len(names) > MAX_FILES_PER_FOLDER:
-            names = names[:SHOW_MAX_FILES_PER_FOLDER]
-            names.append("...")
-        # Hide all of the "__pycache__" folders:
-        names = tuple(filter(lambda item: item != "__pycache__", names))
-        for name in names:
-            # If the file/folder was in `self.children` re-add it
-            if name in current_children_names:
-                idx = current_children_names.index(name)
-                item = old_children[idx]
-                item._update()
+        assert not fullsync, "Don't use this"
+        # If we don't have the perms:
+        if not (self.perms & 1):
+            return None
+        current_children = tuple(self.children)
+        files_folders, error = self.root.filesystem.listdir(self.fullpath)
+        assert not error, "InternalError" # "Perms changed for some reason"
+        for itemname, type in files_folders:
+            assert itemname != NEW_ITEM_NAME, "An item is using a reserved name"
+            item:Item|None = self.get_item_from_name(itemname)
+            if item is not None:
+                not_unchanged:bool = (isfile(item)   and (type == "file")) or \
+                                     (isfolder(item) and (type == "folder"))
+                if not_unchanged:
+                    item.update(fullsync)
+                    continue
+                item.delete(apply_filesystem=False)
+            if type == "file":
+                item:File = File(itemname, master=self, root=self.root)
+            elif type == "folder":
+                item:Folder = Folder(itemname, master=self, root=self.root)
             else:
-                full_path = self.full_path + "/" + name
-                if os.path.isdir(full_path) and (name != "..."):
-                    item = Folder(name, master=self)
-                else:
-                    item = File(name, master=self)
-            self.children.append(item)
-        self.sort_children()
-        for child in old_children:
-            if child not in self.children:
-                child.garbage_collect = True
+                raise NotImplementedError("Invalid filesystem object type")
+            self.add_item(item)
+            if isfolder(item):
+                item.update(fullsync)
+
+        for child in self.children.copy():
+            if child.name not in map(first, files_folders):
+                if (child.name == NEW_ITEM_NAME) and (not fullsync):
+                    continue
+                child.delete(apply_filesystem=False)
+
+    def get_item_from_name(self, name:str) -> Item|None:
+        """
+        Gets the item from self.children given a name.
+        """
+        for item in self.children:
+            if item.name == name:
+                return item
+        return None
 
     def to_string(self) -> str:
-        # If we shouldn't expanded `return None`
-        if not self.expanded:
-            return ""
-        output = ""
-        for item in self.children:
-            # Get that item's indentation
-            indentation = item.indentation
-            # If it's a file show it
-            if item.isfile:
-                output += " "*(4*indentation) + item.name + "\n"
+        assert TEST, "This can only be used in TEST mode."
+        output:str = ""
+        for item in self.sorted(self.children):
+            indentation:str = " "*SPACES_PER_INDENTATION*(item.indentation-1)
+            r:str = "r" if item.perms&1 else " "
+            w:str = "w" if item.perms&2 else " "
+            flags:str = f"({item.idx.value}{r}{w})"
+            if isfile(item):
+                output += f"{indentation}{item.name}{flags}\n"
             # If it's a folder show it then show it's contents
+            elif isfolder(item):
+                symbol:str = "-" if item.expanded else "+"
+                output += f"{indentation}{symbol}{item.name}{flags}\n"
+                output += item.to_string() + "\n"
             else:
-                # Show the folder
-                if item.expanded:
-                    symbol = "-"
-                else:
-                    symbol = "+"
-                output += " "*(4*indentation) + symbol + " " + item.name + "\n"
-                # Show the folder's contents
-                output += item.to_string()
-                # If the folder is empty make sure that there isn't a "\n\n":
-                output = output.strip("\n") + "\n"
-        return output[:-1]
+                raise NotImplementedError(f'No idea what this: "{item}" is')
+        return output.replace("\n\n", "\n")[:-1]
 
-    def add_item(self, item):
-        if not isinstance(item, Item):
-            raise ValueError(f"`item` must be a `File/Folder` not {type(item)}")
+    def __call__(self) -> None:
+        assert TEST, "This can only be used in TEST mode."
+        print(self.to_string())
+
+    def add_item(self, item:Item) -> None:
+        """
+        Adds an item as a child.
+        """
+        if DEBUG:
+            m = self
+            while m.master is not None:
+                m = m.master
+            if TEST:
+                print(m.to_string() + "\n" + "="*80)
+            print(f"[DEBUG]: Trying to add {item} to {self}")
+        assert isinstance(item, Item), "TypeError"
+        item.idx:Idx = self.root.igiver.push_item(item)
+        if DEBUG: print(f"[DEBUG]: Current idx for {item} is {item.idx}")
+        # item.idx:Idx = self.root.igiver[item]
         self.children.append(item)
-        item.master = self
+        item.master:Item = self
         item.fix_indentation()
+        item.correct_idx() # Fix idxs
+        if DEBUG: print(f"[DEBUG]: Added {item} to {self} at {item.idx}")
         return item
 
-    def new_folder(self, folder:str) -> Folder:
-        if not isinstance(folder, str):
-            raise ValueError(f"`folder` must be a `str` not {type(item)}")
-        return self.add_item(Folder(folder, master=self))
+    def get_idx_insert(self, item:Item, ignore_item:bool=False) -> int:
+        children:list[Item] = self.sorted(self.children.copy())
+        if item in children:
+        #if ignore_item:
+        #    assert item in children, "ignore_item=True when item isn't in self"
+            children.remove(item)
+        assert item not in children, "InternalError"
+        for loc, child in enumerate(children):
+            if self._get_idx_insert_compare(child, item): # child > item
+                return child.idx.value
+        # Base base, empty folder
+        if len(children) == 0:
+            if DEBUG: print(self, self.idx)
+            return self.idx.value+1
+        # If item should be at the end:
+        child:Item = children[-1]
+        while isfolder(child):
+            if len(child.children) == 0:
+                break
+            child:Item = self.sorted(child.children)[-1]
+        return child.idx.value+1
 
-    def new_file(self, file:str) -> File:
-        if not isinstance(file, str):
-            raise ValueError(f"`file` must be a `str` not {type(item)}")
-        return self.add_item(File(file, master=self))
+    @staticmethod
+    def _get_idx_insert_compare(itema:Item, itemb:Item) -> bool:
+        if DEBUG: print(f"[DEBUG]: Compare {itema}>?{itemb}", end="")
+        # returns True iff itema > itemb
+        if isfile(itema) and isfolder(itemb):
+            if DEBUG: print(" => True")
+            return True
+        if isfolder(itema) and isfile(itemb):
+            if DEBUG: print(" => False")
+            return False
+        if itemb.name == NEW_ITEM_NAME:
+            if DEBUG: print(" => False")
+            return False
+        if itema.name == NEW_ITEM_NAME:
+            if DEBUG: print(" => True")
+            return True
+        if DEBUG: print(f" => t{itema.name > itemb.name}")
+        return itema.name >= itemb.name
+
+    @staticmethod
+    def sorted(children:list[Item]) -> list[Item]:
+        return sorted(children, key=lambda item: item.idx)
+
+    def newfolder(self, name:str=NEW_ITEM_NAME) -> Folder:
+        assert self.master is not None, "Master can't be None"
+        names:Iterator[str] = map(lambda i: i.name, self.children)
+        assert NEW_ITEM_NAME not in tuple(names), "Name already taken"
+        folder:Folder = Folder(name=NEW_ITEM_NAME, master=self, root=self.root)
+        self.add_item(folder)
+        return folder
+
+    def newfile(self) -> File:
+        assert self.master is not None, "Master can't be None"
+        names:Iterator[str] = map(lambda i: i.name, self.children)
+        assert NEW_ITEM_NAME not in tuple(names), "Name already taken"
+        file:File = File(name=NEW_ITEM_NAME, master=self, root=self.root)
+        self.add_item(file)
+        return file
+
+    def get_idx_size(self) -> int:
+        count:int = 0
+        items:list[Item] = [self]
+        while len(items) > 0:
+            count += 1
+            item:Item = items.pop()
+            if isfolder(item):
+                items.extend(item.children)
+        return count
 
 
 class File(Item):
-    def __init__(self, name:str, master:Folder):
-        super().__init__(name, master)
-        self.isfile = True
-        self.set_extension()
+    __slots__ = ("extension",)
 
-    def set_extension(self) -> None:
+    def __init__(self, name:str, root:Root, master:Item) -> File:
+        super().__init__(name, root=root, master=master)
+        self.fix_extension()
+
+    def fix_extension(self) -> None:
         extension = self.name.split(".")[-1]
-        if extension in KNOWN_EXT:
-            self.extension = extension
+        if (extension in KNOWN_EXT) and (self.name != NEW_ITEM_NAME):
+            self.extension:str = extension
         else:
-            self.extension = "file"
+            self.extension:str = "file"
+
+    def rename(self, newname:str) -> Error:
+        error:Error = super().rename(newname)
+        if not error:
+            self.fix_extension()
+        return error
+
+    def update(self, fullsync:bool=False) -> None:
+        assert not fullsync, "Don't use this"
+
+    def get_idx_size(self) -> int:
+        return 1
 
 
-class BaseExplorer(Folder):
-    def __init__(self):
-        super().__init__()
+class Root(Folder):
+    __slots__ = "igiver", "filesystem", "autoexpand"
 
-    def add(self, folder_name:str) -> Folder:
+    def __init__(self, filesystem:FileSystem, autoexpand:bool=True):
+        self.autoexpand:bool = autoexpand
+        self.igiver:IdxGiver = IdxGiver(Item)
+        self.filesystem:FileSystem = filesystem
+        super().__init__(name=None, root=self, master=None)
+        self.idx:Idx = self.igiver.push_item(self)
+        self.expanded:bool = True
+
+    @property
+    def fullpath(self) -> str:
+        return ""
+
+    def add(self, path:str) -> Folder:
         """
         Adds a folder to the list of fodlers to be displayed. Please
         note that the input must be a folder.
         """
-        full_path = os.path.abspath(folder_name).replace("\\", "/")
-        folder = Folder(full_path)
-        self.children.append(folder)
+        fullpath:str = self.filesystem.abspath(path)
+        folder:Folder = Folder(fullpath, root=self.root, master=self)
+        super().add_item(folder)
+        folder.update()
         return folder
 
-    def remove(self, folder:str) -> None:
+    def remove(self, item_or_path:Item|str) -> None:
         """
         Removes a folder that was added using the `.add` method.
         Raises `ValueError`, if the folder isn't in `self.children`
         """
-        full_path = os.path.abspath(folder).replace("\\", "/")
-        for child in self.children:
-            if child.full_path == full_path:
-                self.children.remove(child)
-                return None
-        raise ValueError("Can't remove that folder because it wasn't added.")
+        if isinstance(item_or_path, Item):
+            assert item_or_path in self.children, "Item not in Root"
+            item_or_path.delete(apply_filesystem=False)
+        else:
+            fullpath:str = self.filesystem.abspath(item_or_path)
+            for child in self.children:
+                if child.name == fullpath:
+                    child.delete(apply_filesystem=False)
+                    return None
+            raise ValueError("Can't remove that folder because it " \
+                             "wasn't added.")
 
-    def _update(self) -> None:
+    def update(self, fullsync:bool=False) -> None:
         """
         Update the tree.
         """
+        assert not fullsync, "Don't use this"
         for child in self.children:
-            child._update()
+            child.update(fullsync=fullsync)
+
+    def get_item_from_path(self, path:str) -> Item:
+        assert TEST, "This can only be used in TEST mode."
+        orig_path:str = path
+        parent:Item = self
+        while path != "":
+            for child in parent.children:
+                if path.startswith(child.name):
+                    path:str = path.replace(child.name, "", 1).lstrip("/")
+                    parent:Item = child
+                    break
+            else:
+                raise ValueError(f"Not in self... {orig_path}")
+        assert child.fullpath == orig_path.rstrip("/"), "InternalError"
+        return child
+
+    def idx_to_item(self, idx:Idx|int) -> Item:
+        if isinstance(idx, int):
+            idx:Idx = Idx(idx)
+        assert isinstance(idx, Idx), "TypeError"
+        return self.igiver[idx]
 
 
 if __name__ == "__main__":
-    from sys import stderr
-    stderr.write("="*80)
+    TEST = True
+    number_of_tests = 1
 
-    explorer = BaseExplorer()
-    explorer.add(".")
-    print(explorer.to_string())
+    files_folders:tuple[str,str] = (
+                                     ("/test", "folder"),
+                                     ("/test/f", "file"),
+                                   )
+    for name,_ in files_folders: assert not name.endswith("/"), "Error in test"
 
-    print("="*80)
-    test = explorer.children[0].children[1]
-    images = explorer.children[0].children[0]
-
-    print(test, "=>", images)
-    print("="*80)
-    test.move_to(images)
-    print(explorer.to_string())
-
-
-    stderr.write("="*80)
-
-
-    explorer = BaseExplorer()
-    explorer.add(".")
-    print(explorer.to_string())
-
-    print("="*80)
-    test = explorer.children[0].children[1]
-    images = explorer.children[0].children[0]
-
-    print(images, "=>", test)
-    print("="*80)
-    images.move_to(test)
-    print(explorer.to_string())
-
-
-    print("="*80)
-    try2 = explorer.children[0]
-    print(images, "=>", try2)
-    print("="*80)
-    images.move_to(try2)
-    print(explorer.to_string())
-
-
-"""
-explorer.temp_holder = tk.Frame()
-explorer.selected = explorer.shown_items[5]
-explorer.dragging_file = True
-explorer.offset_y = 0
-explorer.event_generate("<Motion>", warp=True, x=146, y=162)
-"""
-
-"""
-explorer.last_taken_row
-[i.item for i in explorer.shown_items]
-[(i, j) for i, j in explorer.item_to_idx.items()]
-"""
-
-
-"""
-slow_item_to_idx
-slow_item_to_frame
-fix_item_to_idx
-item_to_idx
-
-self.shown_items
-"""
+    filesystem = ProvidedFileSystem(files_folders)
+    explorer = Root(filesystem)
+    explorer.add("/test")
+    DEBUG = True
+    explorer()
+    target = explorer.get_item_from_path("/test/f")
+    e = target.rename("")
+    print(e)
+    explorer()

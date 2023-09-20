@@ -134,8 +134,12 @@ src/C++ programs/
 src/state.state
 
 # Debug files
-src/basiceditor/constants/
-src/failed tries/
-src/file_explorer/test folder/
-src/output.file
-src/profiler.py
+backups/
+src/test.py
+src/file_explorer/$BIN/
+src/file_explorer/old/
+src/file_explorer/test/
+src/file_explorer/tester.py
+src/bettertk/bettertk/flickering_test.py
+src/bettertk/terminaltk/test.py
+src/bettertk/terminaltk/sprites/copyrighted/

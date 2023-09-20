@@ -1,0 +1,68 @@
+from __future__ import annotations
+from time import perf_counter
+from typing import Iterable
+import tkinter as tk
+
+
+Break = Applies = bool
+DEBUG:bool = False
+
+
+class Rule:
+    __slots__ = "ons", "widget", "ids", "plugin", "attached"
+    REQUESTED_LIBRARIES:tuple[str] = ()
+
+    def __init__(self, plugin:BasePlugin, widget:tk.Misc, ons:tuple[str]):
+        assert isinstance(ons, tuple), "TypeError"
+        self.plugin:BasePlugin = plugin
+        self.widget:tk.Misc = widget
+        self.attached:bool = False
+        self.ons:tuple[str] = ons
+        self.ids:list[str] = []
+
+    def attach(self) -> None:
+        assert not self.attached, "Already attached"
+        self.attached:bool = True
+        self.ids:list[str] = []
+        for on in self.ons:
+            add:bool = True
+            bind_all:bool = False
+            if on.startswith("a") and (on != "a"):
+                on:str = on.removeprefix("a")
+                bind_all:bool = True
+            if on.startswith("-") and (on != "-"):
+                on:str = on.removeprefix("-")
+                add:bool = False
+            better_on:str = on.removeprefix("<").removesuffix(">").lower()
+            func = lambda event, on=better_on: self(event, on)
+            if bind_all:
+                id:str = self.widget.bind_all(on, func, add=add)
+            else:
+                id:str = self.widget.bind(on, func, add=add)
+            self.ids.append(id)
+
+    def detach(self) -> None:
+        assert self.attached, "Not attached"
+        self.attached:bool = False
+        for on, id in zip(self.ons, self.ids):
+            self.widget.unbind(on, id)
+        self.ids.clear()
+
+    def __call__(self, event:tk.Event, on:str) -> str:
+        start:float = perf_counter()
+        data = self.applies(event, on)
+        if DEBUG: print(f"[DEBUG {perf_counter()-start:.2f}]: Checking if {on} applies to {self.__class__.__name__}")
+        if not isinstance(data, Iterable):
+            data = (data,)
+        *data, applies = data
+        if applies:
+            start:float = perf_counter()
+            block:bool = self.do(on, *data)
+            if DEBUG: print(f"[DEBUG {perf_counter()-start:.2f}]: {self.__class__.__name__}.do({on}) => {block}")
+            return "break" if block else None
+
+    def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
+        return False
+
+    def do(self, on:str, *data) -> Break:
+        return False

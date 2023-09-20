@@ -1,8 +1,16 @@
-# CPP-IDLE
-A C++ integrated development and learning environment
-
+# Bismuth-184
+An integrated development for Python/C/C++/Java. So far it only works with Python but making it work with C/C++/Java should be trivial. Only works on Unix for now because of `os.mkfifo` and `xterm`.
 
 # Dependencies
-### g++:
-Ubuntu: `sudo apt install g++` (Doesn't work on Linux for now)  
-Windows: install `mingw`, in `mingw-get` install (`mingw32-gcc-g++-bin`, `mingw32-gcc-g++-dev`, `mingw32-gcc-g++-doc`, `mingw32-gcc-g++-man`)
+### Python
+* xterm/konsole
+
+### C/C++
+* g++
+	* Ubuntu: `sudo apt install g++`
+	* Windows: install `mingw`, in `mingw-get` install (`mingw32-gcc-g++-bin`, `mingw32-gcc-g++-dev`, `mingw32-gcc-g++-doc`, `mingw32-gcc-g++-man`)
+* xterm/konsole
+
+### Java
+* jre
+* xterm/konsole

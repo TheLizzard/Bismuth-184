@@ -1,19 +1,23 @@
-from os.path import dirname, join
 from PIL import Image, ImageTk
 import tkinter as tk
+import os.path
 
 
 def init(root:tk.Tk) -> None:
     global TK_IMAGES
     TK_IMAGES = {}
-    base_folder = dirname(__file__)
     for extension in EXTENSIONS:
-        path = join(base_folder, f"images/.{extension}.png")
-        tk_image = ImageTk.PhotoImage(Image.open(path))
-        TK_IMAGES.update({extension: tk_image})
+        path = os.path.join(base_folder, f"sprites/.{extension}.png")
+        img:Image.Image = Image.open(path)
+        img:Image.Image = img.resize((WIDTH,HEIGHT), Image.LANCZOS)
+        tk_image = ImageTk.PhotoImage(img, master=root)
+        TK_IMAGES[extension] = tk_image
 
 
-EXTENSIONS = ("py", "txt", "cpp", "folder")
+EXTENSIONS = ("py", "txt", "cpp", "folder", "rar", "*")
+base_folder:str = os.path.dirname(__file__)
+WIDTH:int = 16
+HEIGHT:int = 16
 
 
 if __name__ == "__main__":
@@ -86,12 +90,12 @@ if __name__ == "__main__":
 
     init(root)
 
-    canvas = tk.Canvas(root, width=100, height=200, bg="black")
+    canvas = tk.Canvas(root, width=100, height=500, bg="black")
     canvas.pack()
 
-    y = 20
+    y = HEIGHT
     for extension, tk_img in TK_IMAGES.items():
         canvas.create_image(20, y, image=tk_img)
-        y += 25
+        y += int(HEIGHT*2)
 
     root.mainloop()

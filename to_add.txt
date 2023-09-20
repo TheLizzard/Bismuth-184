@@ -1,17 +1,14 @@
 Editor:
-* `Ctrl-F`, `Ctrl-R`, `Ctrl-H`
-* Clicking/BackSpace/Delete don't call `.edit_separator()`
-* Add the file explorer
+* `Ctrl-F`, `Ctrl-R`
 
 Terminal:
-* Find a way to determine if child is waiting for stdin (kms) - nearly nearly done
-* Fix `python` crashing cmd
+* Windows support
 
 Settings:
-* None
+* Add a settings menu
 
 Window:
 * None
 
 Speed:
-* None
+* Need to test it out to see the speed.

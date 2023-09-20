@@ -1,415 +1,309 @@
+from __future__ import annotations
+from time import perf_counter
 import tkinter as tk
+import os
 
 try:
+    from .base_explorer import Item, Root, isfile, isfolder, FileSystem
+    from .idxgiver import IdxGiver, Idx
+    from .gridgiver import GridGiver
     from . import images
-    from . import base_explorer
 except ImportError:
+    from base_explorer import Item, Root, isfile, isfolder, FileSystem
+    from idxgiver import IdxGiver, Idx
+    from gridgiver import GridGiver
     import images
-    import base_explorer
+
+def iter_skip(iterator:Iterator[T], *, n:int) -> Iterator[T]:
+    for i in range(n):
+        next(iterator)
+    yield from iterator
+
+def generator_len(iterator:Iterator[T]) -> int:
+    return sum(1 for element in iterator)
+
+def create_circle(self, x:int, y:int, r:int, **kwargs):
+    return self.create_oval(x-r, y-r, x+r, y+r, **kwargs)
+tk.Canvas.create_circle = create_circle
 
 
-INDENTATION = 25
-PADX = 5
-PADY = 5 # Not honoured
+INDENTATION:int = 25
+PADX:int = 10
+PADY:int = 5
+DEBUG:bool = False
+UPDATE_DELAY:int = 2000
+HIGHLIGHT_UPDATES:bool = False
+COLLAPSE_BEFORE_MOVE:bool = True
+REDRAW_HIGHLIGHT_DELAY:int = 1000
+SELECTED_COLOUR:str = "dark orange"
+
+AUTO_UPDATE:bool = True
+
+PATH:str = os.path.abspath(os.path.dirname(__file__))
 
 
 class Explorer:
-    def __init__(self, master, fg:str="white", selected_bg:str="blue",
-                 bg:str="black", selected_fg:str=None):
-        self.bg = bg
-        self.fg = fg
-        self.selected_bg = selected_bg
-        self.selected_fg = selected_fg
-        self.master = master
-        self.master.grid_propagate(False)
-        self.tree = base_explorer.BaseExplorer()
+    __slots__ = "master", "changing", "ggiver", "root", "item_to_frame", \
+                "expanded_before"
 
-        self.shown_items = []
-        self.selected = None # The currently selected `tk.Frame`
-        self.renaming = False # Set by classes inhetiting from us
-        self.temp_holder = None
-        self.dragging_file = False
+    def __init__(self, master:tk.Misc) -> Explorer:
+        self.changing:tk.Frame = None
+        self.master:tk.Misc = master
+        master.grid_columnconfigure(1, weight=1)
+        self.root:Root = Root(FileSystem(), autoexpand=False)
+        self.item_to_frame:dict[Item:tk.Frame] = dict()
+        self.ggiver:GridGiver = GridGiver(self.master)
+        self.ggiver.select:Function[tk.Frame,tk.Frame] = self._selected
+        self.ggiver.move_frame:Function[tk.Frame,tk.Frame,None] = self.move
+        self.ggiver.start_move:Function[tk.Frame,list[tk.Frame]] = self.start_move
+        self.ggiver.cancel_move:Function[None] = self.cancel_move
+        self.ggiver.double_click:Function[tk.Frame,str] = self.double_click
 
-        # Make sure we get the correct y value for scrollable frames:
-        self.framey = lambda y: y
-        if hasattr(self.master, "framey"):
-            self.framey = self.master.framey
+        images.init(self.master)
+        self.update_loop()
 
-        self.set_up_images()
-        self.bind_frame(self.master, "<B1-Motion>", self.mouse_moved)
-        self.bind_frame(self.master, "<ButtonPress-1>", self.mouse_pressed)
-        self.bind_frame(self.master, "<ButtonRelease-1>", self.mouse_released)
-        self.master.bind("<FocusOut>", lambda e: self.select(None))
-        self.master.grid_columnconfigure(0, weight=1)
+    # Helpers
+    def _get_closest_folder(self, frame:tk.Frame) -> tk.Frame:
+        if isfile(frame.item):
+            item:Folder = frame.item.master
+            assert isfolder(item), "SanityCheck"
+            return self.item_to_frame[item]
+        elif isfolder(frame.item):
+            return frame
+        raise NotImplementedError(f"What is {frame.item}?")
 
-    def mouse_pressed(self, event:tk.Event) -> None:
-        frame = self.get_frame_from_event(event)
-        if (frame == self.master) or self.renaming:
-            return None
-        self.master.focus_set()
-        self.temp_holder = tk.Frame(self.master, highlightthickness=0,
-                                    height=frame.winfo_height(), bd=0,
-                                    width=frame.winfo_width(), bg=self.bg)
-        self.temp_holder.grid(row=frame.item.idx, column=0)
-        frame.lift()
-
-        self.offset_x = self.master.winfo_pointerx() - frame.winfo_x()
-        self.offset_y = self.framey(self.master.winfo_pointery()) - frame.winfo_y()
-
-    def mouse_moved(self, event:tk.Event) -> None:
-        if (not self.renaming) and (self.selected is not None):
-            self.dragging_file = True
-            x = self.master.winfo_pointerx() - self.offset_x
-            y = self.framey(self.master.winfo_pointery()) - self.offset_y
-            self.selected.frame.place(width=self.master.winfo_width(), x=x, y=y)
-
-    def mouse_released(self, event:tk.Event) -> None:
-        if self.renaming:
-            return None
-        if self.dragging_file:
-            target = self.get_frame_from_mouse(without=self.selected.frame)
-            self.frame_moved(self.selected.frame, target)
-        self.dragging_file = False
-        if self.temp_holder is not None:
-            self.temp_holder.destroy()
-            self.temp_holder = None
-
-    def get_frame_from_mouse(self, without:tk.Frame=None) -> tk.Frame:
-        y = self.framey(self.master.winfo_pointery()) - self.offset_y + \
-            self.selected.frame.winfo_height() // 2
-        for target in self.shown_items:
-            if (target.frame != without) and self.y_in_frame(y, target.frame):
-                return target.frame
-        if (self.temp_holder is not None) and (self.temp_holder != without):
-            if self.y_in_frame(y, self.temp_holder):
-                return self.temp_holder
-
-    def get_frame_from_immediate_mouse(self) -> tk.Frame:
-        y = self.framey(self.master.winfo_pointery()) - \
-            self.master.winfo_rooty()
-        for target in self.shown_items:
-            if self.y_in_frame(y, target.frame):
-                return target.frame
-
-    def frame_moved(self, frame:tk.Frame, target_frame:tk.Frame) -> None:
-        item = frame.item
-        # If we didn't move the item
-        if target_frame == self.temp_holder:
-            frame.grid(row=item.idx, column=0, sticky="ew")
-            return None
-        # If we put the item at the bottom
-        if target_frame is None:
-            target = self.tree.children[-1]
+    def _get_sprite(self, extension:str) -> ImageTk.PhotoImage:
+        if extension in images.EXTENSIONS:
+            return images.TK_IMAGES[extension]
         else:
-            # Get the target
-            target = target_frame.item
-            if target.isfile:
-                target = target.master
-        target_frame = target.frame
-        # Make sure we aren't moving the item to the same location:
-        if item.master == target:
-            frame.grid(row=item.idx, column=0, sticky="ew")
+            return images.TK_IMAGES["*"]
+
+    def _get_shown_children(self, frame:tk.Frame, *, withself:bool):
+        iterator = frame.item.recurse_children(withself=withself,
+                                               only_shown=True)
+        if DEBUG:
+            for item, shown in iterator:
+                assert shown, "SanityCheck"
+                yield self.item_to_frame[item]
+        else:
+            yield from map(lambda x: self.item_to_frame[x[0]], iterator)
+
+    def fix_indentation(self, frame:tk.Frame) -> None:
+        if frame.indent == frame.item.indentation:
             return None
-        # Make sure we aren't moving the folder to a child folder
-        targets_master = target
-        while targets_master is not None:
-            if targets_master == item:
-                frame.grid(row=item.idx, column=0, sticky="ew")
-                return None
-            targets_master = targets_master.master
-        # Move the item
-        item.move_to(target)
-        # Make sure we grid_forget everything if the target isn't expanded
-        if not target.expanded:
-            frame.place_forget()
-            if not item.isfile:
-                self.hide_folder(item)
-            else:
-                # Just unselect it
-                self.call_grid_forget(item)
-        self._frame_moved(frame)
+        frame.indent:int = frame.item.indentation
+        frame.indentation.config(width=(frame.indent-1)*INDENTATION + PADX)
 
-    # ????????????????????????????????????????????????????????????????
-    def _frame_moved(self, frame:tk.Frame) -> None:
-        new_idx, found = self.slow_item_to_idx(frame.item)
-        assert found
-        to_add = []
-        to_move = [frame.item]
-        while len(to_move) > 0:
-            item = to_move.pop(0)
-            if not item.isfile:
-                to_move = item.children.copy() + to_move
-            item.frame.item.idx = new_idx
-            self.shown_items.remove(item)
-            item.frame.indentation.config(width=self.get_indentation(item))
-            to_add.append(item)
-            new_idx += 1
-        for item in to_add:
-            self.shown_items.insert(item.idx, item)
-        self.fix_idxs()
+    @property
+    def selected(self) -> tk.Frame:
+        return self.ggiver.get_selected()
 
-    def slow_item_to_idx(self, item, tree=None) -> (int, bool):
-        if tree is None:
-            tree = self.tree
-        idx = 0
-        for child in tree:
-            if child == item:
-                return idx, True
-            idx += 1
-            if not child.isfile:
-                sub_idx, found = self.slow_item_to_idx(item, child)
-                idx += sub_idx
-                if found:
-                    return idx, True
-        return idx, False
+    @selected.setter
+    def selected(self, frame:tk.Frame) -> None:
+        assert isinstance(frame, tk.Frame), "TypeError"
+        self.ggiver._select(frame)
+        self.master.event_generate("<<Explorer-Selected>>", data=(frame,))
 
-    def get_frame_from_event(self, event:tk.Event) -> tk.Frame:
-        widget = event.widget
-        if isinstance(widget, (tk.Label, tk.Canvas)):
-            return widget.master
-        return widget
+    def get_selected(self) -> tk.Frame:
+        return self.selected
 
-    def y_in_frame(self, y:int, frame:tk.Frame) -> bool:
-        if len(frame.grid_info()) == 0:
-            # frame has beeen placed:
-            return False
-        frame_y = frame.winfo_y()
-        return frame_y < y < frame_y + frame.winfo_height()
+    def fix_icon(self, frame:tk.Frame) -> None:
+        image:tk.PhotoImage = self._get_sprite(frame.item.extension)
+        frame.icon.itemconfig(frame.icon.id, image=image)
 
-    def set_up_images(self) -> None:
-        self.images = {}
-        for extension in ("txt", "cpp", "file", "py"):
-            image = tk.PhotoImage(file=f"sprites/.{extension}.png",
-                                  master=self.master)
-            self.images.update({extension: image})
-
-    def add(self, folder_name:str) -> None:
-        folder = self.tree.add(folder_name)
-        self._update()
-        self.expand_folder(folder)
-
-    def remove(self, folder:str) -> None:
-        raise ValueError("Unimplemented???")
-        self.tree.remove(folder)
-
-    def clean_up(self) -> None:
-        for item in self.shown_items.copy():
-            if item.garbage_collect:
-                self.delete(item)
-        self.fix_idxs()
-
-    def _update(self, update_tree:bool=True) -> None:
-        if update_tree:
-            self.tree._update()
-        self.check_add_new_items(self.tree)
-        self.clean_up()
-
-    def delete(self, item) -> None:
-        if item == self.selected:
-            self.select(None)
-        if not item.isfile:
-            for child in item.children.copy():
-                self.delete(child)
-        item.destroy()
-        item.frame.destroy()
-        self.shown_items.remove(item)
-
-    def fix_idxs(self) -> None:
-        for idx, item in enumerate(self.shown_items):
-            item.idx = idx
-            if len(item.frame.grid_info()) + len(item.frame.place_info()) > 0:
-                item.frame.grid(row=idx, column=0, sticky="ew")
-
-    def change_colour(self, frame:tk.Frame, bg:str=None, fg:str=None) -> None:
-        to_change = [frame]
-        while len(to_change) != 0:
-            widget = to_change.pop(0)
-            if isinstance(widget, tk.Frame):
-                to_change.extend(widget.winfo_children())
-            elif isinstance(widget, tk.Label):
-                widget.config(fg=fg)
-            widget.config(bg=bg)
-
-    def check_add_new_items(self, tree:base_explorer.Folder, idx:int=0) -> int:
-        start_idx = idx
-        for child in tree:
-            if child.new:
-                self.show(child, idx)
-                if (child.master is not None) and (not child.master.expanded):
-                    self.call_grid_forget(child)
-            idx += 1
-            if not child.isfile:
-                idx += self.check_add_new_items(child, idx)
-        return idx - start_idx
-
-    def show(self, item, row:int) -> None:
-        if item in self.shown_items:
-            # Already shown
+    def recolour_frame(self, frame:tk.Frame, bg:str) -> None:
+        if frame is None:
             return None
+        frame.config(bg=bg)
+        frame.indentation.config(bg=bg)
+        frame.name.config(bg=bg)
+        if isfile(frame.item):
+            frame.icon.config(bg=bg)
+        else:
+            frame.expandeder.config(bg=bg)
 
-        frame = tk.Frame(self.master, bg=self.bg, highlightthickness=0, bd=0)
-        frame.grid(row=row, column=0, sticky="ew")
+    # Update/loop
+    def update_loop(self) -> None:
+        if (self.changing is None) and AUTO_UPDATE:
+            self.update(soft=False)
+        elif AUTO_UPDATE and DEBUG:
+            print(f"[DEBUG]: Skipping update")
+        self.master.after(UPDATE_DELAY, self.update_loop)
 
-        indentation = tk.Frame(frame, width=self.get_indentation(item),
-                               bg=self.bg)
-        indentation.grid(row=0, column=0)
+    def update(self, *, soft:bool=False):
+        if DEBUG:
+            start:float = perf_counter()
+            print("[DEBUG]: Updating")
+        if not soft:
+            self.root.update() # Don't remove (root is BaseExplorer)
+            self._update_remove_dead()
+        for item, show in self.root.recurse_children(withself=False):
+            assert not item.idx.deleted, "SanityCheck"
+            # create_frame must check if the frame already exists
+            frame:tk.Frame = self.create_frame(item)
+            if show and (item.idx.dirty or (not frame.shown)):
+                self._update_show(frame)
+            if (not show) and frame.shown:
+                self._update_hide(frame)
+        if DEBUG:
+            print(f"[DEBUG]: Updated in {perf_counter()-start} seconds")
 
-        if item.isfile:
-            tk_icon = self.images[item.extension]
-            icon = tk.Canvas(frame, bg=self.bg, bd=0, highlightthickness=0,
+    def _update_remove_dead(self) -> None:
+        for item in tuple(self.item_to_frame):
+            if item.idx.deleted:
+                self.delete_item(item, apply_filesystem=False)
+
+    def _update_show(self, frame:tk.Frame) -> None:
+        frame.shown:bool = True
+        self.fix_indentation(frame)
+        frame.item.idx.dirty:bool = False
+        self.ggiver.add_frame(frame, frame.item.idx.value)
+        if DEBUG:
+            print(f"[DEBUG]: {frame.item} moved to to={frame.item.idx}")
+        if HIGHLIGHT_UPDATES:
+            frame.after(REDRAW_HIGHLIGHT_DELAY, self.recolour_frame, frame, frame.cget("bg"))
+            self.recolour_frame(frame, "red")
+
+    def _update_hide(self, frame:tk.Frame) -> None:
+        if DEBUG: print(f"[DEBUG]: Hiding: {frame.item}")
+        self.ggiver.remove_frame(frame)
+        frame.shown:bool = False
+
+    def delete_item(self, item:Item, *, apply_filesystem:bool=True) -> None:
+        frame:tk.Frame = self.item_to_frame.pop(item)
+        if not item.idx.deleted: # Check item still in tree
+            frame.item.delete(apply_filesystem=apply_filesystem)
+        self.ggiver.remove_frame(frame, grid_forget=False)
+        frame.destroy()
+
+    # Create frame
+    def create_frame(self, item:Item) -> tk.Frame:
+        frame:tk.Frame = self.item_to_frame.get(item, None)
+        if frame is not None:
+            return frame
+        if DEBUG: print(f"[DEBUG]: Creating frame for {item}")
+        frame = tk.Frame(self.master, bg="black", highlightthickness=0, bd=0)
+        self.item_to_frame[item] = frame
+        frame.shown:bool = False
+        frame.item:Item = item
+
+        indentation = tk.Canvas(frame, width=1, bd=0, bg="black",
+                                height=1, highlightthickness=0)
+        indentation.grid(row=1, column=1, sticky="ns")
+        frame.indentation = indentation
+        frame.indent:int = None
+        self.fix_indentation(frame)
+
+        if isfile(item):
+            tk_icon = self._get_sprite(item.extension)
+            icon = tk.Canvas(frame, bg="black", bd=0, highlightthickness=0,
                              width=tk_icon.width(), height=tk_icon.height())
-            icon.create_image(0, 0, anchor="nw", image=tk_icon)
-            icon.grid(row=0, column=1)
+            icon.id:int = icon.create_image(0, 0, anchor="nw", image=tk_icon)
+            icon.grid(row=1, column=2)
             frame.icon = icon
-        else:
+        elif isfolder(item):
             if item.expanded:
                 text = "-"
             else:
                 text = "+"
-            expandeder = tk.Label(frame, text=text, bg=self.bg, fg=self.fg,
+            expandeder = tk.Label(frame, text=text, bg="black", fg="white",
                                   font=("DejaVu Sans Mono", 9))
-            expandeder.grid(row=0, column=1)
+            expandeder.grid(row=1, column=2, sticky="news")
             frame.expandeder = expandeder
+        else:
+            raise NotImplementedError(f"Don't have a clue to what {item} is")
 
-        name = tk.Label(frame, text=item.name, bg=self.bg, fg=self.fg,
+        name = tk.Label(frame, text=item.purename, bg="black", fg="white",
                         anchor="w")
-        name.grid(row=0, column=2)
-
-        frame.item = item
+        name.grid(row=1, column=4, sticky="news")
         frame.name = name
-        frame.indentation = indentation
+        return frame
 
-        item.frame = frame
-        item.idx = row
+    # Event handlers
+    def _selected(self, old:tk.Frame, new:tk.Frame) -> None:
+        self.recolour_frame(old, "black")
+        self.recolour_frame(new, SELECTED_COLOUR)
 
-        self.bind_frame(frame, "<B1-Motion>", self.mouse_moved)
-        self.bind_frame(frame, "<ButtonPress-1>", self.mouse_pressed)
-        self.bind_frame(frame, "<ButtonRelease-1>", self.mouse_released)
-
-        # These functions should `return "break"`
-        self.bind_frame(frame, "<ButtonPress-1>", self.user_selected, add=True)
-        self.bind_frame(frame, "<Double-Button-1>", self.user_opened, add=True)
-        self.bind_frame(frame, "<ButtonPress-3>", self.right_clicked, add=True)
-
-        self.shown_items.insert(row, item)
-        self.master.event_generate("<<HeightChanged>>", when="tail")
-
-    def bind_frame(self, frame, *args, **kwargs) -> None:
-        to_bind = [frame]
-        while len(to_bind) > 0:
-            widget = to_bind.pop()
-            widget.bind(*args, **kwargs)
-            to_bind.extend(widget.winfo_children())
-
-    def fix_icon(self, item) -> None:
-        # Folders have no icons right now
-        if not item.isfile:
-            return None
-        canvas = item.frame.icon
-        tk_icon = self.images[item.extension]
-        canvas.config(width=tk_icon.width(), height=tk_icon.height())
-        canvas.create_image(0, 0, anchor="nw", image=tk_icon)
-
-    def get_indentation(self, item) -> int:
-        return item.indentation*INDENTATION + PADX
-
-    def user_selected(self, event:tk.Event) -> str:
-        frame = self.get_frame_from_event(event)
-        # User clicked at the end to remove selection
-        if not hasattr(frame, "item"):
-            self.select(None)
-            return "break"
-        item = frame.item
-        if item.isfile:
-            # User clicked on the same item again (not a double click)
-            if self.selected == item:
-                return "break"
-            frame.event_generate("<<SelectedFile>>", when="tail")
-        else:
-            if frame.expandeder == event.widget:
-                return self.user_opened(event)
-            if self.selected == item:
-                return "break"
-            frame.event_generate("<<SelectedFolder>>", when="tail")
-        self.select(item)
-        return "break"
-
-    def user_opened(self, event:tk.Event) -> str:
-        frame = self.get_frame_from_event(event)
-        if frame == self.master:
-            return "break"
-        item = frame.item
-        if item.isfile:
-            frame.event_generate("<<OpenedFile>>", when="tail")
-        else:
-            if item.expanded:
-                self.collapse_folder(item)
+    def start_move(self, frame:tk.Frame) -> list[tk.Frame]:
+        if frame.item.indentation == 1:
+            return []
+        if self.changing is not None:
+            return []
+        self.changing:tk.Frame = frame
+        if COLLAPSE_BEFORE_MOVE:
+            if isfolder(frame.item):
+                self.expanded_before:bool = frame.item.expanded
+                self._collapse(frame)
             else:
-                self.expand_folder(item)
-            self.master.event_generate("<<HeightChanged>>", when="tail")
-        return "break"
+                self.expanded_before:bool = False
+            return [frame]
+        else:
+            children = list(self._get_shown_children(frame, withself=True))
+            return children
 
-    def collapse_folder(self, folder:base_explorer.Folder) -> None:
-        for child in folder.children:
-            self.hide_folder(child)
-        folder.frame.expandeder.config(text="+")
-        folder.expanded = False
+    def cancel_move(self) -> None:
+        if isfolder(self.changing.item) and self.expanded_before:
+            self._expand(self.changing)
+        self.changing:tk.Frame = None
 
-    def hide_folder(self, folder:base_explorer.Folder) -> None:
-        to_hide = [folder]
-        while len(to_hide) > 0:
-            item = to_hide.pop(0)
-            self.call_grid_forget(item)
-            if not item.isfile:
-                to_hide.extend(item.children)
+    def move(self, src:tk.Frame, dis:tk.Frame) -> None:
+        dis:tk.Frame = self._get_closest_folder(dis)
+        self.changing:tk.Frame = None
+        src.item.move(dis.item)
+        if isfolder(src.item) and self.expanded_before:
+            self._expand(src)
+        if isfolder(dis.item):
+            self._expand(dis)
+        self.update(soft=True)
 
-    def expand_folder(self, item:base_explorer.Folder, draw:bool=True) -> None:
-        for child in item.children:
-            child.frame.grid(row=child.idx, column=0, sticky="ew")
-            if (not child.isfile) and child.expanded:
-                self.expand_folder(child, False)
-        if draw:
-            item.frame.expandeder.config(text="-")
-            item.expanded = True
+    def double_click(self, frame:tk.Frame|None) -> str:
+        if frame is None:
+            return None
+        if isfolder(frame.item):
+            return self._toggle_expand(frame)
+        else:
+            self.master.event_generate("<<Explorer-Open>>", data=(frame.item,))
 
-    def select(self, item) -> None:
-        if isinstance(item, tk.Misc):
-            raise VaueError("`item` must be an item not a frame.")
-        if self.selected is not None:
-            self.change_colour(bg=self.bg, frame=self.selected.frame,
-                               fg=self.fg)
-        self.selected = item
-        if self.selected is not None:
-            self.change_colour(bg=self.selected_bg, frame=item.frame,
-                               fg=self.selected_fg)
+    def _toggle_expand(self, frame:tk.Frame) -> str:
+        assert isfolder(frame.item), "TypeError"
+        if frame.item.expanded:
+            self._collapse(frame)
+        else:
+            self._expand(frame)
 
-    def call_grid_forget(self, item) -> None:
-        if item == self.selected:
-            self.select(None)
-        item.frame.grid_forget()
+    def _expand(self, frame:tk.Frame) -> None:
+        if frame.item.expanded:
+            return None
+        if DEBUG: print(f"[DEBUG]: Expanding {frame.item}")
+        frame.item.expanded:bool = True
+        frame.expandeder.config(text="-")
+        self.update(soft=True)
 
-    def right_clicked(self, event:tk.Event) -> str:
-        return "break"
+    def _collapse(self, frame:tk.Frame) -> None:
+        if not frame.item.expanded:
+            return None
+        frame.item.expanded:bool = False
+        frame.expandeder.config(text="+")
+        self.update(soft=True)
+
+    def expand(self, item:Item) -> None:
+        assert isfolder(item), "TypeError"
+        self._expand(self.item_to_frame[item])
+
+    # Functions you can call:
+    def add(self, path:str) -> None:
+        self.root.add(path).update()
+        self.update(soft=True)
+
+    def remove(self, path:str) -> None:
+        self.root.remove(path)
+        self.update(soft=True)
 
 
 if __name__ == "__main__":
-    def selected_file(event):
-        print("[Debug]: Selected", event.widget.item)
-
-    def opened_file(event):
-        print("[Debug]: Opened", event.widget.item)
-
     root = tk.Tk()
-
-    explorer_frame = tk.Frame(root, highlightthickness=0, bd=0, width=180,
-                              height=260, bg="black")
-    explorer_frame.pack(fill="both", expand=True)
-
-    explorer = Explorer(explorer_frame)
-    explorer.add("testing")
-
-    explorer_frame.bind_all("<<OpenedFile>>", opened_file)
-    explorer_frame.bind_all("<<SelectedFile>>", selected_file)
-
-    # root.mainloop()
-    root.bind("a", lambda e: print("="*80+"\n"+explorer.tree.to_string()+"\n"+"="*80))
+    root.geometry("320x130+0+0")
+    root.config(bg="black")
+    root.grid_columnconfigure(1, weight=1)
+    e = Explorer(root)
+    e.add("test/")
