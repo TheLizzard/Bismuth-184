@@ -617,12 +617,16 @@ class Root(Folder):
     def fullpath(self) -> str:
         return ""
 
-    def add(self, path:str) -> Folder:
+    def add(self, path:str) -> Folder|None:
         """
-        Adds a folder to the list of fodlers to be displayed. Please
-        note that the input must be a folder.
+        Adds a folder to the list of folders to be displayed. Please
+        note that the input must be a folder otherwise this returns `None`
         """
         fullpath:str = self.filesystem.abspath(path)
+        if not os.path.exists(fullpath):
+            return None
+        if not os.path.isdir(fullpath):
+            return None
         folder:Folder = Folder(fullpath, root=self.root, master=self)
         super().add_item(folder)
         folder.update()

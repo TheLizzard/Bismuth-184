@@ -292,8 +292,10 @@ class Explorer:
 
     # Functions you can call:
     def add(self, path:str) -> None:
-        self.root.add(path).update()
-        self.update(soft=True)
+        folder:Folder = self.root.add(path)
+        if folder is not None:
+            folder.update()
+            self.update(soft=True)
 
     def remove(self, path:str) -> None:
         self.root.remove(path)

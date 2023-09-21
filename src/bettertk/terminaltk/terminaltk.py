@@ -157,6 +157,9 @@ class TerminalFrame(tk.Frame):
             return False
         return self.terminal.running
 
+    def print(self, string:str, *, end="\n") -> None:
+        self.buffer.send_force_print(string+end)
+
     def start(self) -> None:
         tk_wait_for_map(self)
         self.terminal:Terminal = Terminal(into=self)
@@ -222,6 +225,9 @@ class TerminalTk(BetterTk):
     @property
     def running(self) -> bool:
         return self.terminal.running
+
+    def print(self, string:str, *, end="\n") -> None:
+        self.terminal.print(string, end=end)
 
     def cancel_all(self) -> None:
         self._iqueue.clear()

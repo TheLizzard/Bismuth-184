@@ -1,7 +1,7 @@
 from __future__ import annotations
 import tkinter as tk
 
-WARNINGS:bool = True
+WARNINGS:bool = False
 
 
 class VirtualEvent:

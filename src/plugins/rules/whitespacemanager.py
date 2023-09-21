@@ -19,7 +19,7 @@ class WhiteSpaceManager(Rule):
     REQUESTED_LIBRARIES_STRICT:bool = False
 
     INDENTATIONS:dict[str,int] = {" ":4, "\t":1}
-    INDENTATION_DELTAS:dict[str,int] = {":":+1}
+    INDENTATION_DELTAS:dict[str,int] = {}
     DEFAULT_INDENTATION:str = " "
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:

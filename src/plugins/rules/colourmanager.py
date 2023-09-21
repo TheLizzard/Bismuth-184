@@ -1,10 +1,7 @@
 from __future__ import annotations
-from idlelib.colorizer import ColorDelegator, matched_named_groups, make_pat
-from idlelib.colorizer import any as idleany
+from idlelib.colorizer import ColorDelegator, make_pat
 from idlelib.percolator import Percolator
 import tkinter as tk
-import builtins
-import keyword
 import re
 
 from .baserule import Rule
@@ -15,11 +12,6 @@ class ColourConfig(dict):
 
     def __init__(self) -> ColourConfig:
         super().__init__({
-                           "comment":    dict(foreground="red"),
-                           "keyword":    dict(foreground="orange"),
-                           "builtin":    dict(foreground="#ff75ff"),
-                           "string":     dict(foreground="lime"),
-                           "definition": dict(foreground="cyan"),
                            "SYNC":       dict(),
                            "TODO":       dict(),
                            "error":      dict(),
@@ -34,7 +26,7 @@ class Colorizer(ColorDelegator):
         self.tagdefs:dict[str,str] = ColourConfig()
         self.idprog = re.compile(r"\s+(\w+)")
         self.text:tk.Text = None
-        self.prog = make_pat()
+        self.prog = re.compile("(?:.*)", re.M|re.S) # Kind of matches nothing
         self.close()
 
     def close(self) -> None:
@@ -74,15 +66,16 @@ class ColourManager(Rule):
     __slots__ = "old_bg", "old_fg", "old_insertbg", "colorizer", "text"
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> ColourManager:
-        super().__init__(plugin, text, ons=("<FocusIn>", "<FocusOut>"))
+        super().__init__(plugin, text, ons=())
         self.text:tk.Text = self.widget
         self.colorizer:Colorizer = Colorizer()
-        self.colorizer.apply_colorizer(text)
+        self.apply_colorizer()
+
+    def apply_colorizer(self) -> None:
+        self.colorizer.apply_colorizer(self.text)
 
     def attach(self) -> None:
         super().attach()
-        self.turnon_colorizer()
-        self.colorizer.notify_range("1.0", "end")
         self.old_bg:str = self.text.cget("bg")
         self.old_fg:str = self.text.cget("fg")
         self.old_insertbg:str = self.text.cget("insertbackground")
@@ -93,25 +86,3 @@ class ColourManager(Rule):
         super().detach()
         self.text.config(bg=self.old_bg, fg=self.old_fg,
                          insertbackground=self.old_insertbg)
-        self.turnoff_colorizer()
-        self.colorizer.removecolors()
-
-    def turnon_colorizer(self) -> None:
-        if self.colorizer.colorizer_on:
-            return None
-        self.colorizer.toggle_colorize_event()
-
-    def turnoff_colorizer(self) -> None:
-        self.colorizer.close()
-
-    """
-    def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
-        return True
-
-    def do(self, on:str) -> Break:
-        if on == "focusout":
-            self.turnoff_colorizer()
-        elif on == "focusin":
-            self.turnon_colorizer()
-        return False
-    """

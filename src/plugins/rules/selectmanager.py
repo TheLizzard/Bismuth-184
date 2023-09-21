@@ -44,10 +44,11 @@ class SelectManager(Rule):
         super().attach()
         self.old_sel_fg = self.text.tag_cget("sel", "foreground")
         self.old_sel_bg = self.text.tag_cget("sel", "background")
-        self.text.tag_config("sel", background="red", foreground="")
+        self.text.tag_config("sel", background="", foreground="")
         self.old_inactivebg:str = self.text.cget("inactiveselectbackground")
         self.text.config(inactiveselectbackground=self.text.cget("bg"))
         self.text.tag_config(SEL_TAG, background="orange", foreground="white")
+        self.text.tag_raise(SEL_TAG)
 
     def detach(self) -> None:
         super().detach()

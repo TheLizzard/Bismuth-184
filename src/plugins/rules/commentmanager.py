@@ -8,7 +8,7 @@ from .baserule import Rule
 
 class CommentManager(Rule):
     __slots__ = "text"
-    COMMENT_STR:str = "#"
+    COMMENT_STR:str = ""
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
         super().__init__(plugin, text, ("<Control-slash>",))
@@ -18,6 +18,8 @@ class CommentManager(Rule):
         return True
 
     def do(self, on:str) -> Break:
+        if COMMENT_STR == "":
+            return True
         return self.plugin.double_wrapper(self._do, on)
 
     def _do(self, on:str) -> Break:

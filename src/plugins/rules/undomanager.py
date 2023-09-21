@@ -27,11 +27,11 @@ class UndoManager(Rule):
                            # Undo/Redo
                            "<Control-Z>", "<Control-z>",
                            # Insert separator
-                           "<<Save-File>>",
+                           "<<Saved-File>>",
                            "<<Before-Insert>>", "<<After-Insert>>",
                            "<<Before-Delete>>", "<<After-Delete>>",
                            # Reset undo stack
-                           "<<Open-File>>",
+                           "<<Opened-File>>", "<<Reloaded-File>>",
                            # Communication with other rules:
                            "<<Unpause-Separator>>", "<<Pause-Separator>>",
                            "<<Add-Separator>>", "<<Clear-Separators>>",
@@ -84,13 +84,14 @@ class UndoManager(Rule):
             self.text.event_generate("<<Modified-Change>>")
             return True
 
-        if on == "<open-file>":
-            #self.text.edit_reset()
+        if on in ("<opened-file>", "<reloaded-file>"):
+            self.text.edit_reset()
+            self.sep_unnecessary:bool = False
             self.text.edit_modified(False)
             self.add_sep(wait=False)
             self.text.event_generate("<<Modified-Change>>")
             return False
-        if on == "<save-file>":
+        if on == "<saved-file>":
             #self.add_sep()
             self.text.edit_modified(False)
             self.add_sep(wait=False)

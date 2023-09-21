@@ -14,6 +14,11 @@ from bettertk import BetterTk
 from plugins import PythonPlugin, VirtualEvents
 from settings.settings import curr as settings
 
+# tk.Event.state constants
+SHIFT:int = 1
+ALT:int = 8
+CTRL:int = 4
+
 
 class App:
     __slots__ = "root", "explorer", "notebook", "text_to_page", \
@@ -33,6 +38,7 @@ class App:
 
         self.notebook:Notebook = Notebook(pannedwindow)
         self.notebook.bind("<<Tab-Create>>", lambda _: self.new_tab())
+        self.notebook.bind("<<Tab-Switched>>", self.change_selected_tab)
         self.notebook.on_try_close = self.close_tab
 
         left_frame:tk.Frame = tk.Frame(pannedwindow, bd=0, bg="black",
@@ -42,19 +48,25 @@ class App:
                         highlightthickness=0, takefocus=False,
                         command=self.explorer_add_folder, relief="flat")
         add.grid(row=1, column=1, sticky="news")
+        sep = tk.Canvas(left_frame, bg="grey", bd=0, highlightthickness=0,
+                        width=1, height=1)
+        sep.grid(row=1, column=2, sticky="news")
+        sep = tk.Canvas(left_frame, bg="grey", bd=0, highlightthickness=0,
+                        width=1, height=1)
+        sep.grid(row=2, column=1, columnspan=3, sticky="news")
         rem = tk.Button(left_frame, text="Remove Folder", bg="black", fg="white",
                         activebackground="grey", activeforeground="white",
                         highlightthickness=0, takefocus=False,
                         command=self.explorer_remove_folder, relief="flat")
-        rem.grid(row=1, column=2, sticky="news")
-        left_frame.grid_rowconfigure(2, weight=1)
-        left_frame.grid_columnconfigure((1, 2), weight=1)
+        rem.grid(row=1, column=3, sticky="news")
+        left_frame.grid_rowconfigure(3, weight=1)
+        left_frame.grid_columnconfigure((1, 3), weight=1)
         self.explorer_frame = BetterFrame(left_frame, hscroll=True,
                                           vscroll=True, bg="black",
                                      HScrollBarClass=BetterScrollBarHorizontal,
                                      VScrollBarClass=BetterScrollBarVertical,
                                      scroll_speed=1)
-        self.explorer_frame.grid(row=2, column=1, columnspan=2, sticky="news")
+        self.explorer_frame.grid(row=3, column=1, columnspan=3, sticky="news")
         if settings.explorer.hide_h_scroll:
             self.explorer_frame.h_scrollbar.hide:bool = True
         if settings.explorer.hide_v_scroll:
@@ -63,7 +75,7 @@ class App:
         VirtualEvents(self.explorer_frame) # Must be before the BindFrame
         make_bind_frame(self.explorer_frame)
         self.explorer:ExpandedExplorer = ExpandedExplorer(self.explorer_frame)
-        self.explorer_frame.bind("<<Explorer-Open>>", self.open_tab)
+        self.explorer_frame.bind("<<Explorer-Open>>", self.open_tab_explorer)
 
         pannedwindow.add(left_frame, sticky="news",
                          width=settings.explorer.width)
@@ -78,30 +90,51 @@ class App:
                 page.focus()
                 break
 
+    # Helpers
+    @staticmethod
+    def get_filename(filepath:str) -> str:
+        if filepath is None:
+            return "Untitled"
+        return filepath.split("/")[-1].split("\\")[-1]
+
+    def page_to_text(self, page:NotebookPage) -> tk.Text:
+        if page is None:
+            return None
+        for text, p in self.text_to_page.items():
+            if p == page:
+                return text
+        raise KeyError("InternalError")
+
+    # Tab management
     def new_tab(self, filepath:str=None) -> tk.Text:
         text = tk.Text(self.notebook, highlightthickness=0, bd=0)
+        text.filesystem_data:str = ""
+        text.save_module:bool = True
         text.bind("<Control-W>", self.control_w)
         text.bind("<Control-w>", self.control_w)
-        if not filepath:
-            text.insert("end", PythonPlugin.DEFAULT_CODE)
-        page = self.notebook.tab_create().add_frame(text).focus()
+        page = self.notebook.tab_create().add_frame(text)
+        self.text_to_page[text] = page
+        page.focus()
         text.plugin = PythonPlugin(text)
         text.plugin.attach()
         text.focus_set()
-        text.filepath:str = None
-        text.saved:str = ""
-        self.text_to_page[text] = page
-        text.bind("<<Save-File>>", self.rename_tab, add=True)
-        text.bind("<<Open-File>>", self.rename_tab, add=True)
+        text.bind("<<Request-Save>>", self.request_save, add=True)
+        text.bind("<<Request-Open>>", self.request_open, add=True)
         text.bind("<<Modified-Change>>", self.rename_tab, add=True)
-        text.bind("<<Unsaved-Open>>", self.unsaved_open, add=True)
         if filepath:
             text.edit_modified(False)
-            text.event_generate("<<Trigger-Open>>", data=(filepath,))
+            text.filepath:str = filepath
+            text.event_generate("<<Trigger-Open>>")
         else:
+            text.insert("end", PythonPlugin.DEFAULT_CODE)
             text.edit_modified(True)
             text.event_generate("<<Modified-Change>>")
         return text
+
+    def change_selected_tab(self, event:tk.Event=None) -> None:
+        if self.notebook.curr_page is None:
+            return None
+        self.page_to_text(self.notebook.curr_page).focus_set()
 
     def rename_tab(self, event:tk.Event) -> None:
         filename:str = self.get_filename(event.widget.filepath)
@@ -109,22 +142,17 @@ class App:
             filename:str = f"*{filename}*"
         self.text_to_page[event.widget].rename(filename)
 
-    @staticmethod
-    def get_filename(filepath:str) -> str:
-        if filepath is None:
-            return "Untitled"
-        return filepath.split("/")[-1].split("\\")[-1]
-
     def control_w(self, event:tk.Event) -> str:
+        if (event.state&SHIFT) or (self.notebook.curr_page is None):
+            self.root_close()
+            return ""
         # event.widget is useless here for some reason
         self.notebook.tab_destroy(self.notebook.curr_page)
         return "break"
 
     def close_tab(self, page:NotebookPage) -> bool:
-        return self._close_tab(self.page_to_text(page))
-
-    def _close_tab(self, text:tk.Text) -> bool:
-        block:bool = True
+        text:tk.Text = self.page_to_text(page)
+        block:bool = False
         if text.edit_modified():
             title:str = "Close unsaved text?"
             msg:str = "Are you sure you want to\nclose this unsaved page?"
@@ -135,24 +163,7 @@ class App:
             self.text_to_page.pop(text)
         return block
 
-    def page_to_text(self, page:NotebookPage) -> tk.Text:
-        for text, p in self.text_to_page.items():
-            if p == page:
-                return text
-        raise KeyError("InternalError")
-
-    def unsaved_open(self, event:tk.Event) -> str:
-        title:str = "Discard changes to this file?"
-        msg:str = "You havn't saved this file. Are you sure you\n" \
-                  "want to continue and discard the changes?"
-        ret:bool = askyesno(self.root, title=title, message=msg, center=True,
-                            icon="warning", center_widget=event.widget)
-        if ret:
-            return ""
-        # Return break if you want to cancel the open
-        return "break"
-
-    def open_tab(self, _:tk.Event) -> None:
+    def open_tab_explorer(self, _:tk.Event) -> None:
         path:str = self.explorer.selected.item.fullpath
         for text, page in self.text_to_page.items():
             if text.filepath == path:
@@ -160,18 +171,52 @@ class App:
                 return None
         self.new_tab(path)
 
+    # Save close
+    def request_save(self, event:tk.Event) -> None:
+        if event.widget.filepath is None:
+            filesystem_data:bytes = None
+        elif not os.path.exists(event.widget.filepath):
+            filesystem_data:bytes = None
+        else:
+            with open(event.widget.filepath, "br") as file:
+                filesystem_data:bytes = file.read()
+        if event.widget.filesystem_data.encode("utf-8") != filesystem_data:
+            title:str = "Merge conflict"
+            msg:str = "The file has been modified on the filesystem.\n" \
+                      "Are you sure you want to save it?"
+            ret:bool = askyesno(self.root, title=title, icon="warning",
+                                message=msg, center=True,
+                                center_widget=event.widget)
+            if not ret:
+                return None
+        event.widget.event_generate("<<Trigger-Save>>")
+
+    def request_open(self, event:tk.Event) -> None:
+        if event.widget.edit_modified():
+            title:str = "Discard changes to this file?"
+            msg:str = "You haven't saved this file. Are you sure you\n" \
+                      "want to continue and discard the changes?"
+            ret:bool = askyesno(self.root, title=title, icon="warning",
+                                message=msg, center=True,
+                                center_widget=event.widget)
+            if not ret:
+                return None
+        event.widget.event_generate("<<Trigger-Open>>")
+
+    # Handle the get/set state
     def root_close(self) -> None:
         _, x, y = self.root.geometry().split("+")
         added, expanded = self._get_explorer_state()
         true_explorer_frame:tk.Frame = self.explorer_frame.master_frame
         curr_text:tk.Text = self.page_to_text(self.notebook.curr_page)
+        curr_text_path:str = None if curr_text is None else curr_text.filepath
 
         settings.window.update(height=self.root.winfo_height(), x=x, y=y)
         settings.explorer.update(width=true_explorer_frame.winfo_width())
         settings.notebook.update(width=self.notebook.winfo_width())
         settings.notebook.update(open=self._get_notebook_state())
         settings.explorer.update(added=added, expanded=expanded)
-        settings.window.update(focused_text=curr_text.filepath)
+        settings.window.update(focused_text=curr_text_path)
         settings.save()
         self.root.destroy()
 
@@ -182,7 +227,7 @@ class App:
             yview:str = text.yview()[0]
             xview:str = text.xview()[0]
             insert:str = text.index("insert")
-            saved:str = text.saved
+            saved:str = text.filesystem_data
             modified:str = text.edit_modified()
             if modified:
                 data:str = text.get("1.0", "end").removesuffix("\n")
@@ -194,19 +239,15 @@ class App:
     def _set_notebook_state(self, opened:list[tuple]) -> None:
         files:set[str] = set()
         for file, data, yview, xview, insert, saved, modified in opened:
-            if file is not None:
-                if file in files:
-                    title:str = "Single file in multiple tabs"
-                    msg:str = "Please don't open the same file in multiple\n" \
-                              "tabs as that can cause problems for this editor"
-                    telluser(self.root, title=title, message=msg, center=True,
-                             icon="warning")
+            if file in files:
+                title:str = "Single file in multiple tabs"
+                msg:str = "Please don't open the same file in multiple\n" \
+                          "tabs as that can cause problems for this editor"
+                telluser(self.root, title=title, message=msg, center=True,
+                         icon="warning")
+            elif file is not None:
                 files.add(file)
-                if not os.path.exists(file):
-                    continue
-                if not os.path.isfile(file):
-                    continue
-            text:str = self.new_tab(file)
+            text:tk.Text = self.new_tab(file)
             if modified:
                 text.delete("0.0", "end")
                 text.insert("end", data)
@@ -214,21 +255,26 @@ class App:
                 text.edit_reset()
                 text.edit_separator()
                 text.event_generate("<<Modified-Change>>")
-            if modified and (file is not None):
-                with open(file, "r") as fd:
-                    if saved != fd.read():
-                        title:str = "Merge Conflict"
-                        msg:str = f"The file {file} has been\nmodified on " \
-                                  "you system and there are changes in this " \
-                                  "editor.\nThis means that you have a " \
-                                  "merge conflict. Good luck resolving it."
-                        telluser(self.root, title=title, message=msg,
-                                 center=True, icon="warning",
-                                 center_widget=text, block=False)
             text.event_generate("<<Move-Insert>>", data=(insert,))
             text.mark_set("insert", insert)
             text.xview("moveto", xview)
             text.yview("moveto", yview)
+            text.filesystem_data:str = saved
+            # Validity check:
+            if (file is not None) and modified:
+                problem:bool = True
+                if os.access(file, os.R_OK):
+                    with open(file, "r") as fd:
+                        problem:bool = saved != fd.read()
+                if problem:
+                    title:str = "Merge Conflict"
+                    msg:str = f"The file {file} has been\nmodified on " \
+                              "you system and there are changes in this " \
+                              "editor.\nThis means that you have a " \
+                              "merge conflict."
+                    telluser(self.root, title=title, message=msg,
+                             center=True, icon="warning",
+                             center_widget=text, block=False)
 
     def explorer_remove_folder(self) -> None:
         if self.explorer.selected is None:
@@ -261,6 +307,7 @@ class App:
             if isfolder(item) and (item.fullpath in expanded):
                 self.explorer.expand(item)
 
+    # The mainloop function
     def mainloop(self) -> None:
         self.root.mainloop()
 
@@ -272,5 +319,7 @@ if __name__ == "__main__":
         import sys
         sys.stdin.fileno()
         app.mainloop()
-    except:
+    except ValueError:
+        pass # Inside IDLE
+    except KeyboardInterrupt:
         pass
