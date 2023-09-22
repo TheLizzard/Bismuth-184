@@ -136,6 +136,7 @@ src/state.state
 # Debug files
 backups/
 src/test.py
+src/state.json
 src/file_explorer/$BIN/
 src/file_explorer/old/
 src/file_explorer/test/

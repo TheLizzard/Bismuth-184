@@ -4,7 +4,7 @@ import tkinter as tk
 import os
 
 from file_explorer.expanded_explorer import ExpandedExplorer, isfolder
-from file_explorer.bindframe import make_bind_frame
+from bettertk.betterframe import make_bind_frame
 from bettertk.notebook import Notebook
 from bettertk.betterframe import BetterFrame
 from bettertk.betterscrollbar import BetterScrollBarVertical, \
@@ -222,7 +222,8 @@ class App:
 
     def _get_notebook_state(self) -> list[tuple]:
         opened:list[tuple] = []
-        for text in self.text_to_page:
+        for page in self.notebook.iter_pages():
+            text:tk.Text = self.page_to_text(page)
             file:str = text.filepath
             yview:str = text.yview()[0]
             xview:str = text.xview()[0]

@@ -1,14 +1,22 @@
 Editor:
-* `Ctrl-F`, `Ctrl-R`
+* `FindReplaceManager` is missing
+* `RunManager` can't handle passing in args when running or custom compilation/running commands
+* `WhiteSpaceManager` copies the indentation of the current line without considering that it might be fully enclosed in a bracket.
+* If the user drags the mouse outside the editor and back inside `SelectionManager` sometimes lets the "sel" tag to appear.
+* Implement `MenuManager`?
 
 Terminal:
-* Windows support
-
-Settings:
-* Add a settings menu
+* Windows support (pty_terminal)
+* Finnish Konsole implementation (x11, windows)
+* Add settings window
 
 Window:
-* None
+* Add settings window
+
+File Explorer:
+* Make the frame inside the `dummy_canvas` expand to fill the canvas' width in `BetterFrame`
+* Save exec path on close?
 
 Speed:
-* Need to test it out to see the speed.
+* plugins.rules.bracketmanager.py@BracketManager.find_bracket_match
+* Detach all plugins that aren't visible? (depends on what the profiler says)

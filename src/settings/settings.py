@@ -2,7 +2,8 @@ from __future__ import annotations
 import json
 import os
 
-PATH:str = os.path.join(os.path.dirname(__file__), "settings.json")
+PATH:str = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                        "state.json")
 
 DEFAULTS:str = """
 {

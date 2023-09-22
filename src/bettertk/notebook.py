@@ -2,10 +2,10 @@ from __future__ import annotations
 import tkinter as tk
 
 try:
-    from betterframe import BetterFrame
+    from betterframe import BetterFrame, make_bind_frame
     from betterscrollbar import BetterScrollBarHorizontal
 except ImportError:
-    from .betterframe import BetterFrame
+    from .betterframe import BetterFrame, make_bind_frame
     from .betterscrollbar import BetterScrollBarHorizontal
 
 def round_rectangle(self:tk.Canvas, x1:int, y1:int, x2:int, y2:int, radius:int,
@@ -25,10 +25,12 @@ tk.Canvas.create_round_rectangle = round_rectangle
 
 WIDGET_KWARGS:dict = dict(highlightthickness=0, bd=0, takefocus=False)
 NOTCH_BG:str = "#444444"
+NOT_DRAG_DIST:int = 10
+BUTTON1_TK_STATE:int = 256
 
 
 class TabNotch(tk.Canvas):
-    __slots__ = "text_id", "text", "page", "rrect_id"
+    __slots__ = "text_id", "text", "page", "rrect_id", "width"
     PADX:int = 7
 
     def __init__(self, master:TabNotches) -> TabNotch:
@@ -37,8 +39,9 @@ class TabNotch(tk.Canvas):
         self.text_id:int = super().create_text((0,0), text="", anchor="nw",
                                                fill="white")
         self.rrect_id:int = None
+        self.width:int = 0
         self.text:str = None
-        super().bind("<Button-1>", lambda e: master.clicked(self))
+        super().bind("<Button-1>", lambda e: master.clicked(self), add=True)
         super().bind("<Button-2>", lambda e: master.close(self))
 
     def rename(self, text:str) -> None:
@@ -51,6 +54,7 @@ class TabNotch(tk.Canvas):
         height:int = y2-y1
         super().moveto(self.text_id, self.PADX, height/2)
         super().config(width=width+2*self.PADX, height=2*height)
+        self.width:int = width+2*self.PADX
         if self.rrect_id is not None:
             self.tell_focused()
 
@@ -72,7 +76,8 @@ class TabNotch(tk.Canvas):
 
 
 class TabNotches(BetterFrame):
-    __slots__ = "add_notch", "length", "notebook"
+    __slots__ = "add_notch", "length", "notebook", "notches", "tmp_notch", \
+                "notch_dragging", "dragging", "dragx"
 
     def __init__(self, notebook:Notebook) -> TabNotches:
         self.notebook:Notebook = notebook
@@ -83,14 +88,24 @@ class TabNotches(BetterFrame):
         self.add_notch.grid(row=1, column=1)
         self.add_notch.rename("+")
         self.h_scrollbar.hide:bool = True
-        self.length:int = 0
-        super().resize(height=self.add_notch.winfo_reqheight())
+        self.notches:list[TabNotch] = []
+        self.notch_dragging:bool = None
+        self.dragging:bool = False
+        height:int = self.add_notch.winfo_reqheight()
+        super().resize(height=height)
+        self.tmp_notch:tk.Frame = tk.Frame(self, bg=NOTCH_BG, height=height,
+                                           highlightthickness=0, bd=0)
+
+        make_bind_frame(self)
+        self.bind("<ButtonPress-1>", self.start_dragging, add=True)
+        self.bind_all("<Motion>", self.drag, add=True)
+        self.bind_all("<ButtonRelease-1>", self.end_dragging, add=True)
 
     def add(self) -> TabNotch:
-        self.length += 1
         notch:TabNotch = TabNotch(self)
-        notch.grid(row=1, column=self.length)
-        self.add_notch.grid(row=1, column=self.length+1)
+        notch.grid(row=1, column=len(self.notches))
+        self.add_notch.grid(row=1, column=len(self.notches)+1)
+        self.notches.append(notch)
         return notch
 
     def clicked(self, notch:TabNotch) -> None:
@@ -102,6 +117,68 @@ class TabNotches(BetterFrame):
     def close(self, notch:TabNotch) -> None:
         if notch != self.add_notch:
             notch.page.close()
+
+    def start_dragging(self, event:tk.Event) -> None:
+        if not isinstance(event.widget, TabNotch):
+            return None
+        if event.widget == self.add_notch:
+            return None
+        self.notch_dragging:TabNotch = event.widget
+        self.dragx:int = event.x # event.x_root - event.widget.winfo_rootx()
+        return "break"
+
+    def end_dragging(self, event:tk.Event=None) -> str:
+        if self.notch_dragging is not None:
+            self.tmp_notch.grid_forget()
+            self.notch_dragging.grid(row=1, column=self.tmp_notch.idx)
+            self.notches[self.tmp_notch.idx] = self.notch_dragging
+        self.notch_dragging:TabNotch = None
+        self.dragging:bool = False
+        return "break"
+
+    def drag(self, event:tk.Event) -> str:
+        if self.notch_dragging is None:
+            return None
+        if not (event.state & BUTTON1_TK_STATE):
+            self.end_dragging()
+            return None
+        if not self.dragging:
+            if abs(event.x-self.dragx) < NOT_DRAG_DIST:
+                return None
+            self.dragging:bool = True
+            width:int = self.notch_dragging.winfo_width()
+            self.tmp_notch.width=width
+            self.tmp_notch.config(width=width)
+            idx:int = self.notches.index(self.notch_dragging)
+            self.tmp_notch.grid(row=1, column=idx)
+            self.tmp_notch.idx:int = idx
+            tk.Misc.lift(self.notch_dragging)
+            self.notches[idx] = self.tmp_notch
+
+        x:int = event.x_root - super().winfo_rootx()
+        idx:int = self.calculate_idx(x-self.dragx)
+        self._reshiffle(idx)
+        self.notch_dragging.place(x=x-self.dragx, y=0)
+        return "break"
+
+    def calculate_idx(self, x:int) -> int:
+        total_width:int = 0
+        for idx, notch in enumerate(self.notches):
+            total_width += notch.width>>1
+            if x < total_width:
+                return idx
+            total_width += (notch.width>>1) + (notch.width&1)
+        return len(self.notches)-1
+
+    def _reshiffle(self, idx:int) -> None:
+        if idx == self.tmp_notch.idx:
+            return None
+        self.notches.pop(self.tmp_notch.idx)
+        self.notches.insert(idx, self.tmp_notch)
+        for i in tuple(range(idx, self.tmp_notch.idx+1)) + \
+                 tuple(range(self.tmp_notch.idx, idx+1)):
+            self.notches[i].grid(row=1, column=i)
+        self.tmp_notch.idx:int = idx
 
 
 class NotebookPage:
@@ -158,6 +235,10 @@ class Notebook(tk.Frame):
         notch.page:NotebookPage = page
         self.pages.append(page)
         return page
+
+    def iter_pages(self) -> Iterator[NotebookPage]:
+        for notch in self.notches.notches:
+            yield notch.page
 
     def _tab_switch_to(self, page:NotebookPage) -> None:
         if page == self.curr_page:

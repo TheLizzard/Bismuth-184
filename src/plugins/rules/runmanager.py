@@ -66,7 +66,10 @@ class RunManager(Rule):
 
     def run(self, args:Iterable[str]) -> None:
         if self.text.edit_modified():
-            print("Save first")
+            title:str = "Save first"
+            msg:str = "You need to save before you can run the file."
+            telluser(self.text, title=title, message=msg, center=True,
+                     icon="error", center_widget=self.text)
             return None
 
         if (self.term is None) or (not self.term.running):
