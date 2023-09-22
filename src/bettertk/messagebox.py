@@ -18,13 +18,14 @@ ICONS = creator.SpritesCache(256, 256>>2, 220)
 
 
 class Popup(BetterTk):
-    __slots__ = "root", "image", "tk_image"
+    __slots__ = "root", "image", "tk_image", "block"
 
     def __init__(self, master:tk.Misc, title:str, *, icon:str, center:bool=True,
-                 center_widget:tk.Misc=None) -> Popup:
+                 center_widget:tk.Misc=None, block:bool=True) -> Popup:
         if center_widget is not None:
             assert center, "No point in passing in center_widget if " \
                            "center is False"
+        self.block:bool = block
         super().__init__(master)
         super().title(title)
         self.minimise_button.hide()
@@ -51,7 +52,8 @@ class Popup(BetterTk):
         return icon
 
     def _destroy(self) -> None:
-        super().quit()
+        if self.block:
+            super().quit()
         super().destroy()
 
     def mainloop(self) -> YesNoQuestion:
@@ -79,9 +81,9 @@ class Tell(Popup):
     __slots__ = ()
 
     def __init__(self, master:tk.Misc, title:str, message:str, *, icon:str,
-                 center:bool=True, center_widget:tk.Misc=None) -> Tell:
+                 center:bool=True, center_widget:tk.Misc=None, block:bool=True):
         super().__init__(master, title=title, icon=icon, center=center,
-                         center_widget=center_widget)
+                         center_widget=center_widget, block=block)
         super().bind("<Return>", lambda e: self._destroy())
 
         left_frame = tk.Frame(self, **FRAME_KWARGS)
@@ -109,7 +111,7 @@ class YesNoQuestion(Popup):
                  center:bool=True, center_widget:tk.Misc=None) -> YesNoQuestion:
         self.result:bool = None
         super().__init__(master, title=title, icon=icon, center=center,
-                         center_widget=center_widget)
+                         center_widget=center_widget, block=True)
         super().bind("<Return>", lambda e: self.yes_clicked())
 
         right_frame = tk.Frame(self, **FRAME_KWARGS)
@@ -133,6 +135,8 @@ class YesNoQuestion(Popup):
         yes.pack(side="left", anchor="e", padx=5, pady=(5, 20))
         no.pack(side="left", anchor="e", padx=15, pady=(5, 20))
 
+        super().mainloop()
+
     def yes_clicked(self) -> None:
         self.result:bool = True
         self._destroy()
@@ -146,10 +150,10 @@ class YesNoQuestion(Popup):
 
 
 def askyesno(master:tk.Misc, *args, **kwargs) -> bool|None:
-    return YesNoQuestion(master, *args, **kwargs).mainloop().get()
+    return YesNoQuestion(master, *args, **kwargs).get()
 
 def tell(master:tk.Misc, *args, block:bool=True, **kwargs) -> None:
-    tell:Tell = Tell(master, *args, **kwargs)
+    tell:Tell = Tell(master, *args, block=block, **kwargs)
     if block:
         tell.mainloop()
 
@@ -164,8 +168,9 @@ if __name__ == "__main__":
     #root.withdraw()
 
     msg:str = 'Are you sure you want to delete "Hi.txt"?'
-    result = tell(root, title="Delete file?", message=msg, icon="warning")
+    result = askyesno(root, title="Delete file?", message=msg, icon="warning")
     print(result)
 
     msg:str = 'Are you sure you want to delete "Hi.txt"?'
-    tell = Tell(root, title="Delete file?", message=msg, icon="warning")
+    result = askyesno(root, title="Delete file?", message=msg, icon="warning")
+    print(result)

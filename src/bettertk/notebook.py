@@ -128,7 +128,9 @@ class TabNotches(BetterFrame):
         return "break"
 
     def end_dragging(self, event:tk.Event=None) -> str:
-        if self.notch_dragging is not None:
+        if self.notch_dragging is None:
+            return ""
+        if self.dragging:
             self.tmp_notch.grid_forget()
             self.notch_dragging.grid(row=1, column=self.tmp_notch.idx)
             self.notches[self.tmp_notch.idx] = self.notch_dragging
@@ -179,6 +181,13 @@ class TabNotches(BetterFrame):
                  tuple(range(self.tmp_notch.idx, idx+1)):
             self.notches[i].grid(row=1, column=i)
         self.tmp_notch.idx:int = idx
+
+    def remove(self, notch:TabNotch) -> None:
+        assert notch in self.notches, "InternalError"
+        idx:int = self.notches.index(notch)
+        self.notches.pop(idx)
+        for i in range(idx, len(self.notches)):
+            self.notches[i].grid(row=1, column=i)
 
 
 class NotebookPage:
@@ -284,6 +293,7 @@ class Notebook(tk.Frame):
         assert self.curr_page in self.pages+[None], "SanityCheck"
         page._close()
         self.pages.remove(page)
+        self.notches.remove(page.notch)
 
 
 if __name__ == "__main__":

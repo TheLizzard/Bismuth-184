@@ -68,11 +68,11 @@ class ColourManager(Rule):
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> ColourManager:
         super().__init__(plugin, text, ons=())
         self.text:tk.Text = self.widget
-        self.colorizer:Colorizer = Colorizer()
-        self.apply_colorizer()
-
-    def apply_colorizer(self) -> None:
-        self.colorizer.apply_colorizer(self.text)
+        self.colorizer:Colorizer = getattr(self.text, "colorizer", None)
+        if self.colorizer is None:
+            self.colorizer:Colorizer = Colorizer()
+            self.text.colorizer = self.colorizer
+            self.colorizer.apply_colorizer(self.text)
 
     def attach(self) -> None:
         super().attach()

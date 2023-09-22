@@ -78,6 +78,10 @@ class AllPlugin(BasePlugin):
         super().__init__(text)
         super().add_rules(rules)
 
+    @classmethod
+    def can_handle(Cls:type, filepath:str|None) -> bool:
+        return False
+
     def attach(self) -> None:
         self.virtual_events.paused:bool = False
         super().attach()

@@ -67,11 +67,9 @@ class SelectManager(Rule):
 
         if on.endswith("button-1"):
             on:str = on.removesuffix("button-1") + "mouse"
-            idx:str = self.text.index(f"@{event.x},{event.y}")
 
         elif on == "b1-motion":
             on:str = "mouse-motion"
-            idx:str = self.text.index(f"@{event.x},{event.y}")
             width:int = self.text.winfo_width()
             height:int = self.text.winfo_height()
             drag_x = drag_y = 0
@@ -113,15 +111,17 @@ class SelectManager(Rule):
 
         if on == "mouse":
             self.plugin.remove_selection()
-            self.text.mark_set("mouse-start", idx)
             self.text.event_generate("<<Add-Separator>>")
-            self.text.event_generate("<<Move-Insert>>", data=(idx,))
+            def inner():
+                self.text.mark_set("mouse-start", "insert")
+                self.text.event_generate("<<Move-Insert>>", data=("insert",))
+            self.text.after(1, inner)
             return False
 
         if on == "double-mouse":
             self.plugin.remove_selection()
-            start:str = self.get_movement("left", True, idx, text=True)
-            end:str = self.get_movement("right", True, idx, text=True)
+            start:str = self.get_movement("left", True, "insert", text=True)
+            end:str = self.get_movement("right", True, "insert", text=True)
             self.plugin.set_selection(start, end)
             self.text.event_generate("<<Move-Insert>>", data=(end,))
             return True
@@ -130,17 +130,19 @@ class SelectManager(Rule):
             return True
 
         if on == "mouse-motion":
-            delta:str = None
-            if drag[0] != 0:
-                delta:str = f"{SCROLL_SPEED*drag[0]}c"
-            elif drag[1] != 0:
-                delta:str = f"{SCROLL_SPEED*drag[1]}l"
-            if delta is not None:
-                self.text.see(f"{idx} +{delta}")
-            start, end = self.plugin.order_idxs(idx, "mouse-start")
-            self.plugin.set_selection(start, end)
-            self.text.event_generate("<<Move-Insert>>", data=(idx,))
-            return True
+            def inner():
+                delta:str = None
+                if drag[0] != 0:
+                    delta:str = f"{SCROLL_SPEED*drag[0]}c"
+                elif drag[1] != 0:
+                    delta:str = f"{SCROLL_SPEED*drag[1]}l"
+                if delta is not None:
+                    self.text.see(f"{idx} +{delta}")
+                start, end = self.plugin.order_idxs("insert", "mouse-start")
+                self.plugin.set_selection(start, end)
+                self.text.event_generate("<<Move-Insert>>", data=("insert",))
+            self.text.after(1, inner)
+            return False
 
         if on == "<before-insert>":
             self.plugin.delete_selection()

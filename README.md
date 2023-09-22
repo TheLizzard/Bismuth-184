@@ -1,5 +1,5 @@
 # Bismuth-184
-An integrated development for Python/C/C++/Java. So far it only works with Python but making it work with C/C++/Java should be trivial. Only works on Unix for now because of `os.mkfifo` and `xterm`.
+An integrated development for Python/C/C++/Java. So far it only works with Python/C++ but making it work with C/Java should be trivial. Only works on Unix for now because of `os.mkfifo` and `xterm`.
 
 # Dependencies
 ### Python

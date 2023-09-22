@@ -487,9 +487,10 @@ class BetterTk(tk.Frame):
         Generates a protocol.
         """
         try:
-            self.protocols[protocol]()
+            protocol:Function[None] = self.protocols[protocol]
         except KeyError:
-            raise tk.TclError(f"Unknown protocol: \"{protocol}\"")
+            raise tk.TclError(f'Unknown protocol: "{protocol}"')
+        protocol()
 
     def bind_titlebar(self, sequence:str=None, func=None, add:bool=None):
         to_bind = [self.title_bar]

@@ -18,9 +18,9 @@ class RunManager(Rule):
     REQUESTED_LIBRARIES:tuple[str] = "bind_all"
     REQUESTED_LIBRARIES_STRICT:bool = False
 
+    CD:list[str] = ["cd", "{folder}"]
     COMPILE:list[str] = None
     RUN:list[str] = None
-    CD:list[str] = None
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
         evs:tuple[str] = (
@@ -31,7 +31,6 @@ class RunManager(Rule):
                          )
         super().__init__(plugin, text, ons=evs)
         self.text:tk.Text = self.widget
-        self.text.filepath:str = None
         self.term:TerminalTk = None
         self.args:list[str] = []
         self.cwd:str = None
@@ -100,14 +99,17 @@ class RunManager(Rule):
     def compile(self) -> None:
         if self.COMPILE is None:
             return None
-        command = self.format(self.COMPILE, {"file":self.text.filepath})
+        tmp:str = self.term.terminal.terminal.pipe.tmp.name
+        command = self.format(self.COMPILE, {"file":self.text.filepath,
+                                             "tmp":tmp})
         self.term.iqueue(2, command, None, condition=(0).__eq__)
 
     def execute(self, args:Iterable[str]) -> None:
         if self.RUN is None:
             return None
-        command = self.format(self.RUN, {"file":self.text.filepath}) + \
-                  list(args)
+        tmp:str = self.term.terminal.terminal.pipe.tmp.name
+        command = self.format(self.RUN, {"file":self.text.filepath,
+                                         "tmp":tmp}) + list(args)
         self.term.iqueue(3, command, None, condition=(0).__eq__)
 
     @staticmethod

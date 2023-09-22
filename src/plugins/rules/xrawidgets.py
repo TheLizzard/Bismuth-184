@@ -20,6 +20,13 @@ class BarManager(Rule):
         self.label:tk.Label = tk.Label(widget.master, text="", bg="black",
                                        fg="white", anchor="e")
 
+    def __new__(Cls, plugin:BasePlugin, widget:tk.Misc, *args, **kwargs):
+        self:BarManager = getattr(widget, "barmanager", None)
+        if self is None:
+            self:BarManager = super().__new__(Cls, *args, **kwargs)
+            widget.barmanager:BarManager = self
+        return self
+
     def attach(self) -> None:
         super().attach()
         self.widget.add_widget(self.label, row=4, padx=10)
@@ -65,6 +72,13 @@ class LineManager(Rule, LineNumbers):
             self.sidebar_text.bind(on, func)
         for on in ("<Enter>", "<Leave>"):
             self.sidebar_text.bind(on, lambda e: "break")
+
+    def __new__(Cls, plugin:BasePlugin, widget:tk.Misc, *args, **kwargs):
+        self:LineManager = getattr(widget, "linemanager", None)
+        if self is None:
+            self:LineManager = super().__new__(Cls, *args, **kwargs)
+            widget.linemanager:LineManager = self
+        return self
 
     def attach(self) -> None:
         super().attach()
@@ -126,6 +140,13 @@ class ScrollbarManager(Rule):
                                                         command=text.xview)
             self.xscrollbar.hide:bool = True
 
+    def __new__(Cls, plugin:BasePlugin, widget:tk.Misc, *args, **kwargs):
+        self:ScrollbarManager = getattr(widget, "scrollbarmanager", None)
+        if self is None:
+            self:ScrollbarManager = super().__new__(Cls, *args, **kwargs)
+            widget.scrollbarmanager:ScrollbarManager = self
+        return self
+
     def attach(self) -> None:
         super().attach()
         self.widget.scroll_bar:bool = True
@@ -139,7 +160,7 @@ class ScrollbarManager(Rule):
     def detach(self) -> None:
         super().detach()
         self.widget.scroll_bar:bool = False
-        self.widet.config(yscrollcommand=self.old_yscrollcommand)
+        self.widget.config(yscrollcommand=self.old_yscrollcommand)
 
     def yset(self, low:str, high:str) -> None:
         self.widget.event_generate("<<Y-Scroll>>", data=(low, high))
@@ -159,6 +180,13 @@ class MenuManager(Rule):
         super().__init__(plugin, text, ons=())
         self.menu:BetterMenu = BetterMenu(text.master, direction="horizontal")
         self._create_menu()
+
+    def __new__(Cls, plugin:BasePlugin, widget:tk.Misc, *args, **kwargs):
+        self:MenuManager = getattr(widget, "menumanager", None)
+        if self is None:
+            self:MenuManager = super().__new__(Cls, *args, **kwargs)
+            widget.menumanager:MenuManager = self
+        return self
 
     def _create_menu(self) -> None:
         filemenu = self.menu.add_submenu("File", "vertical")

@@ -30,14 +30,15 @@ class ColourConfig(BaseColourConfig):
 class ColourManager(BaseColourManager):
     __slots__ = ()
 
-    def apply_colorizer(self) -> None:
+    def init_colorizer(self) -> None:
         self.colorizer.tagdefs:dict[str,str] = ColourConfig()
         self.colorizer.idprog = re.compile(r"\s+(\w+)")
         self.colorizer.prog = make_pat()
-        super().apply_colorizer()
 
     def attach(self) -> None:
         super().attach()
+        self.init_colorizer()
+        self.colorizer.config_colors()
         self.turnon_colorizer()
         self.colorizer.notify_range("1.0", "end")
 

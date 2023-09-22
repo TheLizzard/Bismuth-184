@@ -11,8 +11,10 @@ from bettertk.betterscrollbar import BetterScrollBarVertical, \
                                      BetterScrollBarHorizontal
 from bettertk.messagebox import askyesno, tell as telluser
 from bettertk import BetterTk
-from plugins import PythonPlugin, VirtualEvents
+from plugins import VirtualEvents
 from settings.settings import curr as settings
+
+from plugins import plugins
 
 # tk.Event.state constants
 SHIFT:int = 1
@@ -71,7 +73,6 @@ class App:
             self.explorer_frame.h_scrollbar.hide:bool = True
         if settings.explorer.hide_v_scroll:
             self.explorer_frame.v_scrollbar.hide:bool = True
-        # scrollbar_kwargs=dict(width=4),
         VirtualEvents(self.explorer_frame) # Must be before the BindFrame
         make_bind_frame(self.explorer_frame)
         self.explorer:ExpandedExplorer = ExpandedExplorer(self.explorer_frame)
@@ -110,13 +111,13 @@ class App:
         text = tk.Text(self.notebook, highlightthickness=0, bd=0)
         text.filesystem_data:str = ""
         text.save_module:bool = True
+        text.filepath:str = filepath
         text.bind("<Control-W>", self.control_w)
         text.bind("<Control-w>", self.control_w)
         page = self.notebook.tab_create().add_frame(text)
         self.text_to_page[text] = page
         page.focus()
-        text.plugin = PythonPlugin(text)
-        text.plugin.attach()
+        self.plugin_manage(text)
         text.focus_set()
         text.bind("<<Request-Save>>", self.request_save, add=True)
         text.bind("<<Request-Open>>", self.request_open, add=True)
@@ -125,11 +126,27 @@ class App:
             text.edit_modified(False)
             text.filepath:str = filepath
             text.event_generate("<<Trigger-Open>>")
-        else:
-            text.insert("end", PythonPlugin.DEFAULT_CODE)
-            text.edit_modified(True)
-            text.event_generate("<<Modified-Change>>")
+            if text.get("0.0", "end -1c") != "":
+                return text
+        text.insert("end", text.plugin.DEFAULT_CODE)
+        text.edit_modified(False)
+        text.event_generate("<<Modified-Change>>")
         return text
+
+    def plugin_manage(self, text:tk.Text) -> None:
+        old:Plugin = getattr(text, "plugin", None)
+        for Plugin in plugins:
+            if Plugin.can_handle(text.filepath):
+                # If same plugin, nop
+                if old.__class__ == Plugin:
+                    return None
+                # Detach the old
+                if old is not None:
+                    old.detach()
+                # Attach the new
+                text.plugin = Plugin(text)
+                text.plugin.attach()
+                break
 
     def change_selected_tab(self, event:tk.Event=None) -> None:
         if self.notebook.curr_page is None:
@@ -190,6 +207,7 @@ class App:
             if not ret:
                 return None
         event.widget.event_generate("<<Trigger-Save>>")
+        self.plugin_manage(event.widget)
 
     def request_open(self, event:tk.Event) -> None:
         if event.widget.edit_modified():
@@ -202,6 +220,7 @@ class App:
             if not ret:
                 return None
         event.widget.event_generate("<<Trigger-Open>>")
+        self.plugin_manage(event.widget)
 
     # Handle the get/set state
     def root_close(self) -> None:

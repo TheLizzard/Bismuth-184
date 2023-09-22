@@ -3,8 +3,8 @@ from tkinter.filedialog import askopenfilename, asksaveasfilename
 import tkinter as tk
 import os
 
+from bettertk.messagebox import tell as telluser, askyesno
 from bettertk.terminaltk.terminaltk import TerminalTk
-from bettertk.messagebox import tell as telluser
 from .baserule import Rule
 
 # tk.Event.state constants
@@ -32,9 +32,9 @@ class SaveLoadManager(Rule):
                            "<<Trigger-Open>>", "<<Trigger-Save>>",
                          )
         super().__init__(plugin, text, ons=evs)
-        self.text:tk.Text = self.widget
-        self.text.filesystem_data:str = ""
-        self.text.filepath:str = None
+        self.text:tk.Text = text
+        self.text.filesystem_data:str = getattr(text, "filesystem_data", "")
+        self.text.filepath:str = getattr(text, "filepath", None)
 
     # Helpers
     def can_read(self) -> bool:

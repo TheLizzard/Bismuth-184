@@ -45,7 +45,15 @@ class Rule:
         assert self.attached, "Not attached"
         self.attached:bool = False
         for on, id in zip(self.ons, self.ids):
-            self.widget.unbind(on, id)
+            bind_all:bool = False
+            if on.startswith("a") and (on != "a"):
+                on:str = on.removeprefix("a")
+                bind_all:bool = True
+            on:str = on.removeprefix("-")
+            if bind_all:
+                self.widget.unbind_all(on, id)
+            else:
+                self.widget.unbind(on, id)
         self.ids.clear()
 
     def __call__(self, event:tk.Event, on:str) -> str:

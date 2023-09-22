@@ -18,7 +18,7 @@ class CommentManager(Rule):
         return True
 
     def do(self, on:str) -> Break:
-        if COMMENT_STR == "":
+        if self.COMMENT_STR == "":
             return True
         return self.plugin.double_wrapper(self._do, on)
 

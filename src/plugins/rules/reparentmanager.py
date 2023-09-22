@@ -18,6 +18,15 @@ class WidgetReparenterManager(Rule):
         self.frame.grid_columnconfigure(self.SPACE_SIZE, weight=1)
         self.frame.grid_rowconfigure(self.SPACE_SIZE, weight=1)
 
+    def __new__(Cls:type, plugin:BasePlugin, widget:tk.Misc, *args, **kwargs):
+        reparenter = getattr(widget, "reparenter", None)
+        if reparenter is not None:
+            return reparenter
+        else:
+            self = super().__new__(Cls, *args, **kwargs)
+            widget.reparenter = self
+            return self
+
     def attach(self) -> None:
         super().attach()
         self.frame.config(bg=self.widget.cget("bg"))
@@ -47,7 +56,7 @@ class WidgetReparenterManager(Rule):
         self.widget.add_widget = self.add_widget
 
     def detach(self) -> None:
-        super().dettach()
+        super().detach()
         if self.manager_type == "pack":
             self.frame.pack_forget()
             self.widget.pack(**self.manager_state)

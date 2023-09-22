@@ -14,11 +14,11 @@ try:
     from rules.reparentmanager import WidgetReparenterManager
     from rules.xrawidgets import BarManager, LineManager, ScrollbarManager
     # from rules.xrawidgets import MenuManager
-    from rules.python.commentmanager import CommentManager
-    from rules.python.colourmanager import ColourManager
-    from rules.python.whitespacemanager import WhiteSpaceManager
-    from rules.python.saveloadmanager import SaveLoadManager
-    from rules.python.runmanager import RunManager
+    from rules.cpp.commentmanager import CommentManager
+    from rules.cpp.colourmanager import ColourManager
+    from rules.cpp.whitespacemanager import WhiteSpaceManager
+    from rules.cpp.saveloadmanager import SaveLoadManager
+    from rules.cpp.runmanager import RunManager
 except ImportError:
     from .baseplugin import AllPlugin
     # from .rules.seeinsertmanager import SeeInsertManager
@@ -27,20 +27,21 @@ except ImportError:
     from .rules.shortcutmanager import RemoveShortcuts
     from .rules.selectmanager import SelectManager
     from .rules.bracketmanager import BracketManager
+    from .rules.commentmanager import CommentManager
     from .rules.undomanager import UndoManager
     from .rules.reparentmanager import WidgetReparenterManager
     from .rules.xrawidgets import BarManager, LineManager, ScrollbarManager
     # from .rules.xrawidgets import MenuManager
-    from .rules.python.commentmanager import CommentManager
-    from .rules.python.colourmanager import ColourManager
-    from .rules.python.whitespacemanager import WhiteSpaceManager
-    from .rules.python.saveloadmanager import SaveLoadManager
-    from .rules.python.runmanager import RunManager
+    from .rules.cpp.commentmanager import CommentManager
+    from .rules.cpp.colourmanager import ColourManager
+    from .rules.cpp.whitespacemanager import WhiteSpaceManager
+    from .rules.cpp.saveloadmanager import SaveLoadManager
+    from .rules.cpp.runmanager import RunManager
 
 
-class PythonPlugin(AllPlugin):
+class CppPlugin(AllPlugin):
     __slots__ = ()
-    DEFAULT_CODE:str = 'import this\n\nprint("Hello world")'
+    DEFAULT_CODE:str = '#include <iostream>\n\nint main(){\n    // comment\n    /* multi\n    line\n    comment */\n    std::cout << "Hello, world!\\n";\n}'
 
     def __init__(self, text:tk.Text) -> PythonPlugin:
         rules:list[Rule] = [
@@ -69,7 +70,9 @@ class PythonPlugin(AllPlugin):
     def can_handle(Cls:type, filepath:str|None) -> bool:
         if filepath is None:
             return False
-        return filepath.endswith(".py")
+        return filepath.endswith(".cpp") or \
+               filepath.endswith(".c++") or \
+               filepath.endswith(".h")
 
 
 if __name__ == "__main__":

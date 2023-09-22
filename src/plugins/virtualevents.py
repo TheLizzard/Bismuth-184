@@ -31,7 +31,8 @@ class _VirtualEvents:
                 "old_bind", "old_unbind", "old_event_generate", \
                 "old_bind_all", "old_unbind_all"
 
-    def __init__(self, widget:tk.Misc) -> VirtualEvents:
+    def __init__(self, widget:tk.Misc) -> None:
+        assert not getattr(widget, "virtual_events", None), "InternalError"
         self.widget:tk.Misc = widget
         self.virtual_events:dict[str,list[tuple[Function,bool]]] = dict()
         self.paused:bool = False
@@ -46,6 +47,12 @@ class _VirtualEvents:
         self.widget.bind_all = self.bind_all
         self.old_unbind_all = self.widget.unbind_all
         self.widget.unbind_all = self.unbind_all
+
+    def __new__(Cls:type, widget:tk.Misc, *args, **kwargs) -> VirtualEvents:
+        if widget.bind.__self__.__class__ == Cls:
+            return widget.virtual_events
+        else:
+            return super().__new__(Cls, *args, **kwargs)
 
     def send(self, event_name:str, *, drop:bool=True, other:bool=False,
              **kwargs:dict) -> str:
@@ -101,9 +108,10 @@ class _VirtualEvents:
 
     def unbind(self, event_name:str, id:str, *, all:bool=False) -> None:
         if event_name in self.virtual_events:
-            for func, all in self.virtual_events[event_name]:
+            func_list:list[Function] = self.virtual_events.get(event_name, [])
+            for i, (func, all) in enumerate(func_list):
                 if self.func_to_id(func, all) == id:
-                    func_list.remove(func)
+                    func_list.pop(i)
                     if len(func_list) == 0:
                         self.virtual_events.pop(event_name)
                     return None
