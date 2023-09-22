@@ -1,9 +1,9 @@
 from __future__ import annotations
+from os.path import dirname, join
 import json
 import os
 
-PATH:str = os.path.join(os.path.dirname(os.path.dirname(__file__)),
-                        "state.json")
+PATH:str = join(dirname(dirname(__file__)), "state.json")
 
 DEFAULTS:str = """
 {
@@ -16,7 +16,8 @@ DEFAULTS:str = """
                   "width": 250,
                   "hide_h_scroll": true,
                   "hide_v_scroll": true,
-                  "open": []
+                  "expanded": [],
+                  "added": []
                 },
     "notebook": {
                   "width": 900,
@@ -43,15 +44,22 @@ class Settings:
     def __repr__(self) -> str:
         return "Settings(" + ", ".join(map(str, self.settings)) + ")"
 
-    def save(self) -> None:
+    def save(self) -> Error:
+        if os.path.exists(PATH):
+            permissions:bool = os.access(PATH, os.W_OK)
+        else:
+            permissions:bool = os.access(dirname(PATH), os.W_OK)
+        if not permissions:
+            return True
         with open(PATH, "w") as file:
             file.write(json.dumps(self.settings))
+        return False
 
     def update(self, **kwargs) -> None:
         self.settings.update(kwargs)
 
 
-if os.path.exists(PATH):
+if os.access(PATH, os.R_OK):
     with open(PATH, "r") as file:
         curr:Settings = Settings(json.loads(file.read()))
 else:
