@@ -1,6 +1,6 @@
 # Partially taken from: https://stackoverflow.com/a/2400467/11106801
 from __future__ import annotations
-from ctypes.wintypes import BOOL, HWND, LONG
+from ctypes.wintypes import BOOL, HWND, LONG, HDWP, RECT, HRGN
 import tkinter as tk
 import ctypes
 
@@ -8,6 +8,7 @@ import ctypes
 INT = ctypes.c_int
 UINT = ctypes.c_uint
 LONG_PTR = ctypes.c_long
+RECT_PTR = ctypes.POINTER(RECT)
 
 def _errcheck_not_zero(value, func, args):
     if value == 0:
@@ -29,6 +30,31 @@ SetWindowPos = ctypes.windll.user32.SetWindowPos
 SetWindowPos.argtypes = (HWND, HWND, INT, INT, INT, INT, UINT)
 SetWindowPos.restype = BOOL
 SetWindowPos.errcheck = _errcheck_not_zero
+
+DeferWindowPos = ctypes.windll.user32.DeferWindowPos
+DeferWindowPos.argtypes = (HDWP, HWND, HWND, INT, INT, INT, INT, UINT)
+DeferWindowPos.restype = BOOL
+DeferWindowPos.errcheck = _errcheck_not_zero
+
+BeginDeferWindowPos = ctypes.windll.user32.BeginDeferWindowPos
+BeginDeferWindowPos.argtypes = (INT,)
+BeginDeferWindowPos.restype = HDWP
+BeginDeferWindowPos.errcheck = _errcheck_not_zero
+
+EndDeferWindowPos = ctypes.windll.user32.EndDeferWindowPos
+EndDeferWindowPos.argtypes = (HDWP,)
+EndDeferWindowPos.restype = BOOL
+EndDeferWindowPos.errcheck = _errcheck_not_zero
+
+InvalidateRect = ctypes.windll.user32.InvalidateRect
+InvalidateRect.argtypes = (HWND, RECT_PTR, BOOL)
+InvalidateRect.restype = BOOL
+InvalidateRect.errcheck = _errcheck_not_zero
+
+RedrawWindow = ctypes.windll.user32.RedrawWindow
+RedrawWindow.argtypes = (HWND, RECT_PTR, HRGN, UINT)
+RedrawWindow.restype = BOOL
+RedrawWindow.errcheck = _errcheck_not_zero
 
 def get_handle(root:tk.Tk) -> int:
     root.update_idletasks()
@@ -57,11 +83,9 @@ SWP_NOREPOSITION = 0x0200
 SWP_NOSENDCHANGING = 0x0400
 SWP_DEFERERASE = 0x2000
 SWP_ASYNCWINDOWPOS = 0x4000
-"""
-SWP_NOSIZE = 0x0001
-SWP_NOMOVE = 0x0002
-SWP_NOZORDER = 0x0004
-"""
+
+RDW_INVALIDATE = 0x0001
+RDW_UPDATENOW = 0x0100
 
 
 # Only needed for the `NotImplementedError` error.

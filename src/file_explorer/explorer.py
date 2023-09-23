@@ -27,7 +27,7 @@ def create_circle(self, x:int, y:int, r:int, **kwargs):
 tk.Canvas.create_circle = create_circle
 
 
-INDENTATION:int = 25
+INDENTATION:int = 15
 PADX:int = 10
 PADY:int = 5
 DEBUG:bool = False

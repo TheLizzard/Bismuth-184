@@ -178,6 +178,26 @@ XClearArea.argtypes = (DISPLAY, WINDOW, INT, INT, UINT, UINT, BOOL)
 XClearArea.restype = INT
 XClearArea.errcheck = errcheck_not_zero
 
+XResizeWindow = libx11.XResizeWindow
+XResizeWindow.argtypes = (DISPLAY, WINDOW, UINT, UINT)
+XResizeWindow.restype = INT
+XResizeWindow.errcheck = errcheck_not_zero
+
+XMoveWindow = libx11.XMoveWindow
+XMoveWindow.argtypes = (DISPLAY, WINDOW, INT, INT)
+XMoveWindow.restype = INT
+XMoveWindow.errcheck = errcheck_not_zero
+
+XMoveResizeWindow = libx11.XMoveResizeWindow
+XMoveResizeWindow.argtypes = (DISPLAY, WINDOW, INT, INT, UINT, UINT)
+XMoveResizeWindow.restype = INT
+XMoveResizeWindow.errcheck = errcheck_not_zero
+
+XClearArea = libx11.XClearArea
+XClearArea.argtypes = (DISPLAY, WINDOW, INT, INT, UINT, UINT, BOOL)
+XClearArea.restype = INT
+XClearArea.errcheck = errcheck_not_zero
+
 
 _display_owners:set[NoTitlebarTk] = set()
 DEBUG:bool = False

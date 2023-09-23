@@ -196,7 +196,7 @@ class App:
             filesystem_data:bytes = None
         else:
             with open(event.widget.filepath, "br") as file:
-                filesystem_data:bytes = file.read()
+                filesystem_data:bytes = file.read().replace(b"\r\n", b"\n")
         if event.widget.filesystem_data.encode("utf-8") != filesystem_data:
             title:str = "Merge conflict"
             msg:str = "The file has been modified on the filesystem.\n" \
@@ -269,6 +269,7 @@ class App:
                 files.add(file)
             text:tk.Text = self.new_tab(file)
             if modified:
+                text.filesystem_data:str = saved
                 text.delete("0.0", "end")
                 text.insert("end", data)
                 text.edit_modified(True)
@@ -279,13 +280,13 @@ class App:
             text.mark_set("insert", insert)
             text.xview("moveto", xview)
             text.yview("moveto", yview)
-            text.filesystem_data:str = saved
             # Validity check:
             if (file is not None) and modified:
                 problem:bool = True
                 if os.access(file, os.R_OK):
-                    with open(file, "r") as fd:
-                        problem:bool = saved != fd.read()
+                    with open(file, "rb") as fd:
+                        filedata:bytes = fd.read().replace(b"\r\n", b"\n")
+                        problem:bool = saved.encode("utf-8") != filedata
                 if problem:
                     title:str = "Merge Conflict"
                     msg:str = f"The file {file} has been\nmodified on " \

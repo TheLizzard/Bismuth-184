@@ -3,6 +3,7 @@ import tkinter as tk
 import string
 
 from .baserule import Rule
+from settings.settings import curr as settings
 
 DEBUG:bool = False
 # tk.Event.state constants
@@ -17,7 +18,8 @@ SEL_TAG:str = "selected" # Copied from PythonPlugin
 
 
 class SelectManager(Rule):
-    __slots__ = "text", "old_sel_fg", "old_sel_bg", "old_inactivebg"
+    __slots__ = "text", "old_sel_fg", "old_sel_bg", "old_inactivebg", \
+                "selecting"
     REQUESTED_LIBRARIES:tuple[str] = "event_generate", "bind", "unbind"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
@@ -27,6 +29,7 @@ class SelectManager(Rule):
                 "<Left>", "<Right>", "<Up>", "<Down>",
                 # Mouse
                 "<Button-1>", "<Double-Button-1>", "<Triple-Button-1>",
+                #"<ButtonPress-1>", "<ButtonRelease-1>",
                 "<B1-Motion>",
                 # User/program input
                 "<<Before-Insert>>", "<<After-Insert>>", "<<After-Delete>>",
@@ -39,16 +42,19 @@ class SelectManager(Rule):
               )
         super().__init__(plugin, text, evs)
         self.text:tk.Text = self.widget
+        self.selecting:bool = False
 
     def attach(self) -> None:
         super().attach()
         self.old_sel_fg = self.text.tag_cget("sel", "foreground")
         self.old_sel_bg = self.text.tag_cget("sel", "background")
-        self.text.tag_config("sel", background="", foreground="")
+        self.text.tag_config("sel", background="red", foreground="")
         self.old_inactivebg:str = self.text.cget("inactiveselectbackground")
         self.text.config(inactiveselectbackground=self.text.cget("bg"))
-        self.text.tag_config(SEL_TAG, background="orange", foreground="white")
+        self.text.tag_config(SEL_TAG, foreground="white",
+                             background=settings.editor.selectmanager.bg)
         self.text.tag_raise(SEL_TAG)
+        self.text.mark_set("mouse-start", "insert")
 
     def detach(self) -> None:
         super().detach()
@@ -65,8 +71,13 @@ class SelectManager(Rule):
         drag:tuple = None
         data:tuple = None
 
+        # Single/Double/Triple click
         if on.endswith("button-1"):
             on:str = on.removesuffix("button-1") + "mouse"
+
+        # Mouse press/release
+        #if on.startswith("button") and on.endswith("-1"):
+        #    on:str = "mouse-" + on.removeprefix("button").removesuffix("-1")
 
         elif on == "b1-motion":
             on:str = "mouse-motion"
@@ -109,7 +120,17 @@ class SelectManager(Rule):
                 self.text.mark_set("linsert", idx)
             return False
 
+        #if on == "mouse-press":
+        #    self.selecting:bool = True
+        #    return False
+
+        #if on == "mouse-release":
+        #    self.selecting:bool = False
+        #    return False
+
         if on == "mouse":
+            #if not self.selecting:
+            #    return False
             self.plugin.remove_selection()
             self.text.event_generate("<<Add-Separator>>")
             def inner():
@@ -130,6 +151,8 @@ class SelectManager(Rule):
             return True
 
         if on == "mouse-motion":
+            #if not self.selecting:
+            #    return False
             def inner():
                 delta:str = None
                 if drag[0] != 0:

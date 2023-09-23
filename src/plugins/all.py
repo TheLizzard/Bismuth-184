@@ -16,7 +16,7 @@ try:
     # from rules.xrawidgets import MenuManager
     from rules.whitespacemanager import WhiteSpaceManager
     from rules.colourmanager import ColourManager
-    from rules.cpp.saveloadmanager import SaveLoadManager
+    from rules.saveloadmanager import SaveLoadManager
 except ImportError:
     from .baseplugin import AllPlugin
     # from .rules.seeinsertmanager import SeeInsertManager
@@ -32,7 +32,7 @@ except ImportError:
     # from .rules.xrawidgets import MenuManager
     from .rules.whitespacemanager import WhiteSpaceManager
     from .rules.colourmanager import ColourManager
-    from .rules.cpp.saveloadmanager import SaveLoadManager
+    from .rules.saveloadmanager import SaveLoadManager
 
 
 class BasicPlugin(AllPlugin):

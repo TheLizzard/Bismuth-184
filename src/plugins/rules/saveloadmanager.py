@@ -20,7 +20,8 @@ class SaveLoadManager(Rule):
     REQUESTED_LIBRARIES:tuple[str] = "save_module"
     REQUESTED_LIBRARIES_STRICT:bool = False
 
-    FILE_TYPES:tuple[(str, str)] = (("All types", "*"))
+    FILE_TYPES:tuple[(str, str)] = (("Text files", ".txt"),
+                                    ("All types", "*"))
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
         evs:tuple[str] = (
@@ -63,7 +64,10 @@ class SaveLoadManager(Rule):
 
     # handle events
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
-        return event.state&SHIFT, True
+        shift:bool = event.state&SHIFT
+        if (on == "control-r") and (not shift):
+            return False
+        return shift, True
 
     def do(self, on:str, shift:bool) -> Break:
         if on.startswith("<trigger-"):
@@ -77,11 +81,15 @@ class SaveLoadManager(Rule):
         if on.startswith("control-"):
             if on == "control-s":
                 if shift or (self.text.filepath is None):
-                    self.ask_saveas_filepath()
+                    error:bool = self.ask_saveas_filepath()
+                    if error:
+                        return True
                 self.text.event_generate("<<Request-Save>>")
                 return True
             if on == "control-o":
-                self.ask_open_filepath()
+                error:bool = self.ask_open_filepath()
+                if error:
+                    return True
                 self.text.event_generate("<<Request-Open>>")
                 return True
             if on == "control-r":
@@ -94,19 +102,21 @@ class SaveLoadManager(Rule):
         raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
 
     # User ask
-    def ask_saveas_filepath(self) -> None:
+    def ask_saveas_filepath(self) -> Error:
         file:str = asksaveasfilename(defaultextension=self.FILE_TYPES[0][1],
                                      filetypes=self.FILE_TYPES,
                                      master=self.text)
         if not file:
-            return None
+            return True
         self.text.filepath:str = file
+        return False
 
-    def ask_open_filepath(self) -> None:
+    def ask_open_filepath(self) -> Error:
         file:str = askopenfilename(filetypes=self.FILE_TYPES, master=self.text)
         if not file:
-            return None
+            return True
         self.text.filepath:str = file
+        return False
 
     def ask_reload(self) -> bool:
         title:str = "Reload discarding changes?"

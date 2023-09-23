@@ -185,3 +185,65 @@ class AllPlugin(BasePlugin):
         def wrapper():
             return self.virual_event_wrapper(func, *args)
         return self.undo_wrapper(wrapper)
+
+    def find_bracket_match(self, open:str, close:str, end:str="insert"):
+        # If we are in a comment or a string, stay in the comment/string
+        is_comment:bool = self.is_inside("comment", end)
+        is_string:bool = self.is_inside("string", f"{end} +1c")
+        if is_string or is_comment:
+            if is_string:
+                tag:str = "string"
+            elif is_comment:
+                tag:str = "comment"
+            start, _ = self.text.tag_prevrange(tag, end)
+            text:list[str] = self.text.get(start, end).split("\n")
+            add_line, add_char = start.split(".")
+            add_line, add_char = int(add_line)-1, int(add_char)
+        else:
+            add_line = add_char = 0
+            # Remove the strings/comments/both from text
+            #   according to is_comment/is_string
+            text:list[str] = self.text.get("1.0", end).split("\n")
+            self._remove_tag(text, "comment", end)
+            self._remove_tag(text, "string", end)
+        stack:int = 1
+        for line_number, line in enumerate(reversed(text)):
+            for char_number, char in enumerate(reversed(line)):
+                if char == open:
+                    stack -= 1
+                elif char == close:
+                    stack += 1
+                if stack == 0:
+                    l:int = len(text) - line_number + add_line
+                    c:int = len(line) - char_number + add_char - 1
+                    return f"{l}.{c}"
+        return None
+
+    def _remove_tag(self, text:list[str], tag:str, end:str) -> None:
+        cur:str = end
+        while True:
+            tag_range = self.text.tag_prevrange(tag, cur, "1.0")
+            if not tag_range:
+                return None
+            self._remove_range(text, tag_range)
+            cur:str = tag_range[0]
+
+    def _remove_range(self, text:list[str], _range:tuple[tuple[str,str]]):
+        start, end = _range
+        start_line, start_char = start.split(".")
+        start_line, start_char = int(start_line), int(start_char)
+        end_line, end_char = end.split(".")
+        end_line, end_char = int(end_line), int(end_char)
+
+        in_between:list[str] = text[start_line-1:end_line]
+        if start_line == end_line:
+            in_between[0] = in_between[0][:start_char] + \
+                            "-"*(end_char-start_char) + \
+                            in_between[0][end_char:]
+        else:
+            in_between[0] = in_between[0][:start_char] + \
+                            "-"*(len(in_between[0])-start_char)
+            in_between[-1] = "-"*end_char + in_between[-1][end_char:]
+            for i in range(1, len(in_between)-1):
+                in_between[i] = "-"*len(in_between[i])
+        text[start_line-1:end_line] = in_between
