@@ -28,12 +28,10 @@ class SelectManager(Rule):
                 # Arrow
                 "<Left>", "<Right>", "<Up>", "<Down>",
                 # Mouse
-                "<Button-1>", "<Double-Button-1>", "<Triple-Button-1>",
-                #"<ButtonPress-1>", "<ButtonRelease-1>",
-                "<B1-Motion>",
+                "<Double-Button-1>", "<Triple-Button-1>",
+                "<ButtonPress-1>", "<ButtonRelease-1>", "<B1-Motion>",
                 # User/program input
                 "<<Before-Insert>>", "<<After-Insert>>", "<<After-Delete>>",
-                # [<before-delete> can't call delete_selection()]
                 # Backspace to stop other rules from handling it if selsected
                 "<BackSpace>", "<Delete>",
                 # Moving the insert mark should also move the linsert mark
@@ -48,7 +46,7 @@ class SelectManager(Rule):
         super().attach()
         self.old_sel_fg = self.text.tag_cget("sel", "foreground")
         self.old_sel_bg = self.text.tag_cget("sel", "background")
-        self.text.tag_config("sel", background="red", foreground="")
+        self.text.tag_config("sel", background="cyan", foreground="")
         self.old_inactivebg:str = self.text.cget("inactiveselectbackground")
         self.text.config(inactiveselectbackground=self.text.cget("bg"))
         self.text.tag_config(SEL_TAG, foreground="white",
@@ -62,6 +60,10 @@ class SelectManager(Rule):
                                     foreground=self.old_sel_fg)
         self.text.config(inactiveselectbackground=self.old_inactivebg)
 
+    def get_index_from_pos(self, x:int, y:int) -> str:
+        idx:str = self.text.index(f"@{x},{y}")
+        return idx
+
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
         if on in ("backspace", "delete"):
             start, end = self.plugin.get_selection()
@@ -71,16 +73,19 @@ class SelectManager(Rule):
         drag:tuple = None
         data:tuple = None
 
-        # Single/Double/Triple click
+        # Double/Triple click
         if on.endswith("button-1"):
+            idx:int = self.get_index_from_pos(event.x, event.y)
             on:str = on.removesuffix("button-1") + "mouse"
 
         # Mouse press/release
-        #if on.startswith("button") and on.endswith("-1"):
-        #    on:str = "mouse-" + on.removeprefix("button").removesuffix("-1")
+        if on.startswith("button") and on.endswith("-1"):
+            idx:int = self.get_index_from_pos(event.x, event.y)
+            on:str = "mouse-" + on.removeprefix("button").removesuffix("-1")
 
         elif on == "b1-motion":
             on:str = "mouse-motion"
+            idx:int = self.get_index_from_pos(event.x, event.y)
             width:int = self.text.winfo_width()
             height:int = self.text.winfo_height()
             drag_x = drag_y = 0
@@ -120,23 +125,18 @@ class SelectManager(Rule):
                 self.text.mark_set("linsert", idx)
             return False
 
-        #if on == "mouse-press":
-        #    self.selecting:bool = True
-        #    return False
-
-        #if on == "mouse-release":
-        #    self.selecting:bool = False
-        #    return False
-
-        if on == "mouse":
-            #if not self.selecting:
-            #    return False
+        if on == "mouse-press":
+            self.selecting:bool = True
             self.plugin.remove_selection()
+            self.text.mark_set("mouse-start", idx)
             self.text.event_generate("<<Add-Separator>>")
-            def inner():
-                self.text.mark_set("mouse-start", "insert")
-                self.text.event_generate("<<Move-Insert>>", data=("insert",))
-            self.text.after(1, inner)
+            self.text.event_generate("<<Move-Insert>>", data=(idx,))
+            return True
+
+        if on == "mouse-release":
+            if self.selecting:
+                self.selecting:bool = False
+                return True
             return False
 
         if on == "double-mouse":
@@ -151,21 +151,20 @@ class SelectManager(Rule):
             return True
 
         if on == "mouse-motion":
-            #if not self.selecting:
-            #    return False
-            def inner():
-                delta:str = None
-                if drag[0] != 0:
-                    delta:str = f"{SCROLL_SPEED*drag[0]}c"
-                elif drag[1] != 0:
-                    delta:str = f"{SCROLL_SPEED*drag[1]}l"
-                if delta is not None:
-                    self.text.see(f"{idx} +{delta}")
-                start, end = self.plugin.order_idxs("insert", "mouse-start")
-                self.plugin.set_selection(start, end)
-                self.text.event_generate("<<Move-Insert>>", data=("insert",))
-            self.text.after(1, inner)
-            return False
+            if not self.selecting:
+                return False
+            # reimplement this using `xview`/`yview`
+            delta:str = None
+            if drag[0] != 0:
+                delta:str = f"{SCROLL_SPEED*drag[0]}c"
+            elif drag[1] != 0:
+                delta:str = f"{SCROLL_SPEED*drag[1]}l"
+            if delta is not None:
+                self.text.see(f"{idx} +{delta}")
+            start, end = self.plugin.order_idxs("mouse-start", idx)
+            self.plugin.set_selection(start, end)
+            self.text.event_generate("<<Move-Insert>>", data=(idx,))
+            return True
 
         if on == "<before-insert>":
             self.plugin.delete_selection()

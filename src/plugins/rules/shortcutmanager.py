@@ -3,21 +3,54 @@ import tkinter as tk
 
 from .baserule import Rule
 
+SIMPLE_TEXT:str = "SimpleText"
+
 
 class RemoveShortcuts(Rule):
     __slots__ = "text"
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
-        evs:set[str] = set()
-        characters:set[str] = set("poiytewkhfdazxcvbn")
-        others:set[str] = {"at", "slash", "Tab"}
-        for char in characters|set(map(str.upper, characters))|others:
-            evs.add(f"<Control-{char}>")
-        super().__init__(plugin, text, tuple(evs))
+        super().__init__(plugin, text, ())
         self.text:tk.Text = self.widget
 
-    def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
-        return True
+    def attach(self) -> None:
+        super().attach()
+        if not getattr(tk, "simpletag", False):
+            self.create_simple_tag()
+            tk.simpletag:bool = True
 
-    def do(self, on:str) -> Break:
-        return True
+        text_tags:tuple[str] = self.text.bindtags()
+        text_tags:tuple[str] = tuple(SIMPLE_TEXT if t == "Text" else t \
+                                     for t in text_tags)
+        self.text.bindtags(text_tags)
+
+    def detach(self) -> None:
+        super().detach()
+        text_tags:tuple[str] = self.text.bindtags()
+        text_tags:tuple[str] = tuple("Text" if t == SIMPLE_TEXT else t \
+                                     for t in text_tags)
+        self.text.bindtags(text_tags)
+
+    def create_simple_tag(self) -> None:
+        bindings:tuple[str] = self.text._bind(("bind", "Text"), None, None, None)
+        to_remove:set[str] = set()
+        for binding in bindings:
+            if binding in ("<B2-Motion>", "<Button-2>"):
+                to_remove.add(binding)
+            elif binding.startswith("<Control-"):
+                b:str = binding.removeprefix("<Control-").replace("Shift-", "")
+                b:str = b.replace("Key-", "").removesuffix(">")
+                if (b in "htokdi") or ("Tab" in b) or ("Home" in b):
+                    to_remove.add(binding)
+                if ("Next" in b) or ("Prior" in b) or ("End" in b):
+                    to_remove.add(binding)
+            elif "Meta-Key" in binding:
+                to_remove.add(binding)
+            elif ("B1" in binding) or ("Button-1" in binding):
+                to_remove.add(binding)
+            elif "Release-1" in binding:
+                to_remove.add(binding)
+
+        for binding in set(bindings) - to_remove:
+            cmd:str = self.text._bind(("bind", "Text"), binding, None, None)
+            self.text._bind(("bind", SIMPLE_TEXT), binding, cmd, None)

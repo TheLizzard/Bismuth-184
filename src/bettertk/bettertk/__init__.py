@@ -463,6 +463,10 @@ class BetterTk(tk.Frame):
 
     def maybe_destroy(self, event:tk.Event) -> None:
         widget:tk.Misc = event.widget
+        if isinstance(widget, str):
+            # If the widget was already destroyed by something
+            # Don't know when/why this happens?
+            return None
         while (not isinstance(widget, BetterTk)) and (widget.master is not None):
             widget:tk.Misc = widget.master
 

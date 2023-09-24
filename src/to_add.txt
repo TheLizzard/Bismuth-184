@@ -1,20 +1,25 @@
 Editor:
 * Implement `FindReplaceManager`
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
+* Set exec path only works when the tab that will use it is open. Add an event "<<Explorer-Report-CWD>>"
+* SelectionManager` should use `.index("@x,y")` and instead should use `pos = [$w index @$x,$y]; bbox = [$w bbox $pos]; if{$bbox eq ""}{return $pos}; if {($x - [lindex $bbox 0]) < ([lindex $bbox 2]/2)}{return $pos}else{return "$pos + 1 char"}` # https://opensource.apple.com/source/tcl/tcl-107.40.1/tk/tk/library/text.tcl.auto.html
 
 Terminal:
 * Windows support (pty_terminal)
 * Add settings window
 
+Notebook:
+* Clicking on the "+" should scroll to the end
+
 File Explorer:
-* Make the frame inside the `dummy_canvas` expand to fill the canvas' width in `BetterFrame`
+* Make the frame inside the `dummy_canvas` expand to fill the canvas' width/height in `BetterFrame`. This problem also appears in `Notebook`
 * Save exec path on close?
 
 Minor things/Low priority:
-* Finnish Konsole implementation (x11, windows)?
 * `WhiteSpaceManager` copies the indentation of the current line without considering that it might be fully enclosed in a bracket.
-* plugins.rules.bracketmanager.py@BracketManager.find_bracket_match
+* The lines in `LineManager` go to top when reloading a file.
+* Finnish Konsole implementation (x11, windows)?
+* plugins.baseplugin.py@AllPlugin.find_bracket_match is a bit slow
 * Profile the program
-* If the user drags the mouse outside the editor and back inside `SelectionManager` sometimes lets the "sel" tag to appear. (Shouldn't be a problem - commit version 2.3 should have made it worse)
 * Implement `MenuManager`?
 * Add settings window?

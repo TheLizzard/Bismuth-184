@@ -98,7 +98,7 @@ class TabNotches(BetterFrame):
 
         make_bind_frame(self)
         self.bind("<ButtonPress-1>", self.start_dragging, add=True)
-        self.bind_all("<Motion>", self.drag, add=True)
+        self.bind_all("<B1-Motion>", self.drag, add=True)
         self.bind_all("<ButtonRelease-1>", self.end_dragging, add=True)
 
     def add(self) -> TabNotch:
@@ -129,7 +129,7 @@ class TabNotches(BetterFrame):
 
     def end_dragging(self, event:tk.Event=None) -> str:
         if self.notch_dragging is None:
-            return ""
+            return None
         if self.dragging:
             self.tmp_notch.grid_forget()
             self.notch_dragging.grid(row=1, column=self.tmp_notch.idx)
@@ -261,17 +261,19 @@ class Notebook(tk.Frame):
         self.curr_page:NotebookPage = page
         super().event_generate("<<Tab-Switched>>")
 
-    def switch_prev_tab(self, event:tk.Event=None) -> None:
+    def switch_prev_tab(self, event:tk.Event=None) -> str:
         page:NotebookPage = self._switch_next_prev_tab(strides=-1, default=-1)
         if page == self.curr_page:
             page:NotebookPage = None
         self._tab_switch_to(page)
+        return "break"
 
-    def switch_next_tab(self, event:tk.Event=None) -> None:
+    def switch_next_tab(self, event:tk.Event=None) -> str:
         page:NotebookPage = self._switch_next_prev_tab(strides=+1, default=0)
         if page == self.curr_page:
             page:NotebookPage = None
         self._tab_switch_to(page)
+        return "break"
 
     def _switch_next_prev_tab(self, strides:int, default:int) -> NotebookPage:
         if self.curr_page is None:
@@ -338,3 +340,5 @@ if __name__ == "__main__":
 
     nb = notebook
     nts = nb.notches
+
+    root.mainloop()
