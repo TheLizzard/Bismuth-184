@@ -257,10 +257,13 @@ class BetterFrame(tk.Frame):
     def scrolling_linux(self, event:tk.Event) -> None:
         if not self.check_mouse_over_self(event):
             return None
-        y_steps = self.scroll_speed
+        steps:int = self.scroll_speed
         if event.num == 4:
-            y_steps *= -1
-        self.dummy_canvas.yview_scroll(y_steps, "units")
+            steps *= -1
+        if event.state&1:
+            self.dummy_canvas.xview_scroll(steps, "units")
+        else:
+            self.dummy_canvas.yview_scroll(steps, "units")
 
     def check_mouse_over_self(self, event:tk.Event) -> bool:
         return str(event.widget).startswith(str(self.master_frame))

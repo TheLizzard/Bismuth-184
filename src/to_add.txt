@@ -2,7 +2,6 @@ Editor:
 * Implement `FindReplaceManager`
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
 * Set exec path only works when the tab that will use it is open. Add an event "<<Explorer-Report-CWD>>"
-* SelectionManager` should use `.index("@x,y")` and instead should use `pos = [$w index @$x,$y]; bbox = [$w bbox $pos]; if{$bbox eq ""}{return $pos}; if {($x - [lindex $bbox 0]) < ([lindex $bbox 2]/2)}{return $pos}else{return "$pos + 1 char"}` # https://opensource.apple.com/source/tcl/tcl-107.40.1/tk/tk/library/text.tcl.auto.html
 
 Terminal:
 * Windows support (pty_terminal)

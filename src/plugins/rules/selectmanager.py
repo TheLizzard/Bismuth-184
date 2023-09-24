@@ -60,9 +60,12 @@ class SelectManager(Rule):
                                     foreground=self.old_sel_fg)
         self.text.config(inactiveselectbackground=self.old_inactivebg)
 
-    def get_index_from_pos(self, x:int, y:int) -> str:
-        idx:str = self.text.index(f"@{x},{y}")
-        return idx
+    @staticmethod
+    def get_index_from_pos(text:tk.Text, x:int, y:int) -> str:
+        # This function is a wrapper for tk's TextClosestGap function
+        # an example of it's implementation:
+        # https://opensource.apple.com/source/tcl/tcl-107.40.1/tk/tk/library/text.tcl.auto.html
+        return str(text.tk.call("::tk::TextClosestGap", text._w, x, y))
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
         if on in ("backspace", "delete"):
@@ -75,17 +78,17 @@ class SelectManager(Rule):
 
         # Double/Triple click
         if on.endswith("button-1"):
-            idx:int = self.get_index_from_pos(event.x, event.y)
+            idx:int = self.get_index_from_pos(self.text, event.x, event.y)
             on:str = on.removesuffix("button-1") + "mouse"
 
         # Mouse press/release
-        if on.startswith("button") and on.endswith("-1"):
-            idx:int = self.get_index_from_pos(event.x, event.y)
+        elif on.startswith("button") and on.endswith("-1"):
+            idx:int = self.get_index_from_pos(self.text, event.x, event.y)
             on:str = "mouse-" + on.removeprefix("button").removesuffix("-1")
 
         elif on == "b1-motion":
             on:str = "mouse-motion"
-            idx:int = self.get_index_from_pos(event.x, event.y)
+            idx:int = self.get_index_from_pos(self.text, event.x, event.y)
             width:int = self.text.winfo_width()
             height:int = self.text.winfo_height()
             drag_x = drag_y = 0
