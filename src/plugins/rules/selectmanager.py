@@ -129,6 +129,7 @@ class SelectManager(Rule):
             return False
 
         if on == "mouse-press":
+            self.text.focus_set()
             self.selecting:bool = True
             self.plugin.remove_selection()
             self.text.mark_set("mouse-start", idx)

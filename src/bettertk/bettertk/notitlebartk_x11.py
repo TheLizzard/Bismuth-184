@@ -225,6 +225,7 @@ class NoTitlebarTk:
         if master is None:
             self.root = CleanupTk(**kwargs)
         elif isinstance(master, (tk.Misc, NoTitlebarTk)):
+            self.wait_mapped(master)
             self.root = CleanupToplevel(master, **kwargs)
         else:
             raise ValueError("Invalid `master` argument. It must be " \
@@ -243,10 +244,10 @@ class NoTitlebarTk:
                 setattr(self, attribute_name, attribute)
 
         self.display:DISPLAY = self._get_display(master)
-        self.wait_mapped()
+        self.wait_mapped(self.root)
         self.window:WINDOW = self._get_parent(self.root.winfo_id())
         self._overrideredirect()
-        self.wait_mapped()
+        self.wait_mapped(self.root)
 
     def _get_display(self, widget:tk.Misc) -> DISPLAY:
         self.root.cleanup = self.cleanup
@@ -311,14 +312,15 @@ class NoTitlebarTk:
         XAddToSaveSet(self.display, child)
         XFlush(self.display) # Might be unneeded?
 
-    def wait_mapped(self) -> None:
+    @staticmethod
+    def wait_mapped(widget:tk.Misc) -> None:
         def inner() -> None:
-            if self.root.winfo_ismapped():
-                self.root.quit()
+            if widget.winfo_ismapped():
+                widget.quit()
             else:
-                self.root.after(100, inner)
-        self.after(100, inner)
-        self.mainloop()
+                widget.after(100, inner)
+        widget.after(100, inner)
+        widget.mainloop()
 
     """
     def transparentcolor(self, colour:str) -> None:

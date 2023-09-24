@@ -30,7 +30,7 @@ class App:
         self.text_to_page:dict[tk.Text:NotebookPage] = {}
         self.root:BetterTk = BetterTk()
         self.root.title("Bismuth-184")
-        self.root.iconphoto(False, "sprites/Bismuth_184.ico")
+        self.root.iconphoto(True, "sprites/Bismuth_184.ico")
         self.root.protocol("WM_DELETE_WINDOW", self.root_close)
         self.root.geometry(f"+{settings.window.x}+{settings.window.y}")
         pannedwindow = tk.PanedWindow(self.root, orient="horizontal", bd=0,
