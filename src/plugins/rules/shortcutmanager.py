@@ -4,6 +4,7 @@ import tkinter as tk
 from .baserule import Rule
 
 SIMPLE_TEXT:str = "SimpleText"
+DEBUG:bool = False
 
 
 class RemoveShortcuts(Rule):
@@ -65,8 +66,11 @@ class RemoveShortcuts(Rule):
             if binding in ("<<Undo>>", "<<Redo>>", "<<Clear>>"):
                 to_remove.add(binding)
 
-#        print(f"{to_remove=}")
+        if DEBUG: print(f"[DEBUG]: {to_remove=}")
         for binding in set(bindings) - to_remove:
             cmd:str = self.text._bind(("bind", "Text"), binding, None, None)
             self.text._bind(("bind", SIMPLE_TEXT), binding, cmd, None)
-#            print(f"[DEBUG]: {binding}: {cmd!r}")
+            if DEBUG: print(f"[DEBUG]: {binding}: {cmd!r}")
+        # Insert tab and break
+        tab_cmd:str = "\n\t" + r"tk::TextInsert %W \t" + "\n\t" + "break" + "\n"
+        self.text._bind(("bind", SIMPLE_TEXT), "<Tab>", tab_cmd, None)

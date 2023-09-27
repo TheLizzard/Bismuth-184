@@ -1,6 +1,8 @@
 from __future__ import annotations
 import tkinter as tk
+import re
 
+from bettertk.messagebox import tell as telluser
 from bettertk import BetterTk
 from .baserule import Rule
 
@@ -18,6 +20,15 @@ SHIFT:int = 1
 ALT:int = 8
 CTRL:int = 4
 
+ESCAPED:dict[str,str] = {
+                          "a": "\a",
+                          "b": "\b",
+                          "f": "\f",
+                          "n": "\n",
+                          "r": "\r",
+                          "t": "\t",
+                          "v": "\v",
+                        }
 
 
 class MiniPlugin(AllPlugin):
@@ -30,15 +41,36 @@ class MiniPlugin(AllPlugin):
                              ColourManager,
                              SelectManager,
                              ClipboardManager,
-                             WhiteSpaceManager,
                              RemoveShortcuts,
                            ]
         super().__init__(text, rules)
 
 
+class Checkbox(tk.Frame):
+    __slots__ = "ticked", "box"
+
+    def __init__(self, master:tk.Misc, text:str) -> Checkbox:
+        super().__init__(master, bd=0, highlightthickness=0, bg="black")
+        label = tk.Label(self, text="#", bg="black", fg="white")
+        label.pack(side="right")
+        width:int = int(label.winfo_reqwidth()*2/3)
+        self.box = tk.Canvas(self, bd=0, highlightthickness=1, width=width,
+                             height=width)
+        self.box.pack(side="right")
+        self.ticked:bool = False
+        self.box.bind("<Button-1>", self.toggle)
+        label.bind("<Button-1>", self.toggle)
+        label.config(text=text)
+
+    def toggle(self, event:tk.Event=None) -> None:
+        self.ticked:bool = not self.ticked
+        self.box.config(bg="grey" if self.ticked else "white")
+
+
 class FindReplaceManager(Rule):
     __slots__ = "text", "window", "find", "replace", "regex", "matchcase", \
-                "wholeword", "buttons", "shown", "geom"
+                "wholeword", "button", "shown", "geom", "replace_label", \
+                "replace_str"
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> None:
         evs:tuple[str] = (
@@ -51,22 +83,56 @@ class FindReplaceManager(Rule):
         super().__init__(plugin, text, evs)
         self.text:tk.Text = self.widget
         self.window:BetterTk = None
+        self.replace_str:str = ""
+        self.shown:bool = False
         self.geom:str = None
 
     def init(self) -> None:
         self.window:BetterTk = BetterTk(self.text)
+        self.window.protocol("WM_DELETE_WINDOW", self.hide)
         self.window.resizable(False, False)
         self.window.title("Find/Replace")
         self.window.topmost(True)
-        self.window.protocol("WM_DELETE_WINDOW", self.hide)
-        self.buttons:list[tk.Button] = []
         self.replace:tk.Misc = None
         self.shown:bool = True
 
-        self.find:tk.Misc = None
-        self.regex:tk.Misc = None
-        self.wholeword:tk.Misc = None
-        self.matchcase:tk.Misc = None
+        # Left
+        left = tk.Frame(self.window, bg="black", highlightthickness=0, bd=0)
+        left.pack(fill="both", expand=True, side="left")
+        label = tk.Label(left, text="Find:", bg="black", fg="white", anchor="w")
+        label.grid(row=1, column=1, sticky="news", padx=5, pady=5)
+        self.find:tk.Text = tk.Text(left, height=1, bd=2, width=30,
+                                    highlightthickness=0)
+        self.find.grid(row=1, column=2, columnspan=3, pady=5, sticky="news")
+        self.find.bind("<Tab>", self.tab_pressed)
+        self.find.bind("<Return>", self.return_pressed)
+        self.find.bind("<KP_Enter>", self.return_pressed)
+        self.find.bind("<Escape>", lambda e: self.hide())
+        MiniPlugin(self.find).attach()
+        # Checkboxes
+        l = tk.Label(left, text="Options:", bg="black", fg="white", anchor="w")
+        l.grid(row=3, column=1, padx=5, pady=(0,5))
+        self.regex:Checkbox = Checkbox(left, text="Regex")
+        self.matchcase:Checkbox = Checkbox(left, text="Match case")
+        self.wholeword:Checkbox = Checkbox(left, text="Whole word")
+        self.regex.grid(row=3, column=2, pady=(5,), padx=(0,5))
+        self.matchcase.grid(row=3, column=3, pady=(5,), padx=5)
+        self.wholeword.grid(row=3, column=4, pady=(5,), padx=(5,0))
+
+        # Right
+        right = tk.Frame(self.window, bg="black", bd=0)
+        right.pack(fill="both", expand=True, side="right")
+        close = tk.Button(right, activebackground="grey", bg="black",
+                          activeforeground="white", fg="white",
+                          text="Close", command=self.hide, highlightthickness=0)
+        close.pack(fill="x", side="top", pady=(5,0), padx=5)
+        self.button = tk.Button(right, activebackground="grey", bg="black",
+                                activeforeground="white", fg="white",
+                                text="Find Next", command=self._find,
+                                highlightthickness=0)
+        self.button.pack(fill="x", side="top", pady=5, padx=5)
+        self.button.bind("<Tab>", self.tab_pressed)
+        self.find.focus_set()
 
     def __new__(Cls, plugin:BasePlugin, text:tk.Text, *args, **kwargs):
         self:FindReplaceManager = getattr(text, "findreplacemanager", None)
@@ -96,46 +162,156 @@ class FindReplaceManager(Rule):
             return None
         # Replace => Find
         else:
+            self.replace_str:str = self.replace.get("1.0", "end -1c")
+            self.replace_label.destroy()
             self.replace.destroy()
             self.replace:tk.Misc = None
-            for button in buttons:
-                button.delstroy()
-            buttons.clear()
-        self.create_find_buttons()
+            self.button.config(text="Find", command=self._find)
+        self.window.focus_force()
+        self.window.focus_set()
+        self.find.focus_set()
 
     def open_replace(self) -> None:
         self.show()
         # Find => Replace
         if self.replace is None:
-            self.create_replace_text()
-            for button in buttons:
-                button.delstroy()
-            buttons.clear()
-        self.create_replace_buttons()
-
-    def create_find_buttons(self) -> None:
-        ...
-
-    def create_replace_buttons(self) -> None:
-        ...
+            self.button.config(text="Replace All", command=self._replace)
+            self.replace = tk.Text(self.find.master, height=1, bd=2, width=30,
+                                    highlightthickness=0)
+            self.replace.grid(row=2, column=2, columnspan=3, pady=(0, 10),
+                              sticky="news")
+            self.replace.bind("<Tab>", self.tab_pressed)
+            self.replace.bind("<Return>", self.return_pressed)
+            self.replace.bind("<KP_Enter>", self.return_pressed)
+            self.replace_label = tk.Label(self.find.master, text="Replace:",
+                                          bg="black", fg="white", anchor="w")
+            self.replace_label.grid(row=2, column=1, sticky="news", padx=5,
+                                    pady=(0,5))
+            MiniPlugin(self.replace).attach()
+            self.replace.insert("end", self.replace_str)
+            self.replace.bind("<Escape>", lambda e: self.hide())
+        self.window.focus_force()
+        self.window.focus_set()
+        self.find.focus_set()
 
     def show(self) -> None:
         if self.window is None:
             self.init()
         if self.shown:
             return None
+        self.shown:bool = True
         self.window.deiconify()
         if self.geom is not None:
             self.window.geometry(self.geom)
-        self.shown:bool = True
 
     def hide(self) -> None:
         if self.window is None:
             return None
         if not self.shown:
             return None
+        self.shown:bool = False
         geom:str = self.window.geometry()
         self.geom:str = geom[geom.index("+"):]
         self.window.withdraw()
-        self.shown:bool = False
         self.text.focus_set()
+
+    def _find(self, start:str="insert") -> None:
+        start:str = self.text.index(start)
+        a, b = start.split(".")
+        a, b = int(a), int(b)
+        find, flags = self.get_find_params()
+        text:str = self.text.get(start, "end")
+        l, c, size = self._search(text, find, flags)
+        if size == -1:
+            self.report_error(l, c)
+            return None
+        if size == 0:
+            a, b = 1, 0
+            text:str = self.text.get("1.0", start)
+            l, c, size = self._search(text, find, flags)
+        if size == 0:
+            return None
+        if l == 0:
+            a:str = f"{a}.{b+c}"
+        else:
+            a:str = f"{a+l}.{c}"
+        b:str = f"{a} +{size}c"
+        self.plugin.set_selection(a, b)
+        self.text.event_generate("<<Move-Insert>>", data=(b,))
+
+    def _replace(self, start:str="insert") -> None:
+        find, replace, flags = self.get_replace_params()
+        print(f"Implement: replace {find!r} {replace!r} {flags}")
+
+    def _search(self, string:str, reg:str, flags:int) -> tuple[int,int,int]:
+        try:
+            reg = re.compile(reg, flags)
+        except re.error as error:
+            return error.msg, error.pos, -1
+        match = re.search(reg, string)
+        if match is None:
+            return 0, 0, 0
+        s, e = match.span()
+        size:str = e - s
+        before:str = string[:s]
+        line:int = before.count("\n")
+        if line == 0:
+            chars:int = len(before)
+        else:
+            chars:int = len(before)-before.rfind("\n")-1
+        return line, chars, size
+
+    def report_error(self, msg:str, pos:int) -> None:
+        title:str = "Bad regex"
+        msg:str = f"The regex has an error at {pos=}:\n{msg!r}"
+        telluser(self.text, title=title, message=msg, center=True,
+                 center_widget=self.text, icon="error")
+
+    def get_find_params(self) -> tuple[str,int]:
+        find:str = self.format_str(self.find.get("1.0", "end -1c"))
+        flags:int = 0
+        if not self.matchcase.ticked:
+            flags |= re.IGNORECASE
+        if not self.regex.ticked:
+            find:str = re.escape(find)
+        if self.wholeword.ticked:
+            find:str = fr"(?<=\b){find}(?=\b)"
+        return find, flags
+
+    def get_replace_params(self) -> tuple[str,str,dict]:
+        find, kwargs = self.get_find_params()
+        replace:str = self.format_str(self.replace.get("1.0", "end -1c"))
+        return find, replace, kwargs
+
+    def tab_pressed(self, event:tk.Event) -> str:
+        if event.widget == self.button:
+            self.find.focus_set()
+        elif event.widget == self.find:
+            if self.replace is None:
+                self.button.focus_set()
+            else:
+                self.replace.focus_set()
+        elif event.widget == self.replace:
+            self.button.focus_set()
+        return "break"
+
+    def return_pressed(self, event:tk.Event=None) -> str:
+        self.button.invoke()
+        return "break"
+
+    def format_str(self, string:str) -> str:
+        output:str = ""
+        escaping:bool = False
+        for char in string:
+            if char == "\\":
+                if escaping:
+                    output += "\\"
+                escaping:bool = not escaping
+            elif escaping and (char in ESCAPED):
+                output += ESCAPED[char]
+                escaping:bool = False
+            else:
+                if escaping:
+                    output += "\\"
+                output += char
+        return output

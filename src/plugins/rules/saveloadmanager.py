@@ -144,8 +144,10 @@ class SaveLoadManager(Rule):
 
     # reload
     def _reload(self) -> None:
+        insert:str = self.text.index("insert")
         self._internal_open()
         self.text.event_generate("<<Reloaded-File>>")
+        self.text.event_generate("<<Move-Insert>>", data=(insert,))
 
     def _internal_open(self) -> None:
         if not self.can_read():

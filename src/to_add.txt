@@ -1,11 +1,15 @@
 Editor:
-* Implement `FindReplaceManager`
+* Implement the replace part of `FindReplaceManager`
+* `FindReplaceManager` should report matches of length 0 as an error?
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
 * Set exec path only works when the tab that will use it is open. Add an event "<<Explorer-Report-CWD>>"
+* `cpp.WhiteSpaceManager` should manage return pressed from this state: "{|}" where | is the cursor
+* `CommentManager` should insert its comment after the indentation so that `WhiteSpaceManager` can handle the next line correctly
 
 Terminal:
 * Windows support (pty_terminal)
 * Add settings window
+* Add a clear terminal button? (can't think of an icon for that)
 
 Notebook:
 * Clicking on the "+" should scroll to the end

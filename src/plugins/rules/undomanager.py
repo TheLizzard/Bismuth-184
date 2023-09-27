@@ -10,6 +10,7 @@ SHIFT:int = 1
 ALT:int = 8
 CTRL:int = 4
 ALPHANUMERIC_ = string.ascii_letters + string.digits + "_"
+TIME_DELAY_UNDO_SEP:int = 300
 
 
 class UndoManager(Rule):
@@ -144,7 +145,8 @@ class UndoManager(Rule):
         if not wait:
             self._add_sep()
         if not self.last_char_space:
-            self.after_id:str = self.text.after(1000, self.add_sep)
+            self.after_id:str = self.text.after(TIME_DELAY_UNDO_SEP,
+                                                self.add_sep)
 
     def _add_sep(self) -> None:
         if self.paused or self.sep_unnecessary:
