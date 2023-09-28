@@ -4,13 +4,16 @@ As the name implies this project might be very unstable and can break down in th
 # Dependencies
 ### Python
 * xterm/konsole
+* PIL (`pip install Pillow`)
 
 ### C/C++
 * g++
 	* Ubuntu: `sudo apt install g++`
 	* Windows: install `mingw`, in `mingw-get` install (mingw32-gcc-g++-bin, mingw32-gcc-g++-dev, mingw32-gcc-g++-doc, mingw32-gcc-g++-man)
 * xterm/konsole
+* PIL (`pip install Pillow`)
 
 ### Java
 * jre
 * xterm/konsole
+* PIL (`pip install Pillow`)
