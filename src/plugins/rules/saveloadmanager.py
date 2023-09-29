@@ -140,6 +140,7 @@ class SaveLoadManager(Rule):
 
     def _open(self) -> None:
         self._internal_open()
+        self.text.see("end -1c linestart")
         self.text.event_generate("<<Opened-File>>")
 
     # reload

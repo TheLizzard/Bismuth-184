@@ -53,7 +53,7 @@ class Menu:
         self.root.withdraw()
         self.shown:bool = False
         self.frame:tk.Frame = tk.Frame(self.root, bg="black", bd=0,
-                                        highlightthickness=0)
+                                       highlightthickness=0)
         self.frame.pack(fill="both", expand=True, padx=MENU_BD, pady=MENU_BD)
         self.children:list[tk.Misc] = []
         self.master.bind_all("<Escape>", self.cancel, add=True)
@@ -138,8 +138,10 @@ class ExpandedExplorer(Explorer):
         os.makedirs(self.bin_folder, exist_ok=True)
         self.renaming:bool = False
         self.creating:bool = False
+        self.cwd:tk.Frame = None
         self.master.bind_all("<Escape>", self.finish_rename, add=True)
         self.master.bind_all("<Button-1>", self.maybe_cancel_rename, add=True)
+        self.master.bind_all("<<Explorer-Report-CWD>>", self.report_cwd)
 
     # Bin
     def _find_empty_bin(self) -> str:
@@ -214,6 +216,14 @@ class ExpandedExplorer(Explorer):
         self.cwd.cwd_dot.destroy()
         self.cwd:tk.Frame = None
         self.changing:tk.Frame = None
+
+    def report_cwd(self, event:tk.Event=None) -> str:
+        if self.cwd is None:
+            self.master.event_generate("<<Explorer-Unset-CWD>>")
+        else:
+            self.master.event_generate("<<Explorer-Set-CWD>>",
+                                       data=(self.cwd.item.fullpath,))
+        return "break"
 
     # Rename
     def rename(self) -> None:

@@ -55,7 +55,8 @@ class WhiteSpaceManager(Rule):
 
     def do(self, on:str, shift:bool) -> Break:
         if on in ("return", "kp_enter"):
-            return self.plugin.undo_wrapper(self.return_pressed, shift)
+            ret, *_ = self.plugin.undo_wrapper(self.return_pressed, shift)
+            return ret
         elif on == "backspace":
             return self.plugin.undo_wrapper(self.backspace_pressed)
         elif on == "tab":
@@ -68,7 +69,7 @@ class WhiteSpaceManager(Rule):
         raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
 
     # Return
-    def return_pressed(self, shift:bool) -> Break:
+    def return_pressed(self, shift:bool) -> tuple[Break,...]:
         # Get all of the data we need:
         before:str = self.text.get("insert linestart", "insert")
         after:str = self.text.get("insert", "insert lineend")
@@ -86,8 +87,8 @@ class WhiteSpaceManager(Rule):
         if not shift:
             chars:str = self.get_new_line(before, after, indentation_type, size)
             self.text.insert("insert", chars)
-            return True
-        return False
+            return (True, size, indentation_type, chars)
+        return (False,)
 
     def get_whites_delete(self, before, after, shift, indentation_type):
         """

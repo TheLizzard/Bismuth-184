@@ -35,6 +35,10 @@ class RunManager(Rule):
         self.args:list[str] = []
         self.cwd:str = None
 
+    def attach(self) -> None:
+        super().attach()
+        self.text.event_generate("<<Explorer-Report-CWD>>")
+
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
         data:str = None
         if on == "<explorer-set-cwd>":

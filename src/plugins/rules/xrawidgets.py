@@ -129,6 +129,7 @@ class ScrollbarManager(Rule):
     REQUESTED_LIBRARIES:tuple[str] = "add_widget"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
+    # https://stackoverflow.com/q/35412972/11106801
     HORIZONTAL_BAR:bool = True
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> ScrollBarManager:

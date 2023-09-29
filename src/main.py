@@ -244,8 +244,8 @@ class App:
         for page in self.notebook.iter_pages():
             text:tk.Text = self.page_to_text(page)
             file:str = text.filepath
-            yview:str = text.yview()[0]
             xview:str = text.xview()[0]
+            yview:str = text.yview()[0]
             insert:str = text.index("insert")
             saved:str = text.filesystem_data
             modified:str = text.edit_modified()
@@ -253,12 +253,12 @@ class App:
                 data:str = text.get("1.0", "end").removesuffix("\n")
             else:
                 data:str = None
-            opened.append([file, data, yview, xview, insert, saved, modified])
+            opened.append([file, data, xview, yview, insert, saved, modified])
         return opened
 
     def _set_notebook_state(self, opened:list[tuple]) -> None:
         files:set[str] = set()
-        for file, data, yview, xview, insert, saved, modified in opened:
+        for file, data, xview, yview, insert, saved, modified in opened:
             if file in files:
                 title:str = "Single file in multiple tabs"
                 msg:str = "Please don't open the same file in multiple\n" \

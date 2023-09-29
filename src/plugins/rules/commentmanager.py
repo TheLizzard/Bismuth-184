@@ -37,10 +37,17 @@ class CommentManager(Rule):
     def toggle_comment(self, linenumber:int) -> None:
         # virline:str = self.plugin.get_virline(f"{linenumber}.0 lineend")
         line:str = self.text.get(f"{linenumber}.0", f"{linenumber}.0 lineend")
+        whites:str = self.count(line, " \t")
         if line == "":
             return None
-        if line.startswith(self.COMMENT_STR):
-            end:str = f"{linenumber}.{len(self.COMMENT_STR)}"
-            self.text.delete(f"{linenumber}.0", end)
+        if line[whites:].startswith(self.COMMENT_STR):
+            end:int = whites + len(self.COMMENT_STR)
+            self.text.delete(f"{linenumber}.{whites}", f"{linenumber}.{end}")
+            if (line[end:end+1] == " ") and (line[end+1:end+2] != " "):
+                self.text.delete(f"{linenumber}.{whites}")
         else:
-            self.text.insert(f"{linenumber}.0", self.COMMENT_STR, "program")
+            self.text.insert(f"{linenumber}.{whites}", self.COMMENT_STR+" ",
+                             f"program")
+
+    def count(self, string:str, ins:tuple[str]) -> int:
+        return len(string) - len(string.lstrip(ins))
