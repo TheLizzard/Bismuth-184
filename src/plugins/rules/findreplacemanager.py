@@ -70,7 +70,9 @@ class Checkbox(tk.Frame):
 class FindReplaceManager(Rule):
     __slots__ = "text", "window", "find", "replace", "regex", "matchcase", \
                 "wholeword", "button", "shown", "geom", "replace_label", \
-                "replace_str"
+                "replace_str", "find_cache"
+    MAX_FINDS:int = 100
+    HIT_TAG:str = "hit"
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> None:
         evs:tuple[str] = (
@@ -79,19 +81,30 @@ class FindReplaceManager(Rule):
                            # Replace
                            "<Control-R>", "<Control-r>",
                            "<Control-H>", "<Control-h>",
+                           # Hit invalidation (something else is doing this?)
+                           # "<<Before-Insert>>", "<<Before-Delete>>",
                          )
         super().__init__(plugin, text, evs)
+        self.find_cache:tuple[str,int] = None
         self.text:tk.Text = self.widget
         self.window:BetterTk = None
         self.replace_str:str = ""
         self.shown:bool = False
         self.geom:str = None
 
+    def attach(self) -> None:
+        super().attach()
+        self.text.tag_config(self.HIT_TAG, background="blue", foreground="white")
+        self.text.tag_raise(self.HIT_TAG)
+
+    def detach(self) -> None:
+        super().detach()
+        self.hide()
+
     def init(self) -> None:
         self.window:BetterTk = BetterTk(self.text)
         self.window.protocol("WM_DELETE_WINDOW", self.hide)
         self.window.resizable(False, False)
-        self.window.title("Find/Replace")
         self.window.topmost(True)
         self.replace:tk.Misc = None
         self.shown:bool = True
@@ -133,6 +146,7 @@ class FindReplaceManager(Rule):
         self.button.pack(fill="x", side="top", pady=5, padx=5)
         self.button.bind("<Tab>", self.tab_pressed)
         self.find.focus_set()
+        self.fill_in_find()
 
     def __new__(Cls, plugin:BasePlugin, text:tk.Text, *args, **kwargs):
         self:FindReplaceManager = getattr(text, "findreplacemanager", None)
@@ -157,6 +171,7 @@ class FindReplaceManager(Rule):
 
     def open_find(self) -> None:
         self.show()
+        self.window.title("Find")
         # Already setup correctly
         if self.replace is None:
             return None
@@ -173,6 +188,7 @@ class FindReplaceManager(Rule):
 
     def open_replace(self) -> None:
         self.show()
+        self.window.title("Replace")
         # Find => Replace
         if self.replace is None:
             self.button.config(text="Replace All", command=self._replace)
@@ -192,11 +208,21 @@ class FindReplaceManager(Rule):
             self.replace.bind("<Escape>", lambda e: self.hide())
         self.window.focus_force()
         self.window.focus_set()
+
+    def fill_in_find(self) -> None:
+        # Add whatever the user has selected in the editor
+        start, end = self.text.plugin.get_selection()
+        if start != end:
+            self.find.delete("1.0", "end")
+            self.find.insert("1.0", self.text.get(start, end))
+        # Select everything in the find box
+        self.find.plugin.set_selection("1.0", "end -1c")
         self.find.focus_set()
 
     def show(self) -> None:
         if self.window is None:
             self.init()
+        self.fill_in_find()
         if self.shown:
             return None
         self.shown:bool = True
@@ -205,6 +231,7 @@ class FindReplaceManager(Rule):
             self.window.geometry(self.geom)
 
     def hide(self) -> None:
+        self.clear_hits()
         if self.window is None:
             return None
         if not self.shown:
@@ -216,28 +243,59 @@ class FindReplaceManager(Rule):
         self.text.focus_set()
 
     def _find(self, start:str="insert") -> None:
-        start:str = self.text.index(start)
-        a, b = start.split(".")
-        a, b = int(a), int(b)
         find, flags = self.get_find_params()
-        text:str = self.text.get(start, "end")
-        l, c, size = self._search(text, find, flags)
-        if size == -1:
-            self.report_error(l, c)
-            return None
-        if size == 0:
-            a, b = 1, 0
-            text:str = self.text.get("1.0", start)
-            l, c, size = self._search(text, find, flags)
-        if size == 0:
-            return None
-        if l == 0:
-            a:str = f"{a}.{b+c}"
+        if (find, flags) == self.find_cache:
+            res = self.text.tag_nextrange(self.HIT_TAG, start)
+            if res:
+                a, b = res
+            else:
+                res = self.text.tag_nextrange(self.HIT_TAG, "1.0", "end")
+                if res:
+                    a, b = res
+                else:
+                    return None
         else:
-            a:str = f"{a+l}.{c}"
-        b:str = f"{a} +{size}c"
+            self.clear_hits()
+            self.find_cache:tuple[str,int] = (find, flags)
+            a, b = self._find_all(find, flags, start)
         self.plugin.set_selection(a, b)
         self.text.event_generate("<<Move-Insert>>", data=(b,))
+
+    def _find_all(self, find:str, flags:int, start:str) -> tuple[str,str]:
+        finds:int = 0
+        first_a = first_b = None
+        while True:
+            start:str = self.text.index(start)
+            a, b = start.split(".")
+            a, b = int(a), int(b)
+            text:str = self.text.get(start, "end")
+            l, c, size = self._search(text, find, flags)
+            if size == -1:
+                self.report_error(l, c)
+                return first_a, first_b
+            if size == 0:
+                a, b = 1, 0
+                text:str = self.text.get("1.0", start)
+                l, c, size = self._search(text, find, flags)
+            if size == 0:
+                return first_a, first_b
+            if l == 0:
+                a:str = f"{a}.{b+c}"
+            else:
+                a:str = f"{a+l}.{c}"
+            b:str = f"{a} +{size}c"
+            self.text.tag_add(self.HIT_TAG, a, b)
+
+            finds += 1
+            if first_a is None:
+                first_a, first_b = a, b
+            elif first_a == a:
+                break
+            if finds >= self.MAX_FINDS:
+                print("[ERROR]: Too many matches")
+                break
+            start:str = b
+        return first_a, first_b
 
     def _replace(self, start:str="insert") -> None:
         find, replace, flags = self.get_replace_params()
@@ -315,3 +373,9 @@ class FindReplaceManager(Rule):
                     output += "\\"
                 output += char
         return output
+
+    def clear_hits(self) -> None:
+        if self.find_cache is None:
+            return None
+        self.text.tag_remove(self.HIT_TAG, "1.0", "end")
+        self.find_cache:tuple[str,int] = None

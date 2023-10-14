@@ -60,9 +60,9 @@ class UndoManager(Rule):
             self.sep_unnecessary:bool = False
 
         if (on == "<add-separator>") and self.sep_unnecessary:
-            if (len(event.data) == 0) or (not event.data[0]):
-                return False
-            elif not self.paused:
+            # if (len(event.data) == 0) or (not event.data[0]):
+            #     return False
+            # elif not self.paused:
                 self.sep_unnecessary:bool = False
         if self.paused and (on != "<unpause-separator>"):
             return False
@@ -139,17 +139,17 @@ class UndoManager(Rule):
             self.add_sep()
             return False
 
-    def add_sep(self, wait:bool=False) -> None:
+    def add_sep(self, wait:bool=False, force:bool=False) -> None:
         if self.after_id is not None:
             self.text.after_cancel(self.after_id)
         if not wait:
-            self._add_sep()
+            self._add_sep(force)
         if not self.last_char_space:
             self.after_id:str = self.text.after(TIME_DELAY_UNDO_SEP,
                                                 self.add_sep)
 
-    def _add_sep(self) -> None:
-        if self.paused or self.sep_unnecessary:
+    def _add_sep(self, force:bool=False) -> None:
+        if self.paused or (self.sep_unnecessary and (not force)):
             return None
         if DEBUG: print("[DEBUG]: add-sep")
         self.sep_unnecessary:bool = True

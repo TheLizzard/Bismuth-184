@@ -56,10 +56,10 @@ class _VirtualEvents:
 
     def send(self, event_name:str, *, drop:bool=True, other:bool=False,
              **kwargs:dict) -> str:
-        if not other:
+        if (not other) and drop:
             ret:str = self._send_rest(event_name, drop=False, **kwargs)
             if ret in ("break", "handled"):
-                return "break"
+                return ret
         virtual:bool = event_name.startswith("<<") and event_name.endswith(">>")
         if virtual:
             funcs = self.virtual_events.get(event_name, [])
@@ -144,9 +144,11 @@ class _VirtualEvents:
         for vir_event in _vir_events.values():
             if vir_event == self:
                 continue
-            ret:str = vir_event.send(event_name, other=True, **kwargs)
-            if ret == "break":
+            new_ret:str = vir_event.send(event_name, other=True, **kwargs)
+            if new_ret == "break":
                 return "break"
+            if new_ret == "handled":
+                ret:str = "handled"
         return ret
 
 

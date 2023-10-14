@@ -32,10 +32,13 @@ class BarManager(Rule):
         self.widget.add_widget(self.label, row=4, padx=10)
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
-        return event.data[0], True
+        idx:str = self.widget.index(event.data[0])
+        if idx == "": # No idea why this happens
+            return False
+        return idx, True
 
     def do(self, on:str, idx:str) -> Break:
-        line, column = self.widget.index(idx).split(".")
+        line, column = idx.split(".")
         self.label.config(text=self.FORMAT.format(line=line, column=column))
 
 
@@ -125,7 +128,8 @@ class LineManager(Rule, LineNumbers):
 
 
 class ScrollbarManager(Rule):
-    __slots__ = "old_yscrollcommand", "yscrollbar", "xscrollbar"
+    __slots__ = "old_yscrollcommand", "old_xscrollcommand", "yscrollbar", \
+                "xscrollbar"
     REQUESTED_LIBRARIES:tuple[str] = "add_widget"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
@@ -155,12 +159,15 @@ class ScrollbarManager(Rule):
         self.widget.config(yscrollcommand=self.yset)
         self.widget.add_widget(self.yscrollbar, column=2)
         if self.HORIZONTAL_BAR:
+            self.old_xscrollcommand = self.widget.cget("xscrollcommand")
             self.widget.config(xscrollcommand=self.xset)
             self.widget.add_widget(self.xscrollbar, row=2)
 
     def detach(self) -> None:
         super().detach()
         self.widget.scroll_bar:bool = False
+        if self.HORIZONTAL_BAR:
+            self.widget.config(xscrollcommand=self.old_xscrollcommand)
         self.widget.config(yscrollcommand=self.old_yscrollcommand)
 
     def yset(self, low:str, high:str) -> None:

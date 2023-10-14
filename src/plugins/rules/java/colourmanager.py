@@ -28,27 +28,30 @@ class ColourConfig(BaseColourConfig):
 
 
 def get_iostream() -> Iterable[str]:
-    return {"cin", "cout", "cerr", "clog", "wcin", "wcout", "wcerr", "wclog"}
+    return ("System.out.print", "System.err.print",
+            "System.out.println", "System.err.println",
+            "Sytem.out", "System.err", "System.in")
 
 def get_keywords() -> Iterable[str]:
-    return {"asm", "else", "new", "this", "auto", "enum", "operator",
-            "throw", "bool", "explicit", "private", "true", "break",
-            "export", "protected", "try", "case", "extern", "public",
-            "typedef", "catch", "false", "register", "typeid", "char",
-            "float", "reinterpret_cast", "typename", "class", "for",
-            "return", "union", "const", "friend", "short", "unsigned",
-            "const_cast", "goto", "signed", "using", "continue", "if",
-            "sizeof", "virtual", "default", "inline", "static", "void",
-            "delete", "int", "static_cast", "volatile", "do", "long",
-            "struct", "wchar_t", "double", "mutable", "switch", "while",
-            "dynamic_cast", "namespace", "template"}
+    return {"abstract", "assert", "boolean", "break", "byte", "case", "catch",
+            "char", "class", "continue", "const", "default", "do", "double",
+            "else", "enum", "exports", "extends", "final", "finally", "float",
+            "for", "goto", "if", "implements", "import", "instanceof", "int",
+            "interface", "long", "module", "native", "new", "package",
+            "private", "protected", "public", "requires", "return", "short",
+            "static", "strictfp", "super", "switch", "synchronized", "this",
+            "throw", "throws", "transient", "try", "var", "void", "volatile",
+            "while",
+            "record", "null", "false", "true",
+            "String", "Integer", "Float", "Boolean", "Byte", "Short",
+            "Character", "Long", "Double"}
 
 def make_pat() -> re.compile:
     kw = r"\b" + idleany("keyword", get_keywords()) + r"\b"
 
     iostream = r"([^.'\"\\#]\b|^)" + idleany("iostream", get_iostream()) + r"\b"
 
-    include = idleany("include", [r"#[^\n]*"])
+    #include = idleany("include", [r"#[^\n]*"])
 
     multiline_comment = r"/\*[^\*]*((\*(?!/))[^\*]*)*(\*/)?"
     comment = idleany("comment", [r"//[^\n]*", multiline_comment])
@@ -57,8 +60,8 @@ def make_pat() -> re.compile:
     dstring = r'"[^"\\\n]*(\\.[^"\\\n]*)*"?'
     string = idleany("string", [sstring, dstring])
 
-    reg:str = kw + "|" + iostream + "|" + comment + "|" + include + "|" + \
-              string + "|" + idleany("SYNC", [r"\n"])
+    reg:str = kw + "|" + iostream + "|" + comment + "|" + \
+              string + "|" + idleany("SYNC", [r"\n"])# + "|" + include
 
     return re.compile(reg, re.M|re.S)
 

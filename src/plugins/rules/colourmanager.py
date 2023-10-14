@@ -10,13 +10,14 @@ from .baserule import Rule
 class ColourConfig(dict):
     __slots__ = ()
 
-    def __init__(self) -> ColourConfig:
+    def __init__(self, kwargs:dict[str:dict[str:str]]={}) -> ColourConfig:
         super().__init__({
-                           "SYNC":       dict(),
-                           "TODO":       dict(),
-                           "error":      dict(),
-                           "hit":        dict(),
-                         })
+                           "SYNC":  dict(),
+                           "TODO":  dict(),
+                           "error": dict(),
+                           "hit":   dict(background="blue", foreground="white"),
+                           **kwargs
+                        })
 
 
 # /usr/lib/python3.10/idlelib/colorizer.py
@@ -37,6 +38,7 @@ class Colorizer(ColorDelegator):
         self.percolator:Percolator = Percolator(text)
         self.percolator.insertfilter(self)
         self.text:tk.Text = text
+        self.text.tag_raise("hit")
 
     def _add_tag(self, start, end, head, tag):
         tag:str = "SYNC" if tag == "SYNC" else tag.lower()

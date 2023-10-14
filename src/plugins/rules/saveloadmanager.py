@@ -157,6 +157,7 @@ class SaveLoadManager(Rule):
             data:bytes = file.read()
         try:
             data:str = data.decode("utf-8").replace("\r\n", "\n")
+            data:str = data.removesuffix("\n")
         except UnicodeError:
             title:str = "Unknown encoding"
             msg:str = "Error couldn't decode file."

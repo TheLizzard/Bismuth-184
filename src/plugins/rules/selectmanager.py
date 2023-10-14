@@ -65,6 +65,9 @@ class SelectManager(Rule):
         # This function is a wrapper for tk's TextClosestGap function
         # an example of it's implementation:
         # https://opensource.apple.com/source/tcl/tcl-107.40.1/tk/tk/library/text.tcl.auto.html
+        idx:str = text.index(f"@{x},{y}")
+        if text.compare(idx, "==", f"{idx} lineend"):
+            return idx
         return str(text.tk.call("::tk::TextClosestGap", text._w, x, y))
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:

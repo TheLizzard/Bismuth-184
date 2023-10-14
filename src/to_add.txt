@@ -2,6 +2,7 @@ Editor:
 * Implement the replace part of `FindReplaceManager`
 * `FindReplaceManager` should report matches of length 0 as an error?
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
+* java's `RunManager` should also handle testing.
 
 Terminal:
 * Windows support (pty_terminal)
@@ -10,6 +11,7 @@ Terminal:
 
 Notebook:
 * Clicking on the "+" should scroll to the end
+* Control-Tab/Control-Shift-Tab doesn't autoscroll the tab notches
 
 File Explorer:
 * Make the frame inside the `dummy_canvas` expand to fill the canvas' width/height in `BetterFrame`. This problem also appears in `Notebook`

@@ -56,7 +56,15 @@ class Rule:
                 self.widget.unbind(on, id)
         self.ids.clear()
 
+    def destroy(self) -> None:
+        if self.attached:
+            self.detach()
+        self.widget = None
+        self.plugin = None
+
     def __call__(self, event:tk.Event, on:str) -> str:
+        if not self.attached:
+            return None
         start:float = perf_counter()
         data = self.applies(event, on)
         if DEBUG: print(f"[DEBUG {perf_counter()-start:.2f}]: Checking if {on} applies to {self.__class__.__name__}")

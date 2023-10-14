@@ -17,6 +17,8 @@ class BasePlugin:
         self.rules:list[Rule] = []
 
     def attach(self) -> None:
+        assert getattr(self.widget, "plugin", None) is None, "already has a plugin"
+        self.widget.plugin:BasePlugin = self
         for rule in self.rules:
             Rule:type[rule] = rule.__class__
             libraries:tuple[str]|str = rule.__class__.REQUESTED_LIBRARIES
@@ -28,8 +30,18 @@ class BasePlugin:
             rule.attach()
 
     def detach(self) -> None:
+        if self.widget.plugin == self:
+            self.widget.plugin:BasePlugin = None
         for rule in self.rules:
             rule.detach()
+
+    def destroy(self) -> None:
+        if self.widget.plugin == self:
+            self.widget.plugin:BasePlugin = None
+        for rule in self.rules:
+            rule.destroy()
+        self.rules.clear()
+        self.widget:tk.Misc = None
 
     def add(self, Rule:type[Rule]) -> None:
         self.rules.append(Rule(self, self.widget))
@@ -65,12 +77,11 @@ ALL_MODIFIERS = ("shift", "caps", "control",
                  "alt", "mod2", "mod3", "mod4", "alt_gr",
                  "button1", "button2", "button3", "button4", "button5")
 
-SEL_TAG:str = "selected" # used in SelectManager
-
 
 class AllPlugin(BasePlugin):
     __slots__ = "text", "virtual_events"
     DEFAULT_CODE:str = ""
+    SEL_TAG:str = "selected" # used in SelectManager
 
     def __init__(self, text:tk.Text, rules:list[Rule]) -> PythonPlugin:
         self.virtual_events:VirtualEvents = VirtualEvents(text)
@@ -85,6 +96,7 @@ class AllPlugin(BasePlugin):
     def attach(self) -> None:
         self.virtual_events.paused:bool = False
         super().attach()
+        self.text.tag_raise(self.text.plugin.SEL_TAG)
 
     def detach(self) -> None:
         self.virtual_events.paused:bool = True
@@ -122,7 +134,7 @@ class AllPlugin(BasePlugin):
         Get the selection idxs. Guaranteed to be pure and ordered.
         If no selection exists, returns (index("insert"), index("insert"))
         """
-        tag_ranges:tuple[str,str] = self.text.tag_ranges(SEL_TAG)
+        tag_ranges:tuple[str,str] = self.text.tag_ranges(self.SEL_TAG)
         if len(tag_ranges) == 0:
             insert:str = self.text.index("insert")
             return insert, insert
@@ -137,13 +149,13 @@ class AllPlugin(BasePlugin):
         """
         self.remove_selection()
         if start != end:
-            self.text.tag_add(SEL_TAG, start, end)
+            self.text.tag_add(self.SEL_TAG, start, end)
 
     def remove_selection(self) -> None:
         """
         Removes the selection.
         """
-        self.text.tag_remove(SEL_TAG, "1.0", "end")
+        self.text.tag_remove(self.SEL_TAG, "1.0", "end")
 
     def delete_selection(self) -> Success:
         """

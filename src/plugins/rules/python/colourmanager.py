@@ -16,15 +16,15 @@ import keyword
 class ColourConfig(BaseColourConfig):
     __slots__ = ()
 
-    def __init__(self) -> ColourConfig:
-        super().__init__()
-        super().update({
-                         "comment":    dict(foreground="red"),
-                         "keyword":    dict(foreground="orange"),
-                         "builtin":    dict(foreground="#ff75ff"),
-                         "string":     dict(foreground="lime"),
-                         "definition": dict(foreground="cyan"),
-                       })
+    def __init__(self, kwargs:dict[str:dict[str:str]]={}) -> ColourConfig:
+        super().__init__({
+                           "comment":    dict(foreground="red"),
+                           "keyword":    dict(foreground="orange"),
+                           "builtin":    dict(foreground="#ff75ff"),
+                           "string":     dict(foreground="lime"),
+                           "definition": dict(foreground="cyan"),
+                           **kwargs
+                        })
 
 
 class ColourManager(BaseColourManager):

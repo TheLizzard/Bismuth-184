@@ -186,7 +186,7 @@ def encode_run(cmd_id:int, args:tuple[str], string_to_print:str|None) -> bytes:
     if string_to_print is None:
         string_to_print:bytes = b""
     else:
-        string_to_print:bytes = string_to_print.encode("utf-8") + b"\n"
+        string_to_print:bytes = string_to_print.encode("utf-8")
     return b"RUN" + cmd_id.to_bytes(2,"big") + len(args).to_bytes(2,"big") + \
            _encode_args(args) + string_to_print + b"\x00"
 
@@ -202,8 +202,8 @@ def encode_print(text:str) -> bytes:
 if __name__ == "__main__":
     XTERM_DEBUG:bool = True
     term:Terminal = Terminal()
-    term.pipe.write(encode_run(0, ["bash"], " Bash Started ".center(80, "=")))
-    term.pipe.write(encode_run(1, ["python3", "/home/thelizzard/.updater.py"], " Updater Started ".center(80, "=")))
+    term.pipe.write(encode_run(0, ["bash"], " Bash Started ".center(80, "=")+"\n"))
+    term.pipe.write(encode_run(1, ["python3", "/home/thelizzard/.updater.py"], " Updater Started ".center(80, "=")+"\n"))
     while not term.ended():
         data:bytes = term.pipe.read(100)
         print(data)

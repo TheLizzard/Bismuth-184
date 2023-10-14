@@ -49,10 +49,11 @@ class Pipe:
 
 
 class PipePair:
-    __slots__ = "self2other", "other2self"
+    __slots__ = "self2other", "other2self", "debug_log"
     taken_idxs:int = -1
 
     def __init__(self, self2other:str, other2self:str, *, owns:bool=True):
+        self.debug_log:list[str] = []
         if owns:
             os.mkfifo(self2other)
             os.mkfifo(other2self)
@@ -70,12 +71,19 @@ class PipePair:
     def close(self) -> None:
         self.self2other.close()
         self.other2self.close()
+        self.debug_log.append(f"Closed")
 
     def write(self, data:bytes) -> None:
         self.self2other.write(data)
+        self.debug_log.append(f"Wrote: {data!r}")
 
     def read(self, length:int) -> bytes:
-        return self.other2self.read(length)
+        data:bytes = self.other2self.read(length)
+        self.debug_log.append(f"Read: {data!r}")
+        return data
+
+    def dump_log(self) -> str:
+        return "PipeLog:\n\t" + "\n\t".join(self.debug_log)
 
     def reverse(self) -> tuple[str,str]:
         return self.other2self.path, self.self2other.path

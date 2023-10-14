@@ -42,7 +42,7 @@ class TabNotch(tk.Canvas):
         self.width:int = 0
         self.text:str = None
         super().bind("<Button-1>", lambda e: master.clicked(self), add=True)
-        super().bind("<Button-2>", lambda e: master.close(self))
+        super().bind("<Button-2>", lambda e: master.close(self), add=True)
 
     def rename(self, text:str) -> None:
         if self.text == text:
@@ -77,9 +77,10 @@ class TabNotch(tk.Canvas):
 
 class TabNotches(BetterFrame):
     __slots__ = "add_notch", "length", "notebook", "notches", "tmp_notch", \
-                "notch_dragging", "dragging", "dragx"
+                "notch_dragging", "dragging", "dragx", "on_reshuffle"
 
     def __init__(self, notebook:Notebook) -> TabNotches:
+        self.on_reshuffle:Function[None] = lambda: None
         self.notebook:Notebook = notebook
         super().__init__(notebook, bg=NOTCH_BG, hscroll=True, vscroll=False,
                          HScrollBarClass=BetterScrollBarHorizontal,
@@ -152,6 +153,7 @@ class TabNotches(BetterFrame):
             self.tmp_notch.width=width
             self.tmp_notch.config(width=width)
             idx:int = self.notches.index(self.notch_dragging)
+            self.tmp_notch.page = self.notch_dragging.page
             self.tmp_notch.grid(row=1, column=idx)
             self.tmp_notch.idx:int = idx
             tk.Misc.lift(self.notch_dragging)
@@ -181,6 +183,7 @@ class TabNotches(BetterFrame):
                  tuple(range(self.tmp_notch.idx, idx+1)):
             self.notches[i].grid(row=1, column=i)
         self.tmp_notch.idx:int = idx
+        self.on_reshuffle()
 
     def remove(self, notch:TabNotch) -> None:
         assert notch in self.notches, "InternalError"
@@ -189,6 +192,12 @@ class TabNotches(BetterFrame):
         for i in range(idx, len(self.notches)):
             self.notches[i].grid(row=1, column=i)
 
+
+CONTROL_T:bool = False
+CONTROL_W:bool = False
+TAB_CONTROLS:bool = True
+CONTROL_NUMBERS_CONTROLS:bool = False
+CONTROL_NUMBERS_RESTRICT:bool = False
 
 class NotebookPage:
     __slots__ = "notebook", "frame", "notch"
@@ -200,9 +209,34 @@ class NotebookPage:
 
     def add_frame(self, frame:tk.Frame) -> NotebookPage:
         frame.pack(in_=self.frame, fill="both", expand=True)
-        #frame.bind("<Control-Key><Tab>", self.notebook.switch_next_tab)
-        frame.bind("<Control-Tab>", self.notebook.switch_next_tab)
-        frame.bind("<Control-ISO_Left_Tab>", self.notebook.switch_prev_tab)
+        if TAB_CONTROLS:
+            #frame.bind("<Control-Key><Tab>", self.notebook.switch_next_tab)
+            frame.bind("<Control-Tab>", self.notebook.switch_next_tab, add=True)
+            frame.bind("<Control-ISO_Left_Tab>", self.notebook.switch_prev_tab,
+                       add=True)
+        if CONTROL_NUMBERS_CONTROLS:
+            for i in range(1, 10):
+                on:str = f"<Control-KeyPress-{i}>"
+                frame.bind(on, self.notebook.control_numbers, add=True)
+        if CONTROL_T:
+            def control_t(event:tk.Event) -> str:
+                if event.state&1:
+                    print("Control-Shift-t not implemented.")
+                    return ""
+                self.notebook.event_generate("<<Tab-Create>>")
+                return "break"
+            frame.bind("<Control-t>", control_t, add=True)
+            frame.bind("<Control-T>", control_t, add=True)
+        if CONTROL_W:
+            def control_w(event:tk.Event) -> str:
+                kwargs:dict = dict(state=event.state, x=event.x, y=event.y)
+                if (event.state&1) or (self.notebook.curr_page is None):
+                    self.notebook.event_generate("<<Close-All>>", **kwargs)
+                    return ""
+                self.notebook.tab_destroy(self.notebook.curr_page)
+                return "break"
+            frame.bind("<Control-w>", control_w, add=True)
+            frame.bind("<Control-W>", control_w, add=True)
         return self
 
     def rename(self, title:str) -> NotebookPage:
@@ -228,11 +262,12 @@ class Notebook(tk.Frame):
     def __init__(self, master:tk.Misc) -> Notebook:
         self.pages:list[NotebookPage] = []
         self.curr_page:NotebookPage = None
-        self.on_try_close = None
+        self.on_try_close:Function[NotebookPage,Break] = lambda page: False
 
         super().__init__(master, **WIDGET_KWARGS, bg="black")
         self.notches:TabNotches = TabNotches(self)
         self.notches.pack(fill="both")
+        self.notches.on_reshuffle = self.update_pages_list
         self.bottom:tk.Frame = tk.Frame(self, **WIDGET_KWARGS, bg="black")
         self.bottom.pack(fill="both", expand=True)
 
@@ -285,23 +320,48 @@ class Notebook(tk.Frame):
             return self.pages[idx%len(self.pages)]
 
     def tab_destroy(self, page:NotebookPage) -> None:
-        if self.on_try_close is not None:
-            res:bool = self.on_try_close(page)
-            if res:
-                return None
+        if self.on_try_close(page):
+            return None
         if self.curr_page == page:
-            self.switch_prev_tab()
+            if self.pages[0] == page:
+                self.switch_next_tab()
+            else:
+                self.switch_prev_tab()
         assert self.curr_page != page, "SanityCheck"
         assert self.curr_page in self.pages+[None], "SanityCheck"
         page._close()
         self.pages.remove(page)
         self.notches.remove(page.notch)
 
+    def update_pages_list(self) -> None:
+        # TabNotches._reshuffle shuffled the pages so now we have to
+        #  update self.pages
+        self.pages[:] = [n.page for n in self.notches.notches \
+                         if n != self.notches.add_notch]
+
+    def control_numbers(self, event:tk.Event) -> str:
+        number:str = getattr(event, "keysym", None)
+        if not isinstance(number, str):
+            return None
+        if number not in set("123456789"):
+            return None
+        if CONTROL_NUMBERS_RESTRICT:
+            idx:int = min(len(self.pages), int(number)) - 1
+        else:
+            idx:int = int(number) - 1
+        if not (0 <= idx < len(self.pages)):
+            return None
+        self.pages[idx].focus()
+        return "break"
+
 
 if __name__ == "__main__":
     page_to_text = {}
 
-    def add_tab() -> None:
+    def add_tab(_:tk.Event=None) -> None:
+        """
+        The + button is pressed. Feel free to not do anything here.
+        """
         t = tk.Text(notebook, bg="black", fg="white", insertbackground="white",
                     takefocus=False, highlightthickness=0, bd=0)
         t.insert("end", len(notebook.pages)+1)
@@ -310,35 +370,51 @@ if __name__ == "__main__":
         page.rename(title=f"Tab number {len(notebook.pages)}")
         page.add_frame(t).focus()
 
-    def selected(e) -> None:
+    def selected(_:tk.Event=None) -> None:
+        """
+        Do what you will.
+        """
         if notebook.curr_page is None:
             return None
         page_to_text[notebook.curr_page].focus_set()
 
-    def on_try_close(page) -> bool:
-        for i, p in enumerate(page_to_text.keys()):
-            if p == page:
-                if i%2:
-                    return True
-                else:
-                    page_to_text.pop(page)
-                    return False
+    def on_try_close(page) -> Break:
+        """
+        Return True to stop the tab from being closed.
+        """
+        return notebook.pages.index(page)%2
+
+    def close_all(event:tk.Event) -> None:
+        """
+        Control-Shift-w was pressed or Control-w and there are no more
+        tabs to close. Feel free to do nothing here.
+        """
+        if event.state&1:
+            print("Control-Shift-w")
+        else:
+            print("Closing notebook as no tabs are open")
+        root.destroy()
+
+    # Control-Tab and Control-Shift-Tab
+    TAB_CONTROLS:bool = True
+    # Control-{number} switches tabs
+    CONTROL_NUMBERS_CONTROLS:bool = True
+    # What to do with Control-5 if there are only 2 tabs open
+    CONTROL_NUMBERS_RESTRICT:bool = False
+    # Should Control-t/Control-w
+    CONTROL_T:bool = True
+    CONTROL_W:bool = True
 
     root = tk.Tk()
     notebook = Notebook(root)
     notebook.pack(fill="both", expand=True)
     notebook.on_try_close = on_try_close
-
-    notebook.bind("<<Tab-Create>>", lambda e: add_tab())
     notebook.bind("<<Tab-Switched>>", selected)
+    notebook.bind("<<Tab-Create>>", add_tab)
+    notebook.bind("<<Close-All>>", close_all)
 
-    add_tab()
-    add_tab()
-    add_tab()
-    add_tab()
-    add_tab()
+    for i in range(5):
+        add_tab()
 
-    nb = notebook
-    nts = nb.notches
-
+    nb, nts = notebook, notebook.notches
     root.mainloop()

@@ -31,6 +31,7 @@ SetWindowPos.argtypes = (HWND, HWND, INT, INT, INT, INT, UINT)
 SetWindowPos.restype = BOOL
 SetWindowPos.errcheck = _errcheck_not_zero
 
+# TODO: https://youtu.be/1YGD94lSor8?si=EE-p__2fh9Ws5_X4&t=1526
 DeferWindowPos = ctypes.windll.user32.DeferWindowPos
 DeferWindowPos.argtypes = (HDWP, HWND, HWND, INT, INT, INT, INT, UINT)
 DeferWindowPos.restype = BOOL

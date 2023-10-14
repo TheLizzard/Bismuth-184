@@ -323,7 +323,7 @@ class BetterTk(tk.Frame):
                  withdraw:bool=False, **kwargs):
         self.settings = settings
         self.settings.started_using()
-        self._allow_ctrl_w:bool = True
+        self.allow_ctrl_w:bool = True
         self._overrideredirect:bool = False
 
         self.root = NoTitlebarTk(master, **kwargs)
@@ -411,7 +411,12 @@ class BetterTk(tk.Frame):
         # This is actually needed otherwise sometimes the window
         #    doesn't autoresize to child widgets needing more than
         #    200 pixels of height. I have no clue why
-        self.root.update() # DON'T TOUCH
+        # def inner() -> None:
+        #     self.root.geometry("")
+        #     self.root.quit()
+        # self.root.after(100, inner)
+        # self.root.mainloop()
+        self.root.update()     # DON'T TOUCH
         self.root.geometry("") # DON'T TOUCH
 
         if master is None:
@@ -472,7 +477,9 @@ class BetterTk(tk.Frame):
         while (not isinstance(widget, BetterTk)) and (widget.master is not None):
             widget:tk.Misc = widget.master
 
-        if getattr(widget, "_allow_ctrl_w", False):
+        if widget == self.root:
+            widget:tk.Misc = self
+        if getattr(widget, "allow_ctrl_w", False):
             widget.generate_destroy()
 
     def generate_destroy(self) -> None:
@@ -574,14 +581,6 @@ class BetterTk(tk.Frame):
 
     def check_parent_titlebar(self, event:tk.Event) -> bool:
         return event.widget not in self.buttons
-
-    @property
-    def allow_ctrl_w(self) -> bool:
-        return self._allow_ctrl_w
-
-    @allow_ctrl_w.setter
-    def allow_ctrl_w(self, allowed:bool) -> None:
-        self._allow_ctrl_w:bool = allowed
 
     @property
     def custom_buttons(self) -> [CustomButton, CustomButton, ...]:
@@ -872,33 +871,25 @@ class ResizableWindow:
 
     def resize_east(self) -> (int, int, int, int):
         x = self.betterroot.root.winfo_pointerx()
-        new_width = x - self.currentx
-        if new_width < MIN_WIDTH:
-            new_width = MIN_WIDTH
+        new_width = max(x-self.currentx, MIN_WIDTH)
         return new_width, None, None, None
 
     def resize_west(self) -> (int, int, int, int):
         x = self.betterroot.root.winfo_pointerx()
-        dx = self.currentx - x
-        if dx < MIN_WIDTH - self.current_width:
-            dx = MIN_WIDTH - self.current_width
+        dx = max(self.currentx-x, MIN_WIDTH-self.current_width)
         new_width = self.current_width + dx
-        return new_width, None, self.currentx - dx, None
+        return new_width, None, self.currentx-dx, None
 
     def resize_south(self) -> (int, int, int, int):
         y = self.betterroot.root.winfo_pointery()
-        new_height = y - self.currenty
-        if new_height < MIN_HEIGHT:
-            new_height = MIN_HEIGHT
+        new_height = max(y-self.currenty, MIN_HEIGHT)
         return None, new_height, None, None
 
     def resize_north(self) -> (int, int, int, int):
         y = self.betterroot.root.winfo_pointery()
-        dy = self.currenty - y
-        if dy < MIN_HEIGHT - self.current_height:
-            dy = MIN_HEIGHT - self.current_height
+        dy = max(self.currenty-y, MIN_HEIGHT-self.current_height)
         new_height = self.current_height + dy
-        return None, new_height, None, self.currenty - dy
+        return None, new_height, None, self.currenty-dy
 
     def update_resizing_params(self, _list:list, _tuple:tuple):
         """
@@ -950,7 +941,7 @@ class DraggableWindow:
 
 
 # Example 1:
-if __name__ == "__main__a":
+if __name__ == "__main__":
     root = BetterTk()
     root.title("Example 1")
     root.geometry("400x400")

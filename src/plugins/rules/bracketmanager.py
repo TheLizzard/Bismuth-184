@@ -53,8 +53,8 @@ class BracketManager(Rule):
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
         if event.state&CTRL:
             return False
-        if (event.state&ALT) and (not on.startswith("alt-")):
-            return False
+        # if (event.state&ALT) and (not on.startswith("alt-")):
+        #     return False
         if on == "backspace":
             before, after = self.text.get("insert -1c", "insert +1c")
             if before not in self.BRACKETS_DICT:

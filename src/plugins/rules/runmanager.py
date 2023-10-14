@@ -21,6 +21,7 @@ class RunManager(Rule):
     CD:list[str] = ["cd", "{folder}"]
     COMPILE:list[str] = None
     RUN:list[str] = None
+    TEST:list[str] = None # No key binding yet
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
         evs:tuple[str] = (
@@ -42,6 +43,9 @@ class RunManager(Rule):
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
         data:str = None
         if on == "<explorer-set-cwd>":
+            if len(event.data) == 0:
+                print("[WARNING]: <explorer-set-cwd> had no data!")
+                return False
             data:str = event.data[0]
         return event.state&SHIFT, data, True
 
@@ -77,42 +81,49 @@ class RunManager(Rule):
 
         if (self.term is None) or (not self.term.running):
             self.term = TerminalTk(self.widget)
-            self.term.print(" Starting ".center(80, "="))
-            #self.term.iqueue(0, ["echo", " Starting ".center(80, "=")], None)
+            print_str:str = " Starting ".center(80, "=") + "\n"
         else:
             self.term.cancel_all()
             self.term.send_signal(b"KILL")
             self.term.send_ping(wait=True)
-            self.term.print(" Restarting ".center(80, "="))
-            #self.term.iqueue(0, ["echo", " Restarting ".center(80, "=")], None)
+            self.term.clear()
+            print_str:str = " Restarting ".center(80, "=") + "\n"
 
         self.term.topmost(True)
         self.term.topmost(False)
         self.term.focus_set()
-        self.cd()
+        self.cd(print_str=print_str)
         self.compile()
         self.execute(args)
 
-    def cd(self) -> None:
+    def cd(self, req_cwd:str=None, *, print_str:str="") -> None:
         if self.CD is None:
             return None
-        cwd:str = self.cwd or os.path.expanduser("~")
+        cwd:str = self.cwd or req_cwd or os.path.expanduser("~")
         command:tuple[str] = self.format(self.CD, {"folder":cwd})
-        self.term.iqueue(1, command, None)
+        self.term.iqueue(1, command, print_str)
 
-    def compile(self) -> None:
+    def compile(self, *, print_str:str="") -> None:
         if self.COMPILE is None:
             return None
         tmp:str = self.term.terminal.terminal.pipe.tmp.name
         command = self.format(self.COMPILE, {"file":self.text.filepath,
                                              "tmp":tmp})
-        self.term.iqueue(2, command, None, condition=(0).__eq__)
+        self.term.iqueue(2, command, print_str, condition=(0).__eq__)
 
-    def execute(self, args:Iterable[str]) -> None:
+    def execute(self, args:Iterable[str], *, print_str:str="") -> None:
         if self.RUN is None:
             return None
         tmp:str = self.term.terminal.terminal.pipe.tmp.name
         command = self.format(self.RUN, {"file":self.text.filepath,
+                                         "tmp":tmp}) + list(args)
+        self.term.iqueue(3, command, print_str, condition=(0).__eq__)
+
+    def test(self, args:Iterable[str], *, print_str:str="") -> None:
+        if self.RUN is None:
+            return None
+        tmp:str = self.term.terminal.terminal.pipe.tmp.name
+        command = self.format(self.TEST, {"file":self.text.filepath,
                                          "tmp":tmp}) + list(args)
         self.term.iqueue(3, command, None, condition=(0).__eq__)
 

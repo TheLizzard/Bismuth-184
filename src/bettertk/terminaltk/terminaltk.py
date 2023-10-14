@@ -134,7 +134,7 @@ class Buffer:
         self.msg_handler:Function = msg_handler
         with self.queue_lock:
             while len(self.msg_queue) != 0:
-                msg_handler(*self.msg_queue.pop())
+                msg_handler(*self.msg_queue.pop(0))
 
     def msg_queue_append(self, args:tuple) -> None:
         if self.msg_handler is None:
@@ -159,6 +159,9 @@ class TerminalFrame(tk.Frame):
 
     def print(self, string:str, *, end="\n") -> None:
         self.buffer.send_force_print(string+end)
+
+    def clear(self) -> None:
+        self.buffer.send_force_print("\r\x1b[2J\x1b[3J\x1b[H")
 
     def start(self) -> None:
         tk_wait_for_map(self)
@@ -229,6 +232,9 @@ class TerminalTk(BetterTk):
     def print(self, string:str, *, end="\n") -> None:
         self.terminal.print(string, end=end)
 
+    def clear(self) -> None:
+        self.terminal.clear()
+
     def cancel_all(self) -> None:
         self._iqueue.clear()
         self.terminal.cancel_all()
@@ -292,7 +298,7 @@ class TerminalTk(BetterTk):
     def handle_msg_loop(self) -> None:
         while len(self.terminal.buffer.msg_queue) > 0:
             with self.terminal.buffer.queue_lock:
-                self.handle_msg(*self.terminal.buffer.msg_queue.pop())
+                self.handle_msg(*self.terminal.buffer.msg_queue.pop(0))
         super().after(READ_MSG_RATE, self.handle_msg_loop)
 
     def send_ping(self, *, wait:bool) -> None:
@@ -326,6 +332,11 @@ class TerminalTk(BetterTk):
             super().title(f"TerminalTk[{name}]")
             self._proc_running()
         elif msg == "EXITCODE":
+            if self.running_state[0] != args[0]:
+                print(f"{self.running_something=}")
+                print(f"{self.running_state=}")
+                print(f"{msg=!r} {args=}")
+                print(self.terminal.terminal.pipe.dump_log())
             assert len(args) == 2, "SanityCheck"
             assert self.running_state[0] == args[0], "SanityCheck"
             self.running_state:tuple[int,int] = args
@@ -388,6 +399,6 @@ if __name__ == "__main__":
     term.queue(["python3"], " python3 started ".center(80, "="))
     """
     term:TerminalTk = TerminalTk(className="TerminalTk")
-    term.iqueue(0, ["bash"], " bash started ".center(80, "="))
-    term.iqueue(1, ["python3"], " python3 started ".center(80, "="),
+    term.iqueue(0, ["bash"], " bash started ".center(80, "=")+"\n")
+    term.iqueue(1, ["python3"], " python3 started ".center(80, "=")+"\n",
                 condition=(0).__eq__)

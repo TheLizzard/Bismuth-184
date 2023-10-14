@@ -28,6 +28,7 @@ class GridGiver:
         self.b1pressed:bool = False
         self.dragging:bool = False
         master.bind("<Motion>", self._mouse_moved, add=True)
+        master.bind("<B1-Motion>", self._mouse_moved, add=True)
         master.bind("<ButtonPress-1>", self._mouse_pressed, add=True)
         master.bind("<ButtonRelease-1>", self._mouse_released, add=True)
         master.bind("<<FocusOutExplorer>>", lambda e: self._select(None), add=True)

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from subprocess import Popen, PIPE
 from sys import stderr
 import tkinter as tk
 import os
@@ -310,8 +311,8 @@ class ExpandedExplorer(Explorer):
     # Open in explorer
     def open_in_explorer(self) -> None:
         if OPEN_IN_EXPLORER is not None:
-            path:str = self.selected.item.fullpath
-            os.system(OPEN_IN_EXPLORER.format(path=path))
+            cmd:str = OPEN_IN_EXPLORER.format(path=self.selected.item.fullpath)
+            Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
         self.changing:tk.Frame = None
 
 
@@ -329,7 +330,7 @@ if __name__ == "__main__":
     root.bind("<Button-3>", lambda e: menu.popup(root))
     raise SystemExit
     # """
-    from bindframe import BindFrame
+    from bettertk.betterframe import BindFrame
     import gridgiver
     import base_explorer
     import explorer
@@ -347,4 +348,4 @@ if __name__ == "__main__":
     f = BindFrame(root, bg="black", bd=0, highlightthickness=0)
     f.pack(fill="both", expand=True)
     e = ExpandedExplorer(f)
-    e.add("test/")
+    e.add("test/") # Note doesn't add anything if folder doesn't exist

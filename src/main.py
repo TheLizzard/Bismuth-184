@@ -2,32 +2,34 @@ from __future__ import annotations
 from tkinter.filedialog import askdirectory
 import tkinter as tk
 import os
+os.chdir(os.path.dirname(__file__))
 
 from file_explorer.expanded_explorer import ExpandedExplorer, isfolder
 from bettertk.betterframe import make_bind_frame
-from bettertk.notebook import Notebook
 from bettertk.betterframe import BetterFrame
 from bettertk.betterscrollbar import BetterScrollBarVertical, \
                                      BetterScrollBarHorizontal
 from bettertk.messagebox import askyesno, tell as telluser
 from bettertk import BetterTk
+from bettertk import notebook
 from plugins import VirtualEvents
 from settings.settings import curr as settings
 
 from plugins import plugins
 
-# tk.Event.state constants
-SHIFT:int = 1
-ALT:int = 8
-CTRL:int = 4
 
+notebook.CONTROL_T:bool = True
+notebook.CONTROL_W:bool = True
+notebook.TAB_CONTROLS:bool = True
+notebook.CONTROL_NUMBERS_CONTROLS:bool = True
+notebook.CONTROL_NUMBERS_RESTRICT:bool = False
 
 class App:
     __slots__ = "root", "explorer", "notebook", "text_to_page", \
                 "explorer_frame"
 
     def __init__(self) -> App:
-        self.text_to_page:dict[tk.Text:NotebookPage] = {}
+        self.text_to_page:dict[tk.Text:notebook.NotebookPage] = {}
         self.root:BetterTk = BetterTk()
         self.root.title("Bismuth-184")
         self.root.iconphoto(True, "sprites/Bismuth_184.ico")
@@ -38,16 +40,17 @@ class App:
                                       sashwidth=4)
         pannedwindow.pack(fill="both", expand=True)
 
-        self.notebook:Notebook = Notebook(pannedwindow)
+        self.notebook:notebook.Notebook = notebook.Notebook(pannedwindow)
         self.notebook.bind("<<Tab-Create>>", lambda _: self.new_tab())
         self.notebook.bind("<<Tab-Switched>>", self.change_selected_tab)
+        self.notebook.bind("<<Close-All>>", self.root_close)
         self.notebook.on_try_close = self.close_tab
 
         left_frame:tk.Frame = tk.Frame(pannedwindow, bd=0, bg="black",
                                        highlightthickness=0)
         add = tk.Button(left_frame, text="Add Folder", bg="black", fg="white",
                         activebackground="grey", activeforeground="white",
-                        highlightthickness=0, takefocus=False,
+                        highlightthickness=0, takefocus=False, width=15,
                         command=self.explorer_add_folder, relief="flat")
         add.grid(row=1, column=1, sticky="news")
         sep = tk.Canvas(left_frame, bg="grey", bd=0, highlightthickness=0,
@@ -58,7 +61,7 @@ class App:
         sep.grid(row=2, column=1, columnspan=3, sticky="news")
         rem = tk.Button(left_frame, text="Remove Folder", bg="black", fg="white",
                         activebackground="grey", activeforeground="white",
-                        highlightthickness=0, takefocus=False,
+                        highlightthickness=0, takefocus=False, width=15,
                         command=self.explorer_remove_folder, relief="flat")
         rem.grid(row=1, column=3, sticky="news")
         left_frame.grid_rowconfigure(3, weight=1)
@@ -98,7 +101,7 @@ class App:
             return "Untitled"
         return filepath.split("/")[-1].split("\\")[-1]
 
-    def page_to_text(self, page:NotebookPage) -> tk.Text:
+    def page_to_text(self, page:notebook.NotebookPage) -> tk.Text:
         if page is None:
             return None
         for text, p in self.text_to_page.items():
@@ -112,8 +115,6 @@ class App:
         text.filesystem_data:str = ""
         text.save_module:bool = True
         text.filepath:str = filepath
-        text.bind("<Control-W>", self.control_w)
-        text.bind("<Control-w>", self.control_w)
         page = self.notebook.tab_create().add_frame(text)
         self.text_to_page[text] = page
         page.focus()
@@ -144,8 +145,7 @@ class App:
                 if old is not None:
                     old.detach()
                 # Attach the new
-                text.plugin = Plugin(text)
-                text.plugin.attach()
+                Plugin(text).attach()
                 break
 
     def change_selected_tab(self, event:tk.Event=None) -> None:
@@ -159,14 +159,6 @@ class App:
             filename:str = f"*{filename}*"
         self.text_to_page[event.widget].rename(filename)
 
-    def control_w(self, event:tk.Event) -> str:
-        if (event.state&SHIFT) or (self.notebook.curr_page is None):
-            self.root_close()
-            return ""
-        # event.widget is useless here for some reason
-        self.notebook.tab_destroy(self.notebook.curr_page)
-        return "break"
-
     def close_tab(self, page:NotebookPage) -> bool:
         text:tk.Text = self.page_to_text(page)
         block:bool = False
@@ -177,7 +169,11 @@ class App:
                                  center=True, icon="warning",
                                  center_widget=text)
         if not block:
+            plugin:Plugin = getattr(text, "plugin", None)
+            if plugin is not None:
+                text.plugin.destroy()
             self.text_to_page.pop(text)
+            text.destroy()
         return block
 
     def open_tab_explorer(self, _:tk.Event) -> None:
@@ -197,6 +193,7 @@ class App:
         else:
             with open(event.widget.filepath, "br") as file:
                 filesystem_data:bytes = file.read().replace(b"\r\n", b"\n")
+                filesystem_data:bytes = filesystem_data.removesuffix(b"\n")
         if event.widget.filesystem_data.encode("utf-8") != filesystem_data:
             title:str = "Merge conflict"
             msg:str = "The file has been modified on the filesystem.\n" \
@@ -223,7 +220,7 @@ class App:
         self.plugin_manage(event.widget)
 
     # Handle the get/set state
-    def root_close(self) -> None:
+    def root_close(self, event:tk.Event=None) -> str:
         _, x, y = self.root.geometry().split("+")
         added, expanded = self._get_explorer_state()
         true_explorer_frame:tk.Frame = self.explorer_frame.master_frame
@@ -238,6 +235,7 @@ class App:
         settings.window.update(focused_text=curr_text_path)
         settings.save()
         self.root.destroy()
+        return "break"
 
     def _get_notebook_state(self) -> list[tuple]:
         opened:list[tuple] = []
@@ -286,6 +284,7 @@ class App:
                 if os.access(file, os.R_OK):
                     with open(file, "rb") as fd:
                         filedata:bytes = fd.read().replace(b"\r\n", b"\n")
+                        filedata:bytes = filedata.removesuffix(b"\n")
                         problem:bool = saved.encode("utf-8") != filedata
                 if problem:
                     title:str = "Merge Conflict"

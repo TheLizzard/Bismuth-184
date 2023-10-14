@@ -369,6 +369,9 @@ class Item:
         assert self.master is not None, "Root(None) has no idx"
         # Even if self.idx hasn't changed, indentation might have changed
         self.idx.dirty:bool = True
+        # If we are root's children, don't reorder us
+        if self.master.master is None:
+            return None
         _newidx:int = self.master.get_idx_insert(self)
         if self.idx.value == _newidx:
             return None
