@@ -225,7 +225,7 @@ class NoTitlebarTk:
         if master is None:
             self.root = CleanupTk(**kwargs)
         elif isinstance(master, (tk.Misc, NoTitlebarTk)):
-            self.wait_mapped(master)
+            self.wait_for_func(True, master.winfo_ismapped)
             self.root = CleanupToplevel(master, **kwargs)
         else:
             raise ValueError("Invalid `master` argument. It must be " \
@@ -244,10 +244,10 @@ class NoTitlebarTk:
                 setattr(self, attribute_name, attribute)
 
         self.display:DISPLAY = self._get_display(master)
-        self.wait_mapped(self.root)
+        self.wait_for_func(True, self.root.winfo_ismapped)
         self.window:WINDOW = self._get_parent(self.root.winfo_id())
         self._overrideredirect()
-        self.wait_mapped(self.root)
+        self.wait_for_func(True, self.root.winfo_ismapped)
 
     def _get_display(self, widget:tk.Misc) -> DISPLAY:
         self.root.cleanup = self.cleanup
@@ -312,16 +312,6 @@ class NoTitlebarTk:
         XAddToSaveSet(self.display, child)
         XFlush(self.display) # Might be unneeded?
 
-    @staticmethod
-    def wait_mapped(widget:tk.Misc) -> None:
-        def inner() -> None:
-            if widget.winfo_ismapped():
-                widget.quit()
-            else:
-                widget.after(100, inner)
-        widget.after(100, inner)
-        widget.mainloop()
-
     """
     def transparentcolor(self, colour:str) -> None:
         vinfo = XVISUALINFO()
@@ -359,43 +349,59 @@ class NoTitlebarTk:
         return self.root.attributes(*args)
     wm_attributes = attributes
 
-    def fullscreen(self) -> None:
+    def fullscreen(self, *, wait:bool=False) -> None:
+        assert not wait, "NotImplemented"
         if self._fullscreen:
             return None
         self._fullscreen:bool = True
         self.notmaximised()
         self.root.attributes("-fullscreen", True)
 
-    def notfullscreen(self) -> None:
+    def notfullscreen(self, *, wait:bool=False) -> None:
+        assert not wait, "NotImplemented"
         if not self._fullscreen:
             return None
         self._fullscreen:bool = False
         self.root.attributes("-fullscreen", False)
 
-    def toggle_fullscreen(self) -> None:
+    def toggle_fullscreen(self, *, wait:bool=False) -> None:
         if self._fullscreen:
-            self.notfullscreen()
+            self.notfullscreen(wait=wait)
         else:
-            self.fullscreen()
+            self.fullscreen(wait=wait)
 
-    def maximised(self) -> None:
+    def maximised(self, *, wait:bool=False) -> None:
         if self._maximised:
             return None
         self._maximised:bool = True
         self.notfullscreen()
         self.root.attributes("-zoomed", True)
+        if wait:
+            self.wait_for_func(True, self.root.attributes, "-zoomed")
 
-    def notmaximised(self) -> None:
+    def notmaximised(self, *, wait:bool=False) -> None:
         if not self._maximised:
             return None
         self._maximised:bool = False
         self.root.attributes("-zoomed", False)
+        if wait:
+            self.wait_for_func(False, self.root.attributes, "-zoomed")
 
-    def toggle_maximised(self) -> None:
+    def toggle_maximised(self, *, wait:bool=False) -> None:
         if self._maximised:
-            self.notmaximised()
+            self.notmaximised(wait=wait)
         else:
-            self.maximised()
+            self.maximised(wait=wait)
+
+    def wait_for_func(self, waiting_for:T, func:Function[Args,T], *args:Args):
+        def inner() -> None:
+            if func(*args) == waiting_for:
+                self.root.quit()
+            else:
+                self.root.after(10, inner)
+        if func(*args) != waiting_for:
+            inner()
+            self.root.mainloop()
 
 
 class Draggable(NoTitlebarTk):

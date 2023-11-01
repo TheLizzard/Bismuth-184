@@ -432,13 +432,13 @@ class BetterTk(tk.Frame):
         except KeyError:
             return self
 
-    def fullscreen(self) -> None:
-        self.root.fullscreen()
+    def fullscreen(self, *, wait:bool=False) -> None:
+        self.root.fullscreen(wait=wait)
 
-    def notfullscreen(self) -> None:
-        self.root.notfullscreen()
+    def notfullscreen(self, *, wait:bool=False) -> None:
+        self.root.notfullscreen(wait=wait)
 
-    def toggle_fullscreen(self, event:tk.Event=None) -> None:
+    def toggle_fullscreen(self, event:tk.Event=None, *, wait:bool=False):
         """
         Toggles fullscreen.
         """
@@ -447,15 +447,15 @@ class BetterTk(tk.Frame):
             # Make sure that we didn't double click something else
             if not self.check_parent_titlebar(event):
                 return None
-        self.root.toggle_fullscreen()
+        self.root.toggle_fullscreen(wait=wait)
 
-    def maximised(self) -> None:
-        self.root.maximised()
+    def maximised(self, *, wait:bool=False) -> None:
+        self.root.maximised(wait=wait)
 
-    def notmaximised(self) -> None:
-        self.root.notmaximised()
+    def notmaximised(self, *, wait:bool=False) -> None:
+        self.root.notmaximised(wait=wait)
 
-    def toggle_maximised(self, event:tk.Event=None) -> None:
+    def toggle_maximised(self, event:tk.Event=None, *, wait:bool=False) -> None:
         """
         Toggles maximised.
         """
@@ -466,7 +466,7 @@ class BetterTk(tk.Frame):
                 return None
         if self.resizable_window.resizable_horizontal and \
            self.resizable_window.resizable_vertical:
-            self.root.toggle_maximised()
+            self.root.toggle_maximised(wait=wait)
 
     def maybe_destroy(self, event:tk.Event) -> None:
         widget:tk.Misc = event.widget

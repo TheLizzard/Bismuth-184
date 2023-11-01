@@ -124,6 +124,8 @@ class XTermTerminal(BaseTerminal):
         if into is None:
             command:str = f"xterm {args}"
         else:
+            # into.config(takefocus=True)
+            # into.focus_set()
             command:str = f"xterm -into {into.winfo_id()} {args}"
         self.run(command, env=os.environ|dict(force_color_prompt="yes"))
         if XTERM_DEBUG: Thread(target=self.debug_proc_end, daemon=True).start()

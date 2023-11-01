@@ -22,7 +22,7 @@ DEFAULTS:str = """
     "notebook": {
                   "width": 900,
                   "open": []
-                }
+                },
     "editor":   {
                   "selectmanager": {
                                      "bg": "#ff4500"

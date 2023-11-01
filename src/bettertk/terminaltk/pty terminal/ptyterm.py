@@ -2,7 +2,9 @@ from __future__ import annotations
 from threading import Thread, Lock
 from subprocess import Popen
 import pty, fcntl, termios
+from tkinter import font
 from time import sleep
+import tkinter as tk
 import ctypes
 import os
 
@@ -81,27 +83,161 @@ INT_TO_COLOUR = {0:"black",
 
 
 class TerminalScreen:
-    __slots__ = "screen", "width", "height"
+    __slots__ = "text", "queue", "cursor_tags", "width", "height"
 
-    def __init__(self, size:(int,int)) -> None:
+    def __init__(self, text:tk.Text, size:(int,int)) -> None:
+        assert isinstance(text, tk.Text), "TypeError"
+        self.text:tk.Text = text
+        self.text.config(width=size[0], height=size[1])
+        self.text.bind("<KeyPress>", self.key_pressed)
+        self.config_tags()
+        self.queue:list[tuple[bool,str]] = []
         self.resize(*size)
+        self.apply_queue()
 
+    def config_tags(self) -> None:
+        # Font magic
+        kwargs = font.nametofont(self.text.cget("font")).actual()
+        kwargs["size"] = kwargs["size"]+2
+        self.text.config(font=font.Font(self.text, **kwargs))
+        bold = font.Font(self.text, **{**kwargs, "weight":"bold"})
+        italic = font.Font(self.text, **{**kwargs, "slant":"italic"})
+        # Set up other stuff
+        self.cursor_tags:list[str] = []
+        self.text.mark_set("termcursor", "1.0")
+        # Tags
+        for number, colour in INT_TO_COLOUR.items():
+            self.text.tag_config(f"BG{number}", background=colour)
+            self.text.tag_config(f"FG{number}", foreground=colour)
+        self.text.tag_config("UNDERLINED", underline=True)
+        self.text.tag_config("ITALIC", font=italic)
+        self.text.tag_config("BOLD", font=bold)
+
+    # Not thread-safe
     def resize(self, width:int, height=int) -> None:
         self.width:int = width
         self.height:int = height
 
-    def add(self, data:str, is_ansi:bool) -> None:
+    def write(self, data:str, is_ansi:bool) -> None:
+        self.queue.append((is_ansi, data))
+
+    # Inside tkinter's thread
+    def apply_queue(self) -> None:
+        #print(len(self.queue))
+        while len(self.queue) > 0:
+            self.handle_event(*self.queue.pop(0))
+        self.text.after(100, self.apply_queue)
+
+    def handle_event(self, is_ansi:bool, data:str) -> None:
         if not is_ansi:
-            print(repr(data)[1:-1], end="")
+            self.insert(data)
+        elif data == "\r":
+            self.text.mark_set("termcursor", "termcursor linestart")
         elif data == "\n":
-            print()
+            self.insert_newline()
+        elif data.startswith("FG") or data.startswith("BG"):
+            self.cursor_tags.append(data)
+        elif data in ("BOLD", "ITALIC", "UNDERLINED"):
+            self.cursor_tags.append(data)
+        elif data == "RESET_COLOUR":
+            self.cursor_tags.clear()
+
+        elif data.startswith("ERRASE"):
+            data:str = data.removeprefix("ERRASE")
+            if (data[0] == "K") and (data[1] != "?"):
+                data:int = int(data[1:])
+                if (data == 0) or (data == 2):
+                    self.text.delete("termcursor", "termcursor lineend")
+                if (data == 1) or (data == 2):
+                    chars:int = int(self.text.index("termcursor").split(".")[1])
+                    self.text.delete("termcursor linestart", "termcursor")
+                    self.text.insert("termcursor", " "*chars)
+                if data not in (0, 1, 2):
+                    print(f"[DEBUG] Unhandled ANSI: ERRASEK{data!r}")
+            elif (data[0] == "J") and (data[1] != "?"):
+                data:int = int(data[1:])
+                if data == 0:
+                    self.text.delete("termcursor", "end")
+                elif (data == 2) or (data == 3):
+                    line, char = self.get_cursor()
+                    self.text.delete("1.0", "end")
+                    if (line != 1) or (char != 1):
+                        self.assure(line=line, char=char)
+                else:
+                    print(f"[DEBUG] Unhandled ANSI: ERRASEJ{data!r}")
+            else:
+                print(f"[DEBUG] Unhandled ANSI: ERRASE{data!r}")
+
+        elif data.startswith("CURSOR_MOVE"):
+            data:str = data.removeprefix("CURSOR_MOVE")
+            row, column = data.split(";")
+            self.assure(line=int(row), char=int(column)-1)
+
+        elif data.startswith("INSERT_BLANK_CHARS"):
+            chars:int = int(data.removeprefix("INSERT_BLANK_CHARS"))
+            if self.text.compare("termcursor", "!=", "termcursor lineend"):
+                idx:str = self.text.index("termcursor")
+                self.text.insert("termcursor", " "*chars)
+                self.text.mark_set("termcursor", idx)
+
+        elif data.startswith("CURSOR_UP"):
+            n:int = int(data.removeprefix("CURSOR_UP"))
+            line, char = self.get_cursor()
+            self.assure(line=line-n, char=char)
+
+        elif data.startswith("CURSOR_DOWN"):
+            n:int = int(data.removeprefix("CURSOR_DOWN"))
+            line, char = self.get_cursor()
+            self.assure(line=line+n, char=char)
+
+        elif data.startswith("CURSOR_RIGHT"):
+            n:int = int(data.removeprefix("CURSOR_RIGHT"))
+            line, char = self.get_cursor()
+            self.assure(line=line, char=char+n)
+
+        elif data.startswith("CURSOR_LEFT"):
+            n:int = int(data.removeprefix("CURSOR_LEFT"))
+            line, char = self.get_cursor()
+            self.assure(line=line, char=char-n)
+
+        else:
+            print(f"[DEBUG] Unhandled ANSI: {data!r}")
+
+    def key_pressed(self, event:tk.Event) -> str:
+        print(f"[DEBUG]: {event}")
+        return "break"
+
+    def get_cursor(self) -> tuple[int,int]:
+        line, column = self.text.index("termcursor").split(".")
+        return int(line), int(column)
+
+    def assure(self, *, line:int, char:int) -> None:
+        line, char = max(0, line), max(0, char)
+        cline, cchar = self.text.index(f"{line}.{char}").split(".")
+        cline, cchar = int(cline), int(cchar)
+        if cline < line:
+            self.text.insert("end", "\n"*(line-cline))
+            crow:int = 0
+        if cchar < char:
+            self.text.insert(f"{line}.{char}", " "*(char-cchar))
+
+    def insert(self, data:str) -> None:
+        prevdata:str = self.text.get("termcursor", f"termcursor +{len(data)}c")
+        self.text.insert("termcursor", data, self.cursor_tags)
+        chars:int = (prevdata+"\n").find("\n")
+        self.text.delete("termcursor", f"termcursor +{chars}c")
+
+    def insert_newline(self) -> None:
+        if text.compare("termcursor +1l", "==", "end"):
+            self.text.insert("termcursor lineend", "\n")
+        self.text.mark_set("termcursor", f"termcursor +1l linestart")
 
 
 class PtyTerminal:
     __slots__ = "_master_pty", "_proc", "_screen", "_size", "_buffer"
 
-    def __init__(self, cmd:tuple[str], size:(int,int)=(80,24)) -> PtyTerminal:
-        self._screen:TerminalScreen = TerminalScreen(size)
+    def __init__(self, master:tk.Text, cmd:tuple[str], size:(int,int)=(80,24)):
+        self._screen:TerminalScreen = TerminalScreen(master, size)
         self._buffer:str = ""
         master_fd, slave_fd = pty.openpty()
         self._master_pty:PtyPeekaboo = PtyPeekaboo(master_fd)
@@ -146,7 +282,7 @@ class PtyTerminal:
         for string, is_ansi, rest in self._split_ansi_data(data):
             if len(string) == 0:
                 continue
-            self._screen.add(string, is_ansi)
+            self._screen.write(string, is_ansi)
         self._buffer:str = rest
 
     def _split_ansi_data(self, data:str) -> Iterable[(str,str)]:
@@ -162,15 +298,15 @@ class PtyTerminal:
             if data[:1] == "\n":
                 data:str = data[1:]
                 yield "\n", True, data
-            if data[:1] == "\x1b":
+            if data.startswith("\x1b"):
                 ansi, ansi_length = self._get_ansi(data)
-                if ansi.startswith("\x1b"):
-                    data:str = ansi+data[ansi_length:]
-                    continue
                 if ansi_length == 0:
                     return
                 if ansi_length == 1:
                     data:str = "\\x1b"+data[1:]
+                    continue
+                if ansi.startswith("\x1b"):
+                    data:str = ansi+data[ansi_length:]
                     continue
                 data:str = data[ansi_length:]
                 yield ansi, True, data
@@ -208,8 +344,10 @@ class PtyTerminal:
             return None, 1
         if data[1:3] in ("#3", "#4", "#5", "#6", "#8", "%@", "%G"):
             return None, 1
-        if data[1] in "()*+-./69Fclmno|}~":
+        if data[1] in "()*+-./69Flmno|}~":
             return None, 1
+        if data[1] == "c":
+            return "\x1b[m]\x1b[H\x1b[2J", 2
         if data[1] in "DEHMNOPVWXZ_\\":
             return None, 1
         if data[1] in "=>":
@@ -260,7 +398,9 @@ class PtyTerminal:
             data:str = data[2:]
             if len(data) == 0:
                 return None, 0
-            if data[0] == "u#>":
+            if data[0] in "u#>":
+                return None, 1
+            if data == "?":
                 return None, 1
             args, size = PtyTerminal._parse_args(data)
             size += 2
@@ -273,7 +413,7 @@ class PtyTerminal:
                     args = ("1",)+args
                 if len(args) != 2:
                     return None, 1
-                return "CURSOR_MOVE_RIGHT"+args[0], size
+                return "INSERT_BLANK_CHARS"+args[0], size
             if args[-1] == " @":
                 if len(args) == 1:
                     args = ("1",)+args
@@ -329,6 +469,8 @@ class PtyTerminal:
                     args = ("1","1")+args
                 if len(args) == 2:
                     args = (args[0], "1", args[1])
+                if args[0] == "":
+                    args = ("1", *args[1:])
                 if len(args) != 3:
                     return None, 1
                 return "CURSOR_MOVE"+";".join(args[:2]), size
@@ -396,8 +538,13 @@ class PtyTerminal:
                         return "", size
                 elif args[1] == "4":
                     _, width, height, _ = args
-                    return f"RESIZE_WINDOW{width};{height}", size
+                    return f"RESIZE_WINDOW_PIX{width};{height}", size
+                elif args[1] == "8":
+                    _, width, height, _ = args
+                    return f"RESIZE_WINDOW_CHR{width};{height}", size
             if args[-1] == "m":
+                if len(args) == 1:
+                    return "RESET_COLOUR", size
                 if (args[0] in "0") and (len(args) == 2):
                     return "RESET_COLOUR", size
                 if args[0].isdigit() and (len(args) == 2):
@@ -411,9 +558,9 @@ class PtyTerminal:
                     if digit == 4:
                         return f"UNDERLINED", size
                     if 30 <= digit <= 37:
-                        return f"FG{INT_TO_COLOUR[digit-30]}", size
+                        return f"FG{digit-30}", size
                     if 40 <= digit <= 47:
-                        return f"BG{INT_TO_COLOUR[digit-40]}", size
+                        return f"BG{digit-40}", size
                 if args == ("01", "31", "m"):
                     return f"\x1b[1m\x1b[31m", size
         return None, 1
@@ -451,9 +598,20 @@ class PtyTerminal:
 
 from os.path import dirname
 cmd = ["g++", f"{dirname(__file__)}/test.cpp"]
+#cmd = ["python3", "/media/thelizzard/C36D-8837/pokemon/hoster.py", "--https"]
+#cmd = ["echo", "\\x1b[\\n"]
 #cmd = ["bash"]
 
-pty_terminal = PtyTerminal(cmd)
+
+root = tk.Tk()
+text = tk.Text(root, bg="black", fg="white", insertbackground="white")
+text.pack(fill="both", expand=True)
+
+pty_terminal = PtyTerminal(text, cmd)
+
+root.mainloop()
+
+
 # pty_terminal.resize(width=50, height=24)
 #pty_terminal.write(b"less '/home/thelizzard/Downloads/pty terminal/test.cpp'\n")
 #pty_terminal.write(b"q")

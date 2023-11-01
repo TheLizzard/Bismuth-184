@@ -100,6 +100,7 @@ class TabNotches(BetterFrame):
         make_bind_frame(self)
         self.bind("<ButtonPress-1>", self.start_dragging, add=True)
         self.bind_all("<B1-Motion>", self.drag, add=True)
+        self.bind_all("<Motion>", self.drag, add=True)
         self.bind_all("<ButtonRelease-1>", self.end_dragging, add=True)
 
     def add(self) -> TabNotch:
@@ -118,6 +119,13 @@ class TabNotches(BetterFrame):
     def close(self, notch:TabNotch) -> None:
         if notch != self.add_notch:
             notch.page.close()
+
+    def remove(self, notch:TabNotch) -> None:
+        assert notch in self.notches, "InternalError"
+        idx:int = self.notches.index(notch)
+        self.notches.pop(idx)
+        for i in range(idx, len(self.notches)):
+            self.notches[i].grid(row=1, column=i)
 
     def start_dragging(self, event:tk.Event) -> None:
         if not isinstance(event.widget, TabNotch):
@@ -149,6 +157,7 @@ class TabNotches(BetterFrame):
             if abs(event.x-self.dragx) < NOT_DRAG_DIST:
                 return None
             self.dragging:bool = True
+            self.tmp_notch.x:int = self.get_start_x(self.notch_dragging)
             width:int = self.notch_dragging.winfo_width()
             self.tmp_notch.width=width
             self.tmp_notch.config(width=width)
@@ -160,37 +169,65 @@ class TabNotches(BetterFrame):
             self.notches[idx] = self.tmp_notch
 
         x:int = event.x_root - super().winfo_rootx()
-        idx:int = self.calculate_idx(x-self.dragx)
-        self._reshiffle(idx)
+        delta:int = self.calculate_idx_delta(x-self.dragx)
+        if delta != 0:
+            self._reshiffle(delta)
         self.notch_dragging.place(x=x-self.dragx, y=0)
         return "break"
 
+    def get_start_x(self, notch:TabNotch) -> int:
+        total:int = 0
+        for n in self.notches:
+            if n == notch:
+                return total
+            total += n.width
+        raise RuntimeError("InternalError: Notch not in self.notches???")
+
+    """
     def calculate_idx(self, x:int) -> int:
-        total_width:int = 0
+        total_width:float = 0
         for idx, notch in enumerate(self.notches):
-            total_width += notch.width>>1
-            if x < total_width:
+            if x < total_width+notch.width/2:
                 return idx
-            total_width += (notch.width>>1) + (notch.width&1)
+            total_width += notch.width
         return len(self.notches)-1
+    """
 
-    def _reshiffle(self, idx:int) -> None:
-        if idx == self.tmp_notch.idx:
-            return None
-        self.notches.pop(self.tmp_notch.idx)
-        self.notches.insert(idx, self.tmp_notch)
-        for i in tuple(range(idx, self.tmp_notch.idx+1)) + \
-                 tuple(range(self.tmp_notch.idx, idx+1)):
-            self.notches[i].grid(row=1, column=i)
-        self.tmp_notch.idx:int = idx
-        self.on_reshuffle()
+    def calculate_idx_delta(self, notch_start:int) -> int:
+        if self.tmp_notch.winfo_x() < self.notch_dragging.winfo_x():
+            # dragging =>
+            if self.tmp_notch == self.notches[-1]:
+                return 0
+            next_notch:TabNotch = self.notches[self.tmp_notch.idx+1]
+            notch_end:int = notch_start + self.notch_dragging.width
+            next_notch_start:int = self.tmp_notch.x + self.tmp_notch.width
+            if notch_end > next_notch_start+next_notch.width/2:
+                return +1
+            else:
+                return 0
+        else:
+            # dragging <=
+            if self.tmp_notch == self.notches[0]:
+                return 0
+            prev_notch:TabNotch = self.notches[self.tmp_notch.idx-1]
+            prev_notch_half:int = self.tmp_notch.x - prev_notch.width/2
+            if notch_start < prev_notch_half:
+                return -1
+            else:
+                return 0
 
-    def remove(self, notch:TabNotch) -> None:
-        assert notch in self.notches, "InternalError"
-        idx:int = self.notches.index(notch)
-        self.notches.pop(idx)
-        for i in range(idx, len(self.notches)):
+    def _reshiffle(self, delta:int) -> None:
+        idx:int = self.tmp_notch.idx
+        self.tmp_notch.idx += delta
+        self.swap(self.notches, idx, idx+delta)
+        self.tmp_notch.x += self.notches[idx].width * delta
+        for i in (idx, idx+delta):
             self.notches[i].grid(row=1, column=i)
+        self.on_reshuffle(idx, idx+delta)
+
+    @staticmethod
+    def swap(array:list, idxa:int, idxb:int):
+        array[idxa], array[idxb] = array[idxb], array[idxa]
 
 
 CONTROL_T:bool = False
@@ -333,11 +370,10 @@ class Notebook(tk.Frame):
         self.pages.remove(page)
         self.notches.remove(page.notch)
 
-    def update_pages_list(self) -> None:
+    def update_pages_list(self, idxa:int, idxb:int) -> None:
         # TabNotches._reshuffle shuffled the pages so now we have to
         #  update self.pages
-        self.pages[:] = [n.page for n in self.notches.notches \
-                         if n != self.notches.add_notch]
+        self.notches.swap(self.pages, idxa, idxb)
 
     def control_numbers(self, event:tk.Event) -> str:
         number:str = getattr(event, "keysym", None)
@@ -356,6 +392,24 @@ class Notebook(tk.Frame):
 
 
 if __name__ == "__main__":
+    def add_tab(title:str) -> None:
+        l = tk.Label(notebook, bg="black", fg="white", text=title)
+        notebook.tab_create().rename(title=title).add_frame(l).focus()
+
+    root = tk.Tk()
+    notebook = Notebook(root)
+    notebook.pack(fill="both", expand=True)
+    notebook.on_try_close = lambda p: False
+
+    add_tab("longgggggggggggggg")
+    add_tab("short")
+    add_tab("longgggggggggggggg2")
+
+    nb, nts = notebook, notebook.notches
+    root.mainloop()
+
+
+if __name__ == "__main__a":
     page_to_text = {}
 
     def add_tab(_:tk.Event=None) -> None:

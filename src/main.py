@@ -221,6 +221,10 @@ class App:
 
     # Handle the get/set state
     def root_close(self, event:tk.Event=None) -> str:
+        # Unmaximise window to get its width, height, x, y
+        self.root.notmaximised(wait=True)
+        self.root.update_idletasks()
+
         _, x, y = self.root.geometry().split("+")
         added, expanded = self._get_explorer_state()
         true_explorer_frame:tk.Frame = self.explorer_frame.master_frame

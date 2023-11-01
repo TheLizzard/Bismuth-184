@@ -145,3 +145,4 @@ src/file_explorer/tester.py
 src/bettertk/bettertk/flickering_test.py
 src/bettertk/terminaltk/test.py
 src/bettertk/terminaltk/sprites/copyrighted/
+src/bettertk/terminaltk/pty terminal/test.cpp

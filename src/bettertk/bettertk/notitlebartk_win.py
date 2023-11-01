@@ -140,14 +140,14 @@ class NoTitlebarTk:
         return self.root.attributes(*args)
     wm_attributes = attributes
 
-    def fullscreen(self) -> None:
+    def fullscreen(self, *, wait:bool=False) -> None:
         if self._fullscreen:
             return None
         self._fullscreen:bool = True
         self.root.attributes("-fullscreen", True)
     maximised = fullscreen
 
-    def notfullscreen(self) -> None:
+    def notfullscreen(self, *, wait:bool=False) -> None:
         if not self._fullscreen:
             return None
         self._fullscreen:bool = False
@@ -155,11 +155,11 @@ class NoTitlebarTk:
         self._overrideredirect()
     notmaximised = notfullscreen
 
-    def toggle_fullscreen(self) -> None:
+    def toggle_fullscreen(self, *, wait:bool=False) -> None:
         if self._fullscreen:
-            self.notfullscreen()
+            self.notfullscreen(wait=wait)
         else:
-            self.fullscreen()
+            self.fullscreen(wait=wait)
     toggle_maximised = toggle_fullscreen
 
     @property

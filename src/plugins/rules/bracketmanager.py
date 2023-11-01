@@ -86,9 +86,14 @@ class BracketManager(Rule):
 
     def open_bracket(self, open:str, close:str) -> Break:
         if open == close:
-            is_comment:str = self.plugin.is_inside("comment", "insert")
-            is_string:str = self.plugin.is_inside("string", "insert")
+            is_comment:bool = self.plugin.is_inside("comment", "insert")
+            is_string:bool = self.plugin.is_inside("string", "insert")
             if is_comment or is_string:
+                # For people (like me) who double press '"':
+                if self.plugin.is_inside(self.BACKET_HIGHLIGHT_TAG, "insert +1c"):
+                    self.text.event_generate("<<Move-Insert>>",
+                                             data=("insert +1c",))
+                    return True
                 return False
         start, end = self.plugin.get_selection()
         self.plugin.remove_selection()

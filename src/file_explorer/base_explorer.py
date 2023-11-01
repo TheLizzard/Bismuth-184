@@ -133,10 +133,10 @@ class FileSystem:
 
     def access(self, path:str) -> tuple[bool, bool, bool]:
         st:int = os.stat(path).st_mode
-        read:bool = (st&stat.S_IRGRP > 0)
-        write:bool = (st&stat.S_IWGRP > 0)
-        exec:bool = (st&stat.S_IXGRP > 0)
-        return (read, write, exec)
+        read:bool = st & (stat.S_IRGRP|stat.S_IRUSR)
+        write:bool = st & (stat.S_IWGRP|stat.S_IWUSR)
+        exec:bool = st & (stat.S_IXGRP|stat.S_IXUSR)
+        return bool(read), bool(write), bool(exec)
 
     def exists(self, path:str) -> bool:
         return os.path.exists(path)
