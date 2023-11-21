@@ -19,7 +19,7 @@ PONG_SIGNAL:bytes = b"#"
 
 
 if IS_WINDOWS:
-    raise NotImplementedError("Convert the command bellow to Windows")
+    ...
 elif IS_UNIX:
     XTERM_DEBUG:bool = False
     XTERM_KEY_BINDINGS:str = r" \n ".join((
@@ -48,6 +48,7 @@ elif IS_UNIX:
                        "scrollKey: true",
                        "omitTranslation: popup-menu",
                        "allowWindowOps: true",
+                       "bellOnReset: false",
                        # "ScrollBar: on",
                        # "xterm*sixelScrolling: on",
                        # f"xterm*scrollbar.thumb: {THUMB_SPRITE}",
@@ -59,7 +60,7 @@ elif IS_UNIX:
     XTERM_ARGS += f'-e {sys.executable} "{SLAVE_PATH}" "{{}}" "{{}}"'
     KONSOLE_ARGS = f'-e {sys.executable} "{SLAVE_PATH}" "{{}}" "{{}}"'
 else:
-    raise NotImplementedError("Don't know what this OS is")
+    ...
 
 
 class BaseTerminal:
@@ -167,8 +168,9 @@ class KonsoleTerminal(BaseTerminal):
 if IS_UNIX:
     Terminal:type = XTermTerminal
 else:
-    raise NotImplementedError("OS not implemented")
-assert issubclass(Terminal, BaseTerminal), "You must subclass BaseTerminal."
+    print('[WARNING]: (Terminal) NotImplementedError')
+    Terminal:type = type(None)
+assert issubclass(Terminal, BaseTerminal|None), "You must subclass BaseTerminal."
 
 
 def allisinstance(iterable:Iterable, T:type) -> bool:

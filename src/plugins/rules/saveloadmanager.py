@@ -160,9 +160,10 @@ class SaveLoadManager(Rule):
             data:str = data.removesuffix("\n")
         except UnicodeError:
             title:str = "Unknown encoding"
-            msg:str = "Error couldn't decode file."
+            msg:str = "Error couldn't open file."
             telluser(self.text, title=title, message=msg, icon="error",
                      center=True, center_widget=self.text)
+            self.text.after(10, self.text.event_generate, "<<Close-Tab>>")
             return None
         if self.text.compare("1.0", "!=", "end -1c"):
             self.text.delete("1.0", "end")

@@ -1,16 +1,22 @@
 Editor:
 * Implement the replace part of `FindReplaceManager`
 * `FindReplaceManager` should report matches of length 0 as an error?
+* `FindReplaceManager` Shift-Return
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
 * java's `RunManager` should also handle testing.
 * Control-Shift-s displays "are you sure" message if the file doesn't exist
 * `FindReplaceManager` removes hit tag when the user adds/removes text near the hit
+* If you can see end, pressing return should scroll to the end
+* Implement Home/End/Control-Up/Control-Down
+* Commenting a block with a comment inside it, uncomments the comment
 
 Terminal:
 * Windows support (pty_terminal)
 * Add settings window
 * Add a clear terminal button? (can't think of an icon for that)
 * Printing ANSI characters to resize the terminal doesn't work
+* XTerm:
+	- Ctrl-Shift-\ closes xterm without closing the `TerminalFrame`
 
 Notebook:
 * Clicking on the "+" should scroll to the end
@@ -20,6 +26,8 @@ File Explorer:
 * Make the frame inside the `dummy_canvas` expand to fill the canvas' width/height in `BetterFrame`. This problem also appears in `Notebook`
 * Save exec path on close?
 * Save CWD
+* Add a tooltip to all children of Root that show their full path
+* Unpredictable focusing
 
 Minor things/Low priority:
 * `WhiteSpaceManager` copies the indentation of the current line without considering that it might be fully enclosed in a bracket.

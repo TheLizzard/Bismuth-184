@@ -56,7 +56,10 @@ class BracketManager(Rule):
         # if (event.state&ALT) and (not on.startswith("alt-")):
         #     return False
         if on == "backspace":
-            before, after = self.text.get("insert -1c", "insert +1c")
+            around:str = self.text.get("insert -1c", "insert +1c")
+            if len(around) < 2:
+                return False
+            before, after = around
             if before not in self.BRACKETS_DICT:
                 return False
             if after != self.BRACKETS_DICT[before]:
@@ -88,12 +91,13 @@ class BracketManager(Rule):
         if open == close:
             is_comment:bool = self.plugin.is_inside("comment", "insert")
             is_string:bool = self.plugin.is_inside("string", "insert")
-            if is_comment or is_string:
-                # For people (like me) who double press '"':
+            if (is_comment and (open == "'")) or is_string:
+                # For people (like me) who double press ":
                 if self.plugin.is_inside(self.BACKET_HIGHLIGHT_TAG, "insert +1c"):
-                    self.text.event_generate("<<Move-Insert>>",
-                                             data=("insert +1c",))
-                    return True
+                    if self.text.get("insert", "insert +1c") == close:
+                        self.text.event_generate("<<Move-Insert>>",
+                                                 data=("insert +1c",))
+                        return True
                 return False
         start, end = self.plugin.get_selection()
         self.plugin.remove_selection()

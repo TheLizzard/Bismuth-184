@@ -43,7 +43,11 @@ class ClipboardManager(Rule):
                 selected:str = None
             else:
                 selected:str = self.text.get(start, end)
-            copied:str = self.text.clipboard_get()
+            try:
+                copied:str = self.text.clipboard_get()
+            except tk.TclError:
+                print("Clipboard contents too large")
+                return True
             # If they are the same, just move the cursor
             if selected == copied:
                 self.plugin.remove_selection()
@@ -51,7 +55,6 @@ class ClipboardManager(Rule):
             # else delete selected and insert the clipboard text
             else:
                 self.text.delete(start, end)
-                self.text.insert("insert", self.text.clipboard_get())
+                self.text.insert("insert", copied)
             return True
         raise RuntimeError(f"Unhandled {op} in {self.__class__.__name__}")
-

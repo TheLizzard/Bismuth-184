@@ -26,7 +26,10 @@ class Popup(BetterTk):
             assert center, "No point in passing in center_widget if " \
                            "center is False"
         self.block:bool = block
-        super().__init__(master)
+        if master is None:
+            super().__init__(className=str(icon))
+        else:
+            super().__init__(master)
         super().title(title)
         self.minimise_button.hide()
         super().resizable(False, False)

@@ -85,10 +85,15 @@ def string_to_c(data:str) -> CHAR_PTR:
     return ctypes.create_string_buffer(data.encode())
 
 libx11 = ctypes.cdll.LoadLibrary("libX11.so.6")
+try:
+    libx11fixes = ctypes.cdll.LoadLibrary("libXfixes.so.3")
+except OSError:
+    libx11fixes = None
 
 # Constants
 PropModeReplace = 0
 XA_ATOM = 4
+SHAPE_INPUT = 2
 
 ALLOCNONE = 0
 TRUECOLOR = 4
@@ -198,6 +203,25 @@ XClearArea.argtypes = (DISPLAY, WINDOW, INT, INT, UINT, UINT, BOOL)
 XClearArea.restype = INT
 XClearArea.errcheck = errcheck_not_zero
 
+XRECTANGLE = PTR
+XRECTANGLE_PTR = ctypes.POINTER(XRECTANGLE)
+XSERVERREGION = ULONG
+
+if libx11fixes is not None:
+    XFixesCreateRegion = libx11fixes.XFixesCreateRegion
+    XFixesCreateRegion.argtypes = (DISPLAY, XRECTANGLE_PTR, INT)
+    XFixesCreateRegion.restype = XSERVERREGION
+    XFixesCreateRegion.errcheck = errcheck_not_zero
+
+    XFixesDestroyRegion = libx11fixes.XFixesDestroyRegion
+    XFixesDestroyRegion.argtypes = (DISPLAY, XSERVERREGION)
+    XFixesDestroyRegion.restype = None
+
+    XFixesSetWindowShapeRegion = libx11fixes.XFixesSetWindowShapeRegion
+    XFixesSetWindowShapeRegion.argtypes = (DISPLAY, WINDOW, INT, INT, INT,
+                                           XSERVERREGION)
+    XFixesSetWindowShapeRegion.restype = None
+
 
 _display_owners:set[NoTitlebarTk] = set()
 DEBUG:bool = False
@@ -225,7 +249,7 @@ class NoTitlebarTk:
         if master is None:
             self.root = CleanupTk(**kwargs)
         elif isinstance(master, (tk.Misc, NoTitlebarTk)):
-            self.wait_for_func(True, master.winfo_ismapped)
+            self.wait_for_func(True, master.winfo_ismapped, tcl=master)
             self.root = CleanupToplevel(master, **kwargs)
         else:
             raise ValueError("Invalid `master` argument. It must be " \
@@ -248,6 +272,27 @@ class NoTitlebarTk:
         self.window:WINDOW = self._get_parent(self.root.winfo_id())
         self._overrideredirect()
         self.wait_for_func(True, self.root.winfo_ismapped)
+
+    def make_non_clickable(self, topmost:bool=True, notaskbar:bool=True):
+        # https://stackoverflow.com/a/50806584/11106801
+        # Everything except bindings work perfectly
+        assert libx11fixes is not None, "X11Fixes shared object not found"
+        if topmost:
+            self.root.attributes("-topmost", True)
+        if notaskbar:
+            self.root.attributes("-type", "splash")
+        region = XFixesCreateRegion(self.display, None, 0)
+        XFixesSetWindowShapeRegion(self.display, self.window, SHAPE_INPUT,
+                                   0, 0, region)
+        XFixesDestroyRegion(self.display, region)
+        XFlush(self.display)
+
+    """
+    def _change_shape(self) -> None:
+        # https://sites.ualberta.ca/dept/chemeng/AIX-43/share/man/info/en_US/a_doc_lib/x11/specs/pdf/shape.PDF
+        pass
+        # No clue what I am doing here or how to even import libx-shape
+    """
 
     def _get_display(self, widget:tk.Misc) -> DISPLAY:
         self.root.cleanup = self.cleanup
@@ -329,7 +374,8 @@ class NoTitlebarTk:
         XChangeWindowAttributes(self.display, self.window, CWCOLORMAP,
                                 ctypes.byref(attr))
         XFlush(self.display)
-    # Please kill me, it doesn't do anything for some reason"""
+    # Please kill me, it doesn't do anything for some reason
+    """
 
     def overrideredirect(self, boolean:bool=None) -> None:
         raise RuntimeError("This window must stay as `overrideredirect`")
@@ -393,15 +439,18 @@ class NoTitlebarTk:
         else:
             self.maximised(wait=wait)
 
-    def wait_for_func(self, waiting_for:T, func:Function[Args,T], *args:Args):
+    def wait_for_func(self, waiting_for:T, func:Function[Args,T], *args:Args,
+                      tcl:tk.Misc=None) -> None:
+        if tcl is None:
+            tcl:tk.Misc = self.root
         def inner() -> None:
             if func(*args) == waiting_for:
-                self.root.quit()
+                tcl.quit()
             else:
-                self.root.after(10, inner)
+                tcl.after(10, inner)
         if func(*args) != waiting_for:
             inner()
-            self.root.mainloop()
+            tcl.mainloop()
 
 
 class Draggable(NoTitlebarTk):
@@ -425,6 +474,14 @@ class Draggable(NoTitlebarTk):
         self._offsetx:int = self.winfo_pointerx() - self.winfo_rootx()
         self._offsety:int = self.winfo_pointery() - self.winfo_rooty()
         self.dragging:bool = True
+
+
+# Example 0
+if __name__ == "__main__":
+    root = NoTitlebarTk()
+    root.geometry("400x400")
+    root.make_non_clickable()
+    root.mainloop()
 
 
 # Example 1

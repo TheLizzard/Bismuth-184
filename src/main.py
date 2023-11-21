@@ -23,6 +23,7 @@ notebook.CONTROL_W:bool = True
 notebook.TAB_CONTROLS:bool = True
 notebook.CONTROL_NUMBERS_CONTROLS:bool = True
 notebook.CONTROL_NUMBERS_RESTRICT:bool = False
+notebook.HIDE_SCROLLBAR:bool = False
 
 class App:
     __slots__ = "root", "explorer", "notebook", "text_to_page", \
@@ -30,7 +31,7 @@ class App:
 
     def __init__(self) -> App:
         self.text_to_page:dict[tk.Text:notebook.NotebookPage] = {}
-        self.root:BetterTk = BetterTk()
+        self.root:BetterTk = BetterTk(className="Bismuth-184")
         self.root.title("Bismuth-184")
         self.root.iconphoto(True, "sprites/Bismuth_184.ico")
         self.root.protocol("WM_DELETE_WINDOW", self.root_close)
@@ -342,6 +343,7 @@ if __name__ == "__main__":
     try:
         import sys
         sys.stdin.fileno()
+        print("\x1b[8;24;106;t\x1b[A\r\x1b[0K", end="")
         app.mainloop()
     except ValueError:
         pass # Inside IDLE

@@ -409,54 +409,63 @@ class PtyTerminal:
             if len(args) == 0:
                 return None, 0
             if args[-1] == "@":
+                args = tuple(filter(bool, args))
                 if len(args) == 1:
                     args = ("1",)+args
                 if len(args) != 2:
                     return None, 1
                 return "INSERT_BLANK_CHARS"+args[0], size
             if args[-1] == " @":
+                args = tuple(filter(bool, args))
                 if len(args) == 1:
                     args = ("1",)+args
                 if len(args) != 2:
                     return None, 1
                 return "SHIFT_SCREEN_LEFT"+args[0], size
             if args[-1] == "A":
+                args = tuple(filter(bool, args))
                 if len(args) == 1:
                     args = ("1",)+args
                 if len(args) != 2:
                     return None, 1
                 return "CURSOR_UP"+args[0], size
             if args[-1] == " A":
+                args = tuple(filter(bool, args))
                 if len(args) == 1:
                     args = ("1",)+args
                 if len(args) != 2:
                     return None, 1
                 return "SHIFT_SCREEN_RIGHT"+args[0], size
             if args[-1] == "B":
+                args = tuple(filter(bool, args))
                 if len(args) == 1:
                     args = ("1",)+args
                 if len(args) != 2:
                     return None, 1
                 return "CURSOR_DOWN"+args[0], size
             if args[-1] == "C":
+                args = tuple(filter(bool, args))
                 if len(args) == 1:
                     args = ("1",)+args
                 if len(args) != 2:
                     return None, 1
                 return "CURSOR_RIGHT"+args[0], size
             if args[-1] == "D":
+                args = tuple(filter(bool, args))
                 if len(args) == 1:
                     args = ("1",)+args
                 if len(args) != 2:
                     return None, 1
                 return "CURSOR_LEFT"+args[0], size
             if args[-1] == "E":
+                args = tuple(filter(bool, args))
                 if len(args) == 1:
                     args = ("1",)+args
                 if len(args) != 2:
                     return None, 1
                 return "CURSOR_NEXT_LINE"+args[0], size
             if args[-1] == "F":
+                args = tuple(filter(bool, args))
                 if len(args) == 1:
                     args = ("1",)+args
                 if len(args) != 2:
@@ -598,6 +607,7 @@ class PtyTerminal:
 
 from os.path import dirname
 cmd = ["g++", f"{dirname(__file__)}/test.cpp"]
+cmd = ["echo", "-e", "abc\ndef\r\\x1b[Ax"]
 #cmd = ["python3", "/media/thelizzard/C36D-8837/pokemon/hoster.py", "--https"]
 #cmd = ["echo", "\\x1b[\\n"]
 #cmd = ["bash"]

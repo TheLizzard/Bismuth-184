@@ -88,7 +88,7 @@ class TabNotches(BetterFrame):
         self.add_notch:TabNotch = TabNotch(self)
         self.add_notch.grid(row=1, column=1)
         self.add_notch.rename("+")
-        self.h_scrollbar.hide:bool = True
+        self.h_scrollbar.hide:bool = HIDE_SCROLLBAR
         self.notches:list[TabNotch] = []
         self.notch_dragging:bool = None
         self.dragging:bool = False
@@ -235,6 +235,7 @@ CONTROL_W:bool = False
 TAB_CONTROLS:bool = True
 CONTROL_NUMBERS_CONTROLS:bool = False
 CONTROL_NUMBERS_RESTRICT:bool = False
+HIDE_SCROLLBAR:bool = True
 
 class NotebookPage:
     __slots__ = "notebook", "frame", "notch"
@@ -274,6 +275,7 @@ class NotebookPage:
                 return "break"
             frame.bind("<Control-w>", control_w, add=True)
             frame.bind("<Control-W>", control_w, add=True)
+            frame.bind("<<Close-Tab>>", control_w, add=True)
         return self
 
     def rename(self, title:str) -> NotebookPage:
@@ -458,6 +460,8 @@ if __name__ == "__main__a":
     # Should Control-t/Control-w
     CONTROL_T:bool = True
     CONTROL_W:bool = True
+    # Hide the scrollbar when there aren't a lot of tabs open:
+    HIDE_SCROLLBAR:bool = True
 
     root = tk.Tk()
     notebook = Notebook(root)

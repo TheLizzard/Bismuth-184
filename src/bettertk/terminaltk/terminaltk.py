@@ -161,7 +161,7 @@ class TerminalFrame(tk.Frame):
         self.buffer.send_force_print(string+end)
 
     def clear(self) -> None:
-        self.buffer.send_force_print("\r\x1b[2J\x1b[3J\x1b[H")
+        self.buffer.send_force_print("\r\x1b[2J\x1b[3J\x1b[H\x1bc")
 
     def start(self) -> None:
         tk_wait_for_map(self)

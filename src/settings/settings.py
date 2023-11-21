@@ -57,7 +57,7 @@ class Settings:
         if not permissions:
             return True
         with open(PATH, "w") as file:
-            file.write(json.dumps(self.settings))
+            file.write(json.dumps(self.settings, indent=4))
         return False
 
     def update(self, **kwargs) -> None:
