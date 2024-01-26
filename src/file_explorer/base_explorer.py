@@ -19,6 +19,11 @@ DEBUG:bool = False
 TEST:bool = False
 WARNINGS:bool = True
 
+MAX_ITEMS_IN_DIR:int = 40
+MAX_ITEMS_TAKES:int = 5
+MAX_ITEMS_ITENT:str = "..."
+assert MAX_ITEMS_TAKES <= MAX_ITEMS_IN_DIR, "Make sure this assertion holds"
+
 
 def isfolder(item:Item, followsym:bool=False) -> bool:
     return isinstance(item, Folder)
@@ -48,10 +53,18 @@ class Error:
 
 
 class FileSystem:
+    @staticmethod
+    def is_untouchable(path:str) -> bool:
+        return path.rstrip("/").endswith(MAX_ITEMS_ITENT)
+
     def rename(self, fullpath:str, newname:str) -> Error:
+        if newname in (MAX_ITEMS_ITENT, NEW_ITEM_NAME):
+            return Error("Reserved filename")
         return self.move(fullpath, self.join(self.dirname(fullpath), newname))
 
     def move(self, source:str, destination:str) -> Error:
+        if self.is_untouchable(source) or self.is_untouchable(destination):
+            return Error("Source/destination is untouchable")
         if not self.exists(source):
             return Error("Source doesn't exist")
         if self.exists(destination):
@@ -66,7 +79,9 @@ class FileSystem:
             shutil.rmtree(path)
 
     def delete(self, path:str, force:bool=False) -> Error:
-        assert TEST or (not force), "Force only works with TEST:bool=True"
+        if self.is_untouchable(path):
+            return Error("Path is untouchable")
+        assert TEST or (not force), "Force only works with TEST"
         if not force:
             if input(f'Delete "{path}"? [y/n]:').lower() != "y":
                 return Error("Canceled by user")
@@ -77,6 +92,8 @@ class FileSystem:
         """
         Deletes everything inside the path but leaves path untouched.
         """
+        if self.is_untouchable(path):
+            return Error("Path is untouchable")
         assert TEST and force, "Program this if needed"
         root:str = self.abspath(path)
         files_folders, error = self.listdir(root)
@@ -86,10 +103,14 @@ class FileSystem:
         return error
 
     def makedirs(self, path:str) -> Error:
+        if self.is_untouchable(path):
+            return Error("Path is untouchable")
         os.makedirs(path, exist_ok=True)
         return Error()
 
     def newfolder(self, path:str) -> Error:
+        if self.is_untouchable(path):
+            return Error("Path is untouchable")
         try:
             os.mkdir(path)
             if not os.path.exists(path):
@@ -101,6 +122,8 @@ class FileSystem:
         return Error()
 
     def newfile(self, path:str) -> Error:
+        if self.is_untouchable(path):
+            return Error("Path is untouchable")
         if self.isfolder(path):
             return Error("IsADirectoryError")
         if self.exists(path):
@@ -112,17 +135,26 @@ class FileSystem:
         return Error()
 
     def chdir(self, path:str) -> Error:
+        if self.is_untouchable(path):
+            return Error("Path is untouchable")
         if not self.exists(path):
             return Error("Path doesn't exist.")
         os.chdir(path)
         return Error()
 
-    def listdir(self, path:str) -> tuple[tuple[str, str], Error]:
+    def listdir(self, path:str) -> tuple[tuple[str,str], Error]:
+        if self.is_untouchable(path):
+            return (), Error("Path is untouchable")
         try:
             try:
                 root, folders, files = next(os.walk(path))
             except StopIteration:
                 root, folders, files = path, (), ()
+            # Bound the number of files/folders:
+            if len(files) > MAX_ITEMS_IN_DIR:
+                files:tuple[str] = self.bound_listdir(files)
+            if len(folders) > MAX_ITEMS_IN_DIR:
+                folders:tuple[str] = self.bound_listdir(folders)
             # Skip all real filesystem files named NEW_ITEM_NAME
             files:tuple[str] = filterfalse(NEW_ITEM_NAME.__eq__, files)
             folders:tuple[str] = filterfalse(NEW_ITEM_NAME.__eq__, folders)
@@ -131,7 +163,15 @@ class FileSystem:
         except PermissionError:
             return (), Error("PermissionError")
 
-    def access(self, path:str) -> tuple[bool, bool, bool]:
+    @staticmethod
+    def bound_listdir(data:tuple[str]) -> tuple[str]:
+        data:list[str] = sorted(data)
+        data:list[str] = data[:MAX_ITEMS_TAKES] + [MAX_ITEMS_ITENT]
+        return tuple(data)
+
+    def access(self, path:str) -> tuple[bool,bool,bool]:
+        if self.is_untouchable(path):
+            return False, False, False
         st:int = os.stat(path).st_mode
         read:bool = st & (stat.S_IRGRP|stat.S_IRUSR)
         write:bool = st & (stat.S_IWGRP|stat.S_IWUSR)
@@ -139,6 +179,8 @@ class FileSystem:
         return bool(read), bool(write), bool(exec)
 
     def exists(self, path:str) -> bool:
+        if self.is_untouchable(path):
+            return False
         return os.path.exists(path)
 
     def abspath(self, path:str) -> str:
@@ -544,6 +586,12 @@ class Folder(Item):
         if itema.name == NEW_ITEM_NAME:
             if DEBUG: print(" => True")
             return True
+        if itemb.name == MAX_ITEMS_ITENT:
+            if DEBUG: print(" => False")
+            return False
+        if itema.name == MAX_ITEMS_ITENT:
+            if DEBUG: print(" => True")
+            return True
         if DEBUG: print(f" => t{itema.name > itemb.name}")
         return itema.name >= itemb.name
 
@@ -586,6 +634,9 @@ class File(Item):
         self.fix_extension()
 
     def fix_extension(self) -> None:
+        if self.name == MAX_ITEMS_ITENT:
+            self.extension:str = None
+            return None
         extension = self.name.split(".")[-1]
         if (extension in KNOWN_EXT) and (self.name != NEW_ITEM_NAME):
             self.extension:str = extension
@@ -692,9 +743,11 @@ if __name__ == "__main__":
                                    )
     for name,_ in files_folders: assert not name.endswith("/"), "Error in test"
 
-    filesystem = ProvidedFileSystem(files_folders)
+    # filesystem = ProvidedFileSystem(files_folders)
+    filesystem = FileSystem()
     explorer = Root(filesystem)
-    explorer.add("/test")
+    # explorer.add("/test")
+    explorer.add("/media/thelizzard/C36D-8837")
     DEBUG = True
     explorer()
     target = explorer.get_item_from_path("/test/f")

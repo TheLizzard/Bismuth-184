@@ -254,8 +254,8 @@ class NotebookPage:
                        add=True)
         if CONTROL_NUMBERS_CONTROLS:
             for i in range(1, 10):
-                on:str = f"<Control-KeyPress-{i}>"
-                frame.bind(on, self.notebook.control_numbers, add=True)
+                for on in (f"<Control-KeyPress-{i}>", f"<Alt-KeyPress-{i}>"):
+                    frame.bind(on, self.notebook.control_numbers, add=True)
         if CONTROL_T:
             def control_t(event:tk.Event) -> str:
                 if event.state&1:

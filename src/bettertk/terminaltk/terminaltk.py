@@ -3,6 +3,7 @@ from threading import Thread, Lock
 from PIL import ImageTk
 from time import sleep
 import tkinter as tk
+import sys
 import os
 
 try:
@@ -385,6 +386,20 @@ class TerminalTk(BetterTk):
         self.kill_button.config(state="disabled")
         self.pause_button.config(state="disabled")
         self.close_button.config(image=self.sprites["restart"], text="Restart")
+
+
+if (__name__ == "__main__") and (len(sys.argv) != 1):
+    __name__:str = "RUN_FROM_COMMANDLINE_ARGS"
+    term:TerminalTk = TerminalTk(className="TerminalTk")
+    if os.path.isdir(sys.argv[1]):
+        folder:str = sys.argv[1]
+        term.queue(0, ["cd", folder], "")
+        term.queue(1, ["bash"], f' Starting "bash" '.center(80,"=")+"\n")
+    else:
+        file:str = sys.argv[1]
+        fname:str = os.path.split(file)[-1]
+        term.queue(0, [file], f' Starting "{fname}" '.center(80,"=")+"\n")
+    term.mainloop()
 
 
 if __name__ == "__main__":

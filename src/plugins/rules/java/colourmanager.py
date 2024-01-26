@@ -5,12 +5,6 @@ import re
 from ..colourmanager import ColourManager as BaseColourManager
 from ..colourmanager import ColourConfig as BaseColourConfig
 
-"""
-from idlelib.colorizer import matched_named_groups
-import builtins
-import keyword
-"""
-
 
 class ColourConfig(BaseColourConfig):
     __slots__ = ()
@@ -22,7 +16,6 @@ class ColourConfig(BaseColourConfig):
                            "builtins":   dict(foreground="#ff75ff"),
                            "string":     dict(foreground="lime"),
                            "definition": dict(foreground="cyan"), # parial use
-                           "include":    dict(foreground="cyan"),
                            **kwargs
                         })
 
@@ -79,8 +72,6 @@ def make_pat() -> re.compile:
 
     builtins = r"([^.'\"\\#]\b|^)" + idleany("builtins", get_builtins()) + r"\b"
 
-    #include = idleany("include", [r"#[^\n]*"])
-
     multiline_comment = r"/\*[^\*]*((\*(?!/))[^\*]*)*(\*/)?"
     comment = idleany("comment", [r"//[^\n]*", multiline_comment])
 
@@ -89,7 +80,7 @@ def make_pat() -> re.compile:
     string = idleany("string", [sstring, dstring])
 
     reg:str = kw + "|" + builtins + "|" + comment + "|" + \
-              string + "|" + idleany("SYNC", [r"\n"])# + "|" + include
+              string + "|" + idleany("SYNC", [r"\n"])
 
     return re.compile(reg, re.M|re.S)
 

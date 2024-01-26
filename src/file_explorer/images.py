@@ -13,9 +13,10 @@ def init(root:tk.Tk) -> None:
         tk_image = ImageTk.PhotoImage(img, master=root)
         TK_IMAGES[extension] = tk_image
     TK_IMAGES["*"] = TK_IMAGES["star"]
+    TK_IMAGES[None] = TK_IMAGES["blank"]
 
 
-EXTENSIONS = ("py", "txt", "cpp", "folder", "rar", "star")
+EXTENSIONS = ("py", "txt", "cpp", "folder", "rar", "star", "blank")
 base_folder:str = os.path.dirname(__file__)
 WIDTH:int = 16
 HEIGHT:int = 16

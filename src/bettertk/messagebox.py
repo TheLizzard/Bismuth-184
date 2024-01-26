@@ -175,5 +175,5 @@ if __name__ == "__main__":
     print(result)
 
     msg:str = 'Are you sure you want to delete "Hi.txt"?'
-    result = askyesno(root, title="Delete file?", message=msg, icon="warning")
+    result = tell(root, title="Delete file?", message=msg, icon="info")
     print(result)

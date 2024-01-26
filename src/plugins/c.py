@@ -15,11 +15,11 @@ try:
     from rules.reparentmanager import WidgetReparenterManager
     from rules.xrawidgets import BarManager, LineManager, ScrollbarManager
     # from rules.xrawidgets import MenuManager
-    from rules.cpp.commentmanager import CommentManager
-    from rules.cpp.colourmanager import ColourManager
-    from rules.cpp.whitespacemanager import WhiteSpaceManager
-    from rules.cpp.saveloadmanager import SaveLoadManager
-    from rules.cpp.runmanager import RunManager
+    from rules.c.commentmanager import CommentManager
+    from rules.c.colourmanager import ColourManager
+    from rules.c.whitespacemanager import WhiteSpaceManager
+    from rules.c.saveloadmanager import SaveLoadManager
+    from rules.c.runmanager import RunManager
 except ImportError:
     from .baseplugin import AllPlugin
     # from .rules.seeinsertmanager import SeeInsertManager
@@ -34,16 +34,16 @@ except ImportError:
     from .rules.reparentmanager import WidgetReparenterManager
     from .rules.xrawidgets import BarManager, LineManager, ScrollbarManager
     # from .rules.xrawidgets import MenuManager
-    from .rules.cpp.commentmanager import CommentManager
-    from .rules.cpp.colourmanager import ColourManager
-    from .rules.cpp.whitespacemanager import WhiteSpaceManager
-    from .rules.cpp.saveloadmanager import SaveLoadManager
-    from .rules.cpp.runmanager import RunManager
+    from .rules.c.commentmanager import CommentManager
+    from .rules.c.colourmanager import ColourManager
+    from .rules.c.whitespacemanager import WhiteSpaceManager
+    from .rules.c.saveloadmanager import SaveLoadManager
+    from .rules.c.runmanager import RunManager
 
 
-class CppPlugin(AllPlugin):
+class CPlugin(AllPlugin):
     __slots__ = ()
-    DEFAULT_CODE:str = '#include <iostream>\n\nusing namespace std;\n\nint main(){\n    // comment\n    cout << "Hello, world!" << endl;\n    return 0;\n}'
+    DEFAULT_CODE:str = '#include <stdio.h>\n\nint main(){\n    // comment\n    printf("Hello, World!\\n");\n    return 0;\n}'
 
     def __init__(self, text:tk.Text) -> PythonPlugin:
         rules:list[Rule] = [
@@ -73,6 +73,5 @@ class CppPlugin(AllPlugin):
     def can_handle(Cls:type, filepath:str|None) -> bool:
         if filepath is None:
             return False
-        return filepath.endswith(".cpp") or \
-               filepath.endswith(".c++") or \
+        return filepath.endswith(".c") or \
                filepath.endswith(".h")

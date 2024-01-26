@@ -4,12 +4,14 @@ import tkinter as tk
 import os
 
 try:
-    from .base_explorer import Item, Root, isfile, isfolder, FileSystem
+    from .base_explorer import Item, Root, isfile, isfolder, FileSystem, \
+                               MAX_ITEMS_ITENT
     from .idxgiver import IdxGiver, Idx
     from .gridgiver import GridGiver
     from . import images
 except ImportError:
-    from base_explorer import Item, Root, isfile, isfolder, FileSystem
+    from base_explorer import Item, Root, isfile, isfolder, FileSystem, \
+                              MAX_ITEMS_ITENT
     from idxgiver import IdxGiver, Idx
     from gridgiver import GridGiver
     import images
@@ -99,8 +101,8 @@ class Explorer:
         return self.ggiver.get_selected()
 
     @selected.setter
-    def selected(self, frame:tk.Frame) -> None:
-        assert isinstance(frame, tk.Frame), "TypeError"
+    def selected(self, frame:tk.Frame|None) -> None:
+        assert isinstance(frame, tk.Frame|None), "TypeError"
         self.ggiver._select(frame)
         self.master.event_generate("<<Explorer-Selected>>", data=(frame,))
 
@@ -113,6 +115,8 @@ class Explorer:
 
     def recolour_frame(self, frame:tk.Frame, bg:str) -> None:
         if frame is None:
+            return None
+        if frame.item.name == MAX_ITEMS_ITENT:
             return None
         frame.config(bg=bg)
         frame.indentation.config(bg=bg)
@@ -229,6 +233,8 @@ class Explorer:
             return []
         if self.changing is not None:
             return []
+        if frame.item.name == MAX_ITEMS_ITENT:
+            return []
         self.changing:tk.Frame = frame
         if COLLAPSE_BEFORE_MOVE:
             if isfolder(frame.item):
@@ -242,16 +248,18 @@ class Explorer:
             return children
 
     def cancel_move(self) -> None:
-        if isfolder(self.changing.item) and self.expanded_before:
-            self._expand(self.changing)
+        if COLLAPSE_BEFORE_MOVE:
+            if isfolder(self.changing.item) and self.expanded_before:
+                self._expand(self.changing)
         self.changing:tk.Frame = None
 
     def move(self, src:tk.Frame, dis:tk.Frame) -> None:
         dis:tk.Frame = self._get_closest_folder(dis)
         self.changing:tk.Frame = None
         src.item.move(dis.item)
-        if isfolder(src.item) and self.expanded_before:
-            self._expand(src)
+        if COLLAPSE_BEFORE_MOVE:
+            if isfolder(src.item) and self.expanded_before:
+                self._expand(src)
         if isfolder(dis.item):
             self._expand(dis)
         self.update(soft=True)
@@ -274,6 +282,8 @@ class Explorer:
     def _expand(self, frame:tk.Frame) -> None:
         if frame.item.expanded:
             return None
+        if frame.item.name == MAX_ITEMS_ITENT:
+            return None
         if DEBUG: print(f"[DEBUG]: Expanding {frame.item}")
         frame.item.expanded:bool = True
         frame.expandeder.config(text="-")
@@ -281,6 +291,8 @@ class Explorer:
 
     def _collapse(self, frame:tk.Frame) -> None:
         if not frame.item.expanded:
+            return None
+        if frame.item.name == MAX_ITEMS_ITENT:
             return None
         frame.item.expanded:bool = False
         frame.expandeder.config(text="+")

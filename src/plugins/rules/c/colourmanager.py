@@ -22,20 +22,26 @@ class ColourConfig(BaseColourConfig):
 
 
 def get_iostream() -> Iterable[str]:
-    return {"cin", "cout", "cerr", "clog", "wcin", "wcout", "wcerr", "wclog"}
+    return {
+             "clearerr", "clrmemf", "fclose", "fdelrec", "feof", "ferror",
+             "fflush", "fgetc", "fgetpos", "fgets", "fldata", "flocate",
+             "fprintf", "fputc", "fputs", "fread", "freopen", "fscanf", "fseek",
+             "fseeko", "fsetpos", "ftell", "ftello", "fupdate", "fwrite",
+             "getchar", "gets", "perror", "printf", "putc", "putchar", "puts",
+             "remove", "rename", "rewind", "scanf", "setbuf", "setvbuf",
+             "sprintf", "sscanf", "svc99", "tmpfile", "tmpnam", "ungetc",
+             "vfprintf", "vprintf", "vsprintf", "fopen", "getc",
+             "EOF", "NULL", "BUFSIZ",
+           }
 
 def get_keywords() -> Iterable[str]:
-    return {"asm", "else", "new", "this", "auto", "enum", "operator",
-            "throw", "bool", "explicit", "private", "true", "break",
-            "export", "protected", "try", "case", "extern", "public",
-            "typedef", "catch", "false", "register", "typeid", "char",
-            "float", "reinterpret_cast", "typename", "class", "for",
-            "return", "union", "const", "friend", "short", "unsigned",
-            "const_cast", "goto", "signed", "using", "continue", "if",
-            "sizeof", "virtual", "default", "inline", "static", "void",
-            "delete", "int", "static_cast", "volatile", "do", "long",
-            "struct", "wchar_t", "double", "mutable", "switch", "while",
-            "dynamic_cast", "namespace", "template"}
+    return {
+             "auto", "break", "case", "char", "const", "continue", "default",
+             "do", "double", "else", "enum", "extern", "float", "for", "goto",
+             "if", "int", "long", "register", "return", "short", "signed",
+             "sizeof", "static", "struct", "switch", "typedef", "union",
+             "unsigned", "void", "volatile", "while",
+           }
 
 def make_pat() -> re.compile:
     kw = r"\b" + idleany("keyword", get_keywords()) + r"\b"

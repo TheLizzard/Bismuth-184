@@ -12,9 +12,22 @@ def allisinstance(iterable:Iterable, T:type) -> bool:
     return all(map(lambda elem: isinstance(elem, T), iterable))
 
 
+class ExpGridFrame:
+    __slots__ = "frame"
+
+    def __init__(self, frame:tk.Misc) -> ExpGridFrame:
+        assert isinstance(frame, tk.Frame|tk.Tk|tk.Toplevel), "TypeError"
+        self.frame:tk.Misc = frame
+
+    def grid_add(self, widget:tk.Misc, row:int, column:int, **kwargs) -> None:
+        assert "in" not in kwargs, "The in_ argument is implied"
+        assert "in_" not in kwargs, "The in_ argument is implied"
+        widget.grid(row=row, column=column, **kwargs, in_=self.frame)
+
+
 class GridGiver:
     __slots__ = "dragging", "b1pressed", "master", "selected", "sel_frame", \
-                "tmp", "dragx", "dragy", \
+                "tmp", "dragx", "dragy", "expgrid", \
                 "select", "move_frame", "start_move", "cancel_move", \
                 "right_click", "double_click"
 
@@ -23,6 +36,7 @@ class GridGiver:
         if master.__class__ == tk.Frame:
             print("[WARNING]: Mouse events might not be captured properly. " \
                   "Try using `file_explorer.bindframe.BindFrame` instead")
+        self.expgrid:ExpGridFrame = ExpGridFrame(master)
         self.selected:list[tk.Frame] = [None]
         self.master:tk.Misc = master
         self.b1pressed:bool = False
@@ -89,16 +103,20 @@ class GridGiver:
         width:int = self.master.winfo_width()
         self.tmp:tk.Frame = tk.Frame(self.master, **FRAME_KWARGS)
         self.sel_frame:tk.Frame = tk.Frame(self.master, **FRAME_KWARGS)
+        sel_frame_exp:ExpGridFrame = ExpGridFrame(self.sel_frame)
         height:int = 0
+        min_row:int = min(map(lambda x: x.row, self.selected))
         for sel in self.selected:
             sel.lift() # sel must be above all other siblings
             height += sel.winfo_height()
-            sel.grid(row=sel.row, column=1, in_=self.sel_frame, sticky="news")
+            row:int = sel.row - min_row
+            sel_frame_exp.grid_add(sel, row=row, column=1, sticky="news")
         self.sel_frame.config(width=width, height=height)
         self.sel_frame.grid_columnconfigure(1, weight=1)
         self.sel_frame.grid_propagate(False)
         self.tmp.config(width=width, height=height)
-        self.tmp.grid(row=self.get_selected().row, column=1, sticky="news")
+        self.expgrid.grid_add(self.tmp, row=self.get_selected().row, column=1,
+                              sticky="news")
 
     def _mouse_moved(self, event:tk.Event) -> None:
         if not self.b1pressed:
@@ -135,7 +153,7 @@ class GridGiver:
             return None
         self.dragging:bool = False
         for i, sel in enumerate(self.selected):
-            sel.grid(row=sel.row, column=1, sticky="news", in_=self.master)
+            self.expgrid.grid_add(sel, row=sel.row, column=1, sticky="news")
         self.sel_frame.destroy()
         self.tmp.destroy()
         self.selected:list[tk.Frame] = self.selected[:1]
@@ -159,7 +177,7 @@ class GridGiver:
         assert isinstance(frame, tk.Frame), "TypeError"
         assert isinstance(row, int), "TypeError"
         assert not self.dragging, "RuntimeError"
-        frame.grid(row=row, column=1, sticky="news")
+        self.expgrid.grid_add(frame, row=row, column=1, sticky="news")
         frame.row:int = row
         if DEBUG: print(f"[DEBUG]: Added frame {frame} to row {row}")
 

@@ -3,12 +3,13 @@ Editor:
 * `FindReplaceManager` should report matches of length 0 as an error?
 * `FindReplaceManager` Shift-Return
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
-* java's `RunManager` should also handle testing.
-* Control-Shift-s displays "are you sure" message if the file doesn't exist
+* Java's `RunManager` should also handle testing.
+* Control-Shift-s displays "are you sure" message if the file doesn't exist and if there is a newline at the end of the file
 * `FindReplaceManager` removes hit tag when the user adds/removes text near the hit
 * If you can see end, pressing return should scroll to the end
 * Implement Home/End/Control-Up/Control-Down
 * Commenting a block with a comment inside it, uncomments the comment
+* Horizonal scrollbar shows and hides rapidly in rare circumstances
 
 Terminal:
 * Windows support (pty_terminal)
@@ -24,10 +25,11 @@ Notebook:
 
 File Explorer:
 * Make the frame inside the `dummy_canvas` expand to fill the canvas' width/height in `BetterFrame`. This problem also appears in `Notebook`
-* Save exec path on close?
-* Save CWD
+* Save exec path on close
 * Add a tooltip to all children of Root that show their full path
-* Unpredictable focusing
+* Unintuitive focusing
+* Padding on the right of each item
+* Deleting a top level folder causes problems
 
 Minor things/Low priority:
 * `WhiteSpaceManager` copies the indentation of the current line without considering that it might be fully enclosed in a bracket.

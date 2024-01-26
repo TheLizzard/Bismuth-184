@@ -5,22 +5,26 @@ import tkinter as tk
 import os
 
 try:
-    from .base_explorer import NEW_ITEM_NAME
     from .explorer import Explorer, isfile, isfolder, SELECTED_COLOUR
+    from .base_explorer import NEW_ITEM_NAME, MAX_ITEMS_ITENT
 except ImportError:
-    from base_explorer import NEW_ITEM_NAME
     from explorer import Explorer, isfile, isfolder, SELECTED_COLOUR
+    from base_explorer import NEW_ITEM_NAME, MAX_ITEMS_ITENT
 from bettertk import BetterTk, IS_UNIX, IS_WINDOWS
 from bettertk.messagebox import askyesno, tell
 
 
 if IS_UNIX:
     OPEN_IN_EXPLORER:str = 'nautilus "{path}"'
+    OPEN_DEFAULT:str = 'xdg-open "{path}"'
 elif IS_WINDOWS:
     OPEN_IN_EXPLORER:str = 'explorer "{path}"'
+    OPEN_DEFAULT:str = None
 else:
     OPEN_IN_EXPLORER:str = None
+    OPEN_DEFAULT:str = None
     sys.stderr.write("Unknown OS, can't open files/folders in real explorer.\n")
+OPEN_IN_TERMINAL:str = 'python3 bettertk/terminaltk/terminaltk.py "{path}"'
 
 
 BKWARGS:dict = dict(activeforeground="white", activebackground="grey", bd=0,
@@ -165,15 +169,22 @@ class ExpandedExplorer(Explorer):
         self.menu.add("New file", self.newfile)
         self.menu.add("New folder", self.newfolder)
         self.menu.add_separator()
-        self.set_cwd_id:int = self.menu.add("Set as working dir", self.set_cwd)
+        self.menu.add("Open (externally)", self.open_item)
         self.menu.add("Open in explorer", self.open_in_explorer)
+        self.menu.add("Open in terminal", self.open_in_terminal)
+        self.menu.add_separator()
+        self.set_cwd_id:int = self.menu.add("Set as working dir", self.set_cwd)
         self.menu.on_cancel:Function[None] = self.menu_cancel
 
     def right_click(self, frame:tk.Frame) -> str:
+        if self.changing is not None:
+            return None
         if frame is None:
             return None
-        self.ggiver._select(frame)
-        self.changing:tk.Frame = frame
+        if frame.item.name == MAX_ITEMS_ITENT:
+            self.changing = self.selected = None
+            return None
+        self.changing = self.selected = frame
         if super()._get_closest_folder(frame) == self.cwd:
             self.menu.config(self.set_cwd_id, text="Remove exec path (cwd)",
                              command=self.remove_cwd)
@@ -308,10 +319,22 @@ class ExpandedExplorer(Explorer):
         self.creating:bool = True
         self.rename()
 
-    # Open in explorer
+    # Open in ...
     def open_in_explorer(self) -> None:
         if OPEN_IN_EXPLORER is not None:
             cmd:str = OPEN_IN_EXPLORER.format(path=self.selected.item.fullpath)
+            Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+        self.changing:tk.Frame = None
+
+    def open_in_terminal(self) -> None:
+        if OPEN_IN_TERMINAL is not None:
+            cmd:str = OPEN_IN_TERMINAL.format(path=self.selected.item.fullpath)
+            Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+        self.changing:tk.Frame = None
+
+    def open_item(self) -> None:
+        if OPEN_DEFAULT is not None:
+            cmd:str = OPEN_DEFAULT.format(path=self.selected.item.fullpath)
             Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
         self.changing:tk.Frame = None
 
