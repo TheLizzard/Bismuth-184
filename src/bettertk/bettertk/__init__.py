@@ -36,6 +36,7 @@ class BetterTkSettings:
                  bd=3):
         self.SEPARATOR_SIZE = separator_size
         self.BORDER_WIDTH = bd
+        self.USE_BORDER = True
 
         self.USE_UNICODE = use_unicode
 
@@ -70,7 +71,7 @@ class BetterTkSettings:
     def config(self, bg=None, separator_colour=None, hightlight_colour=None,
                active_titlebar_bg=None, active_titlebar_fg=None,
                inactive_titlebar_bg=None, inactive_titlebar_fg=None, bd=None,
-               use_unicode=None, separator_size=None):
+               use_unicode=None, separator_size=None, use_border=None):
         """
         Possible settings:
             bg:str                    The window's background colour
@@ -117,6 +118,8 @@ class BetterTkSettings:
             self.USE_UNICODE = use_unicode
         if separator_size is not None:
             self.SEPARATOR_SIZE = separator_size
+        if use_border is not None:
+            self.USE_BORDER = use_border
     configure = config
 
 
@@ -559,6 +562,8 @@ class BetterTk(tk.Frame):
         """
         items = (self.title_bar, self.buttons_frame, self.title_label,
                  self.icon_label) + tuple(self.buttons)
+        if not self.settings.USE_BORDER:
+            items += (self.master_frame,)
         for item in items:
             item.config(background=colour)
 
@@ -679,8 +684,10 @@ class BetterTk(tk.Frame):
         elif isinstance(image, Image.Image):
             self._tk_icon_2 = ImageTk.PhotoImage(image, master=self)
         else:
-            raise ValueError("Image must be a str path or a PIL.Image.Image "\
-                             "otherwise the image can't be resized")
+            self._tk_icon = self._tk_icon_2 = image
+            print("[WARNING]: For iconbitmap/iconphoto, the image must be " \
+                  "str|PIL.Image.Image otherwise the image can't be resized")
+            return None
         self.root.update_idletasks()
         # The 4 is because of the label's border
         size = self.title_frame.winfo_height() - 4
@@ -692,7 +699,10 @@ class BetterTk(tk.Frame):
         assert isinstance(filepath, str), "TypeError"
         # I recommend `.iconphoto` instead
         self._change_icon(filepath)
-        self.root.iconbitmap(filepath)
+        try:
+            self.root.iconbitmap(filepath)
+        except:
+            self.root.iconbitmap(self._tk_icon_2)
 
     def iconphoto(self, default:bool, image:str|Image.Image) -> None:
         assert isinstance(default, bool), "TypeError"

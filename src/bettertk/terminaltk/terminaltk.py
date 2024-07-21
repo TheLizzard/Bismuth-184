@@ -7,13 +7,11 @@ import sys
 import os
 
 try:
-    from .terminal import Terminal, encode_run, encode_print
-    from .sprites.creator import init as create_sprites
     from ..bettertk import BetterTk
 except ImportError:
-    from terminal import Terminal, encode_run, encode_print
-    from sprites.creator import init as create_sprites
     from bettertk import BetterTk
+from .terminal import Terminal, encode_run, encode_print
+from .sprites.creator import init as create_sprites
 
 
 CHUNK_SIZE:int = 5*1024
@@ -218,7 +216,7 @@ class TerminalTk(BetterTk):
         self._iqueue:list[tuple] = []
         super().__init__(master, **kwargs)
         if ICON is not None:
-            super().iconphoto(True, ICON)
+            super().iconphoto(False, ICON)
         super().title("TerminalTk")
         self.setup_buttons()
         self.terminal:TerminalFrame = TerminalFrame(self, width=815, height=460)
@@ -386,20 +384,6 @@ class TerminalTk(BetterTk):
         self.kill_button.config(state="disabled")
         self.pause_button.config(state="disabled")
         self.close_button.config(image=self.sprites["restart"], text="Restart")
-
-
-if (__name__ == "__main__") and (len(sys.argv) != 1):
-    __name__:str = "RUN_FROM_COMMANDLINE_ARGS"
-    term:TerminalTk = TerminalTk(className="TerminalTk")
-    if os.path.isdir(sys.argv[1]):
-        folder:str = sys.argv[1]
-        term.queue(0, ["cd", folder], "")
-        term.queue(1, ["bash"], f' Starting "bash" '.center(80,"=")+"\n")
-    else:
-        file:str = sys.argv[1]
-        fname:str = os.path.split(file)[-1]
-        term.queue(0, [file], f' Starting "{fname}" '.center(80,"=")+"\n")
-    term.mainloop()
 
 
 if __name__ == "__main__":

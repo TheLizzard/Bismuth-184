@@ -1,5 +1,6 @@
 from __future__ import annotations
 import tkinter as tk
+import os
 
 try:
     from baseplugin import AllPlugin
@@ -58,7 +59,6 @@ class CppPlugin(AllPlugin):
                              FindReplaceManager,
                              SaveLoadManager,
                              RunManager,
-                             # FindReplaceManager,
                              RemoveShortcuts,
                              # Other widgets:
                              WidgetReparenterManager,
@@ -73,6 +73,27 @@ class CppPlugin(AllPlugin):
     def can_handle(Cls:type, filepath:str|None) -> bool:
         if filepath is None:
             return False
-        return filepath.endswith(".cpp") or \
-               filepath.endswith(".c++") or \
-               filepath.endswith(".h")
+        if filepath.endswith(".cpp") or filepath.endswith(".c++"):
+            return True
+        if filepath.endswith(".hpp") or filepath.endswith(".h++"):
+            return True
+        if filepath.endswith(".h"):
+            if os.path.exists(filepath.removesuffix("h") + "c"):
+                return False
+            if os.path.exists(filepath.removesuffix("h") + "cpp"):
+                return True
+            if os.path.exists(filepath.removesuffix("h") + "c++"):
+                return True
+            files:list[str] = os.listdir(os.path.dirname(filepath))
+            c:int = 0
+            cpp:int = 0
+            for file in files:
+                if file.endswith(".c"):
+                    c += 1
+                if file.endswith(".cpp") or file.endswith(".c++"):
+                    cpp += 1
+                if file.endswith(".hpp"):
+                    cpp += 1
+            if cpp > c:
+                return True
+        return False

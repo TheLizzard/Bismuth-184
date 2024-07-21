@@ -54,7 +54,7 @@ class LineManager(Rule, LineNumbers):
                            # If the text widget scrolls, scroll the linenumbers
                            "<<Y-Scroll>>",
                            # If the user presses undo/redo
-                           "<Control-Z>", "<Control-z>",
+                           # "<Control-Z>", "<Control-z>",
                            "<<Undo-Triggered>>", "<<Redo-Triggered>>",
                          )
         Rule.__init__(self, plugin, text, ons=evs)
@@ -103,12 +103,12 @@ class LineManager(Rule, LineNumbers):
         if on == "<y-scroll>":
             self.sidebar_text.yview("moveto", data[0])
             return False
-        if on in ("<after-insert>", "<after-delete>", "<control-z>",
+        if on in ("<after-insert>", "<after-delete>",
                   "<undo-triggered>", "<redo-triggered>"):
             end:int = int(float(self.text.index("end -1c")))
             LineNumbers.update_sidebar_text(self, end)
             return False
-        raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on!r} in {self.__class__.__name__}")
 
     def bounce(self, event:tk.Event, on:str, proper_on:str) -> str:
         if on == "focusin":

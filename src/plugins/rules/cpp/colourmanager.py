@@ -42,14 +42,15 @@ def make_pat() -> re.compile:
 
     iostream = r"([^.'\"\\#]\b|^)" + idleany("iostream", get_iostream()) + r"\b"
 
-    include = idleany("include", [r"#[^\n]*"])
+    include = idleany("include", [r"#(include|[^\n]*?(?=//|/\*|\n|$))"])
 
     multiline_comment = r"/\*[^\*]*((\*(?!/))[^\*]*)*(\*/)?"
     comment = idleany("comment", [r"//[^\n]*", multiline_comment])
 
     sstring = r"'[^'\\\n]*(\\.[^'\\\n]*)*'?"
     dstring = r'"[^"\\\n]*(\\.[^"\\\n]*)*"?'
-    string = idleany("string", [sstring, dstring])
+    includestr = '(?<=include )\<[^\n>]*>'
+    string = idleany("string", [sstring, dstring, includestr])
 
     reg:str = kw + "|" + iostream + "|" + comment + "|" + include + "|" + \
               string + "|" + idleany("SYNC", [r"\n"])

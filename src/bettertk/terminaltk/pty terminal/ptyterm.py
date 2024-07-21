@@ -677,3 +677,6 @@ DOCS:
 ANSI escape sequences regex:
   # https://github.com/getcuia/stransi/blob/main/src/stransi/ansi.py
 """
+
+# Terminal mouse tracking library:
+#   https://github.com/Cubified/tuibox/blob/main/tuibox.h

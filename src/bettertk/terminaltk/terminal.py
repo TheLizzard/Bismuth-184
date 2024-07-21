@@ -6,11 +6,10 @@ import sys
 import os
 
 try:
-    from bettertk.get_os import IS_WINDOWS, IS_UNIX
-    from piper import TmpPipePair
-except ImportError:
     from ..bettertk.get_os import IS_WINDOWS, IS_UNIX
-    from .piper import TmpPipePair
+except ImportError:
+    from bettertk.get_os import IS_WINDOWS, IS_UNIX
+from .piper import TmpPipePair
 
 
 SLAVE_PATH:str = os.path.join(os.path.dirname(__file__), "slave.py")
@@ -26,7 +25,7 @@ elif IS_UNIX:
                               "Ctrl Shift <Key>C: copy-selection(CLIPBOARD)",
                               "Ctrl <Key>V: insert-selection(CLIPBOARD)",
                               "Ctrl <Key>W: quit()",
-                              "Ctrl <Key>X: copy-selection(CLIPBOARD)",
+                              # "Ctrl <Key>X: copy-selection(CLIPBOARD)",
                               "Shift <Key>Left: keymap(None)",
                               "Shift <Key>Right: keymap(None)",
                               "Shift <Key>Up: keymap(None)",

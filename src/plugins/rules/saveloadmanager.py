@@ -40,9 +40,15 @@ class SaveLoadManager(Rule):
     # Helpers
     def can_read(self) -> bool:
         assert self.text.filepath is not None, "InternalError"
-        if os.access(self.text.filepath, os.R_OK):
+        msg:str = "Unreachable in SaveLoadManager.can_read"
+        if not os.path.exists(self.text.filepath):
+            return False
+        elif not os.path.isfile(self.text.filepath):
+            msg:str = "File is now a folder on the filesystem."
+        elif os.access(self.text.filepath, os.R_OK):
             return True
-        msg:str = "You don't have the permissions to open this file."
+        else:
+            msg:str = "You don't have the permissions to open this file."
         telluser(self.text, title="File permissions", message=msg, icon="error",
                  center=True, center_widget=self.text)
         return False

@@ -146,6 +146,7 @@ class FileSystem:
         if self.is_untouchable(path):
             return (), Error("Path is untouchable")
         try:
+            islink = lambda x: os.path.islink(os.path.join(path, x))
             try:
                 root, folders, files = next(os.walk(path))
             except StopIteration:
@@ -158,6 +159,8 @@ class FileSystem:
             # Skip all real filesystem files named NEW_ITEM_NAME
             files:tuple[str] = filterfalse(NEW_ITEM_NAME.__eq__, files)
             folders:tuple[str] = filterfalse(NEW_ITEM_NAME.__eq__, folders)
+            files:tuple[str] = filterfalse(islink, files)
+            folders:tuple[str] = filterfalse(islink, folders)
             return tuple(zip(sorted(folders), repeat("folder"))) + \
                    tuple(zip(sorted(files), repeat("file"))), Error()
         except PermissionError:
@@ -172,10 +175,13 @@ class FileSystem:
     def access(self, path:str) -> tuple[bool,bool,bool]:
         if self.is_untouchable(path):
             return False, False, False
-        st:int = os.stat(path).st_mode
-        read:bool = st & (stat.S_IRGRP|stat.S_IRUSR)
-        write:bool = st & (stat.S_IWGRP|stat.S_IWUSR)
-        exec:bool = st & (stat.S_IXGRP|stat.S_IXUSR)
+        try:
+            st:int = os.stat(path).st_mode
+            read:bool = st & (stat.S_IRGRP|stat.S_IRUSR)
+            write:bool = st & (stat.S_IWGRP|stat.S_IWUSR)
+            exec:bool = st & (stat.S_IXGRP|stat.S_IXUSR)
+        except OSError:
+            read = write = exec = 0
         return bool(read), bool(write), bool(exec)
 
     def exists(self, path:str) -> bool:
@@ -448,11 +454,11 @@ class Item:
 
 
 class Folder(Item):
-    __slots__ = "expanded", "children"
+    __slots__ = "_expanded", "children"
 
     def __init__(self, name, root:Root, master:Item):
         super().__init__(name, root=root, master=master)
-        self.expanded:bool = root.autoexpand
+        self._expanded:bool = root.autoexpand
         self.children:list[Item] = []
         if self.master is None:
             self.fix_indentation()
@@ -464,6 +470,9 @@ class Folder(Item):
         assert not fullsync, "Don't use this"
         # If we don't have the perms:
         if not (self.perms & 1):
+            return None
+        # If we haven't expanded, don't update
+        if not self.expanded:
             return None
         current_children = tuple(self.children)
         files_folders, error = self.root.filesystem.listdir(self.fullpath)
@@ -493,6 +502,17 @@ class Folder(Item):
                 if (child.name == NEW_ITEM_NAME) and (not fullsync):
                     continue
                 child.delete(apply_filesystem=False)
+
+    @property
+    def expanded(self) -> bool:
+        return self._expanded
+
+    @expanded.setter
+    def expanded(self, value:bool) -> None:
+        assert isinstance(value, bool), "TypeError"
+        self._expanded, old_expanded = value, self._expanded
+        if (not old_expanded) and self._expanded:
+            self.update()
 
     def get_item_from_name(self, name:str) -> Item|None:
         """
@@ -665,7 +685,7 @@ class Root(Folder):
         self.filesystem:FileSystem = filesystem
         super().__init__(name=None, root=self, master=None)
         self.idx:Idx = self.igiver.push_item(self)
-        self.expanded:bool = True
+        self._expanded:bool = True
 
     @property
     def fullpath(self) -> str:
@@ -747,7 +767,8 @@ if __name__ == "__main__":
     filesystem = FileSystem()
     explorer = Root(filesystem)
     # explorer.add("/test")
-    explorer.add("/media/thelizzard/C36D-8837")
+    # explorer.add("/media/thelizzard/C36D-8837")
+    explorer.add(".")
     DEBUG = True
     explorer()
     target = explorer.get_item_from_path("/test/f")

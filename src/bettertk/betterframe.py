@@ -195,11 +195,11 @@ class BetterFrame(tk.Frame):
             self.dummy_canvas.configure(xscrollcommand=self.h_scrollbar.set)
 
         # Bind to the mousewheel scrolling
-        self.dummy_canvas.bind_all("<MouseWheel>", self.scrolling_windows,
+        self.dummy_canvas.bind_all("<MouseWheel>", self._scroll_windows,
                                    add=True)
-        self.dummy_canvas.bind_all("<Button-4>", self.scrolling_linux, add=True)
-        self.dummy_canvas.bind_all("<Button-5>", self.scrolling_linux, add=True)
-        self.bind("<Configure>", self.scrollbar_scrolling, add=True)
+        self.dummy_canvas.bind_all("<Button-4>", self._scroll_linux, add=True)
+        self.dummy_canvas.bind_all("<Button-5>", self._scroll_linux, add=True)
+        self.bind("<Configure>", self._scrollbar_scrolling, add=True)
 
         # Place `self` inside `dummy_canvas`
         self.dummy_canvas.create_window((0, 0), window=self, anchor="nw")
@@ -247,14 +247,14 @@ class BetterFrame(tk.Frame):
         """
         return y + self.get_y_offset()[0]
 
-    def scrolling_windows(self, event:tk.Event) -> None:
+    def _scroll_windows(self, event:tk.Event) -> None:
         if not self.check_mouse_over_self(event):
             return None
         assert event.delta != 0, "On Windows, `event.delta` should never be 0"
         y_steps = int(-event.delta/abs(event.delta)*self.scroll_speed)
         self.dummy_canvas.yview_scroll(y_steps, "units")
 
-    def scrolling_linux(self, event:tk.Event) -> None:
+    def _scroll_linux(self, event:tk.Event) -> None:
         if not self.check_mouse_over_self(event):
             return None
         steps:int = self.scroll_speed
@@ -268,7 +268,7 @@ class BetterFrame(tk.Frame):
     def check_mouse_over_self(self, event:tk.Event) -> bool:
         return str(event.widget).startswith(str(self.master_frame))
 
-    def scrollbar_scrolling(self, event:tk.Event) -> None:
+    def _scrollbar_scrolling(self, event:tk.Event) -> None:
         region = list(self.dummy_canvas.bbox("all"))
         region[2] = max(self.dummy_canvas.winfo_width(), region[2])
         region[3] = max(self.dummy_canvas.winfo_height(), region[3])

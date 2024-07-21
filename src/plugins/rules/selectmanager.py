@@ -10,7 +10,6 @@ DEBUG:bool = False
 SHIFT:int = 1
 ALT:int = 8
 CTRL:int = 4
-ALPHANUMERIC_ = string.ascii_letters + string.digits + "_"
 MOUSE_DRAG_PIXELS:int = 10
 SCROLL_SPEED:int = 1
 
@@ -138,6 +137,8 @@ class SelectManager(Rule):
             self.text.mark_set("mouse-start", idx)
             self.text.event_generate("<<Add-Separator>>")
             self.text.event_generate("<<Move-Insert>>", data=(idx,))
+            self.text.event_generate("<<CancelAll>>")
+            self.text.focus_set()
             return True
 
         if on == "mouse-release":
@@ -258,14 +259,15 @@ class SelectManager(Rule):
             current_char:str = self.text.get(start, start+"+1c")
         else:
             current_char:str = self.text.get(start+"-1c", start)
-        looking_for_alphabet:bool = current_char not in ALPHANUMERIC_
+        isalphanumeric = lambda s: s.isidentifier() or s.isdigit() # also "_"
+        looking_for_alphabet:bool = not isalphanumeric(current_char)
         if looking_for_alphabet and text:
             new_start:str = f"{start} +{-strides}c"
             return self.get_word_size(strides, new_start, stop, text=False) - 1
         if current_char in "'\"(){}[]\n":
             return 1
 
-        while looking_for_alphabet ^ (current_char in ALPHANUMERIC_):
+        while looking_for_alphabet ^ isalphanumeric(current_char):
             chars_skipped += 1
             left:str = f"{start} +{chars_skipped*strides}c"
             right:str = f"{start} +{(chars_skipped+1)*strides}c"

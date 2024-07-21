@@ -24,7 +24,7 @@ else:
     OPEN_IN_EXPLORER:str = None
     OPEN_DEFAULT:str = None
     sys.stderr.write("Unknown OS, can't open files/folders in real explorer.\n")
-OPEN_IN_TERMINAL:str = 'python3 bettertk/terminaltk/terminaltk.py "{path}"'
+OPEN_IN_TERMINAL:str = 'python3 bettertk/open_terminal.py "{path}"'
 
 
 BKWARGS:dict = dict(activeforeground="white", activebackground="grey", bd=0,
@@ -63,6 +63,7 @@ class Menu:
         self.children:list[tk.Misc] = []
         self.master.bind_all("<Escape>", self.cancel, add=True)
         self.master.bind_all("<Button-1>", self.cancel, add=True)
+        self.master.bind_all("<<CancelAll>>", self.cancel, add=True)
         self.on_cancel:Function[None] = lambda: None
 
     def _ischild(self, widget:tk.Misc) -> bool:
@@ -146,6 +147,7 @@ class ExpandedExplorer(Explorer):
         self.cwd:tk.Frame = None
         self.master.bind_all("<Escape>", self.finish_rename, add=True)
         self.master.bind_all("<Button-1>", self.maybe_cancel_rename, add=True)
+        self.master.bind_all("<<CancelAll>>", self.maybe_cancel_rename, add=True)
         self.master.bind_all("<<Explorer-Report-CWD>>", self.report_cwd)
 
     # Bin
@@ -177,7 +179,7 @@ class ExpandedExplorer(Explorer):
         self.menu.on_cancel:Function[None] = self.menu_cancel
 
     def right_click(self, frame:tk.Frame) -> str:
-        if self.changing is not None:
+        if (self.changing is not None) and (not self.menu.shown):
             return None
         if frame is None:
             return None

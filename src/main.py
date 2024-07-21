@@ -1,6 +1,7 @@
 from __future__ import annotations
 from tkinter.filedialog import askdirectory
 import tkinter as tk
+import sys
 import os
 os.chdir(os.path.dirname(__file__))
 
@@ -10,7 +11,7 @@ from bettertk.betterframe import BetterFrame
 from bettertk.betterscrollbar import BetterScrollBarVertical, \
                                      BetterScrollBarHorizontal
 from bettertk.messagebox import askyesno, tell as telluser
-from bettertk import BetterTk
+from bettertk import BetterTk, BetterTkSettings
 from bettertk import notebook
 from plugins import VirtualEvents
 from settings.settings import curr as settings
@@ -31,17 +32,20 @@ class App:
 
     def __init__(self) -> App:
         self.text_to_page:dict[tk.Text:notebook.NotebookPage] = {}
-        self.root:BetterTk = BetterTk(className="Bismuth-184")
+        window_settings:BetterTkSettings = BetterTkSettings()
+        window_settings.config(use_border=False)
+        self.root:BetterTk = BetterTk(settings=window_settings,
+                                      className="Bismuth-184")
         self.root.title("Bismuth-184")
         self.root.iconphoto(True, "sprites/Bismuth_184.ico")
         self.root.protocol("WM_DELETE_WINDOW", self.root_close)
         self.root.geometry(f"+{settings.window.x}+{settings.window.y}")
         pannedwindow = tk.PanedWindow(self.root, orient="horizontal", bd=0,
                                       height=settings.window.height,
-                                      sashwidth=4)
+                                      sashwidth=4, bg="grey")
         pannedwindow.pack(fill="both", expand=True)
 
-        self.notebook:notebook.Notebook = notebook.Notebook(pannedwindow)
+        self.notebook:notebook.Notebook = notebook.Notebook(pannedwindow, 0)
         self.notebook.bind("<<Tab-Create>>", lambda _: self.new_tab())
         self.notebook.bind("<<Tab-Switched>>", self.change_selected_tab)
         self.notebook.bind("<<Close-All>>", self.root_close)
@@ -87,6 +91,7 @@ class App:
         pannedwindow.add(self.notebook, sticky="news",
                          width=settings.notebook.width)
 
+    def init(self) -> None:
         self._set_notebook_state(settings.notebook.open)
         self._set_explorer_state(settings.explorer.added,
                                  settings.explorer.expanded)
@@ -162,23 +167,25 @@ class App:
 
     def close_tab(self, page:NotebookPage) -> bool:
         text:tk.Text = self.page_to_text(page)
-        block:bool = False
         if text.edit_modified():
             title:str = "Close unsaved text?"
             msg:str = "Are you sure you want to\nclose this unsaved page?"
-            block = not askyesno(self.root, title=title, message=msg,
-                                 center=True, icon="warning",
-                                 center_widget=text)
-        if not block:
-            plugin:Plugin = getattr(text, "plugin", None)
-            if plugin is not None:
-                text.plugin.destroy()
-            self.text_to_page.pop(text)
-            text.destroy()
-        return block
+            allow = askyesno(self.root, title=title, message=msg, center=True,
+                             icon="warning", center_widget=text)
+            if not allow:
+                return True
+        plugin:Plugin = getattr(text, "plugin", None)
+        if plugin is not None:
+            text.plugin.destroy()
+        self.text_to_page.pop(text)
+        text.destroy()
+        return False
 
     def open_tab_explorer(self, _:tk.Event) -> None:
         path:str = self.explorer.selected.item.fullpath
+        self.open_tab(path)
+
+    def open_tab(self, path:str) -> None:
         for text, page in self.text_to_page.items():
             if text.filepath == path:
                 page.focus()
@@ -187,6 +194,7 @@ class App:
 
     # Save close
     def request_save(self, event:tk.Event) -> None:
+        # Read existing if possible
         if event.widget.filepath is None:
             filesystem_data:bytes = None
         elif not os.path.exists(event.widget.filepath):
@@ -195,15 +203,20 @@ class App:
             with open(event.widget.filepath, "br") as file:
                 filesystem_data:bytes = file.read().replace(b"\r\n", b"\n")
                 filesystem_data:bytes = filesystem_data.removesuffix(b"\n")
-        if event.widget.filesystem_data.encode("utf-8") != filesystem_data:
+        # Get the current data in the editor
+        data:bytes = event.widget.filesystem_data.encode("utf-8") \
+                                                 .removesuffix(b"\n")
+        # Compare and ask if we can replace data
+        if (filesystem_data is not None) and (data != filesystem_data):
             title:str = "Merge conflict"
             msg:str = "The file has been modified on the filesystem.\n" \
                       "Are you sure you want to save it?"
-            ret:bool = askyesno(self.root, title=title, icon="warning",
-                                message=msg, center=True,
-                                center_widget=event.widget)
-            if not ret:
+            allow:bool = askyesno(self.root, title=title, icon="warning",
+                                  message=msg, center=True,
+                                  center_widget=event.widget)
+            if not allow:
                 return None
+        # Actual save
         event.widget.event_generate("<<Trigger-Save>>")
         self.plugin_manage(event.widget)
 
@@ -313,7 +326,7 @@ class App:
         path:str = askdirectory(master=self.root)
         if not path:
             return None
-        self.explorer.add(path)
+        self.explorer.add(path, expand=True)
 
     def _get_explorer_state(self) -> tuple[list[str],list[str]]:
         getpath = lambda item: item.fullpath
@@ -328,9 +341,15 @@ class App:
         for path in added:
             self.explorer.add(path)
         expanded:set[str] = set(expanded)
-        for item, _ in self.explorer.root.recurse_children(withself=False):
-            if isfolder(item) and (item.fullpath in expanded):
-                self.explorer.expand(item)
+        while expanded:
+            changed:bool = False
+            for item, _ in self.explorer.root.recurse_children(withself=False):
+                if isfolder(item) and (item.fullpath in expanded):
+                    expanded.remove(item.fullpath)
+                    self.explorer.expand(item)
+                    changed:bool = True
+            if not changed:
+                break
 
     # The mainloop function
     def mainloop(self) -> None:
@@ -338,14 +357,24 @@ class App:
 
 
 if __name__ == "__main__":
-    app:App = App()
+    from runner import ErrorManager
 
-    try:
-        import sys
-        sys.stdin.fileno()
-        print("\x1b[8;24;106;t\x1b[A\r\x1b[0K", end="")
-        app.mainloop()
-    except ValueError:
-        pass # Inside IDLE
-    except KeyboardInterrupt:
-        pass
+    def start() -> App:
+        return App()
+
+    def init(app:App) -> App:
+        app.init()
+        for path in filter(os.path.isfile, sys.argv[1:]):
+            app.open_tab(path)
+        for path in filter(os.path.isdir, sys.argv[1:]):
+            app.explorer.add(path, expand=True)
+        return app
+
+    def run(app:App) -> None:
+        try:
+            app.mainloop()
+        except KeyboardInterrupt:
+            return None
+
+    manager:ErrorManager = ErrorManager(start=start, init=init, run=run)
+    manager.exec()

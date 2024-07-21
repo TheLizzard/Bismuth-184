@@ -57,7 +57,6 @@ class PythonPlugin(AllPlugin):
                              FindReplaceManager,
                              SaveLoadManager,
                              RunManager,
-                             # FindReplaceManager,
                              RemoveShortcuts,
                              # Other widgets:
                              WidgetReparenterManager,

@@ -5,6 +5,7 @@ import os
 
 from bettertk.terminaltk.terminaltk import TerminalTk
 from bettertk.messagebox import tell as telluser
+from bettertk import BetterTkSettings
 from .baserule import Rule
 
 # tk.Event.state constants
@@ -22,6 +23,7 @@ class RunManager(Rule):
     COMPILE:list[str] = None
     RUN:list[str] = None
     TEST:list[str] = None # No key binding yet
+    AFTER:list[str] = None
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
         evs:tuple[str] = (
@@ -80,7 +82,9 @@ class RunManager(Rule):
             return None
 
         if (self.term is None) or (not self.term.running):
-            self.term = TerminalTk(self.widget)
+            window_settings:BetterTkSettings = BetterTkSettings()
+            window_settings.config(use_border=False)
+            self.term = TerminalTk(self.widget, settings=window_settings)
             print_str:str = " Starting ".center(80, "=") + "\n"
         else:
             self.term.cancel_all()
@@ -93,8 +97,9 @@ class RunManager(Rule):
         self.term.topmost(False)
         self.term.focus_set()
         self.cd(print_str=print_str)
-        self.compile()
-        self.execute(args)
+        if self.compile():
+            self.execute(args)
+        self.after()
 
     def cd(self, req_cwd:str=None, *, print_str:str="") -> None:
         if self.CD is None:
@@ -103,13 +108,17 @@ class RunManager(Rule):
         command:tuple[str] = self.format(self.CD, {"folder":cwd})
         self.term.iqueue(1, command, print_str)
 
-    def compile(self, *, print_str:str="") -> None:
-        if self.COMPILE is None:
-            return None
+    def compile(self, *, print_str:str="", command:list[str]=None) -> bool:
+        if (self.COMPILE is None) and (command is None):
+            return False
+        if self.COMPILE == []:
+            return True
         tmp:str = self.term.terminal.terminal.pipe.tmp.name
-        command = self.format(self.COMPILE, {"file":self.text.filepath,
-                                             "tmp":tmp})
+        command:list[str] = command or self.COMPILE
+        command:list[str] = self.format(command, {"file":self.text.filepath,
+                                                  "tmp":tmp})
         self.term.iqueue(2, command, print_str, condition=(0).__eq__)
+        return True
 
     def execute(self, args:Iterable[str], *, print_str:str="") -> None:
         if self.RUN is None:
@@ -119,12 +128,19 @@ class RunManager(Rule):
                                          "tmp":tmp}) + list(args)
         self.term.iqueue(3, command, print_str, condition=(0).__eq__)
 
+    def after(self, *, print_str:str="", command:list[str]=None) -> None:
+        if (self.AFTER is None) and (command is None):
+            return None
+        command:list[str] = command or self.AFTER
+        command:list[str] = self.format(command, {"file":self.text.filepath})
+        self.term.iqueue(4, command, print_str, condition=(0).__eq__)
+
     def test(self, args:Iterable[str], *, print_str:str="") -> None:
         if self.RUN is None:
             return None
         tmp:str = self.term.terminal.terminal.pipe.tmp.name
         command = self.format(self.TEST, {"file":self.text.filepath,
-                                         "tmp":tmp}) + list(args)
+                                          "tmp":tmp}) + list(args)
         self.term.iqueue(3, command, None, condition=(0).__eq__)
 
     @staticmethod

@@ -130,6 +130,8 @@ class DrawImage:
         y3, y4 = y35-w/2*cos(theta), y35+w/2*cos(theta)
         self.draw_triangle((x1,y1), (x2,y2), (x3,y3), colour=colour, alpha=alpha)
         self.draw_triangle((x2,y2), (x4,y4), (x3,y3), colour=colour, alpha=alpha)
+        # self.draw_polygon((x1,y1), (x2,y2), (x4,y4), (x3,y3), colour=colour,
+        #                   alpha=alpha)
 
     def draw_rounded_line(self, p1, p2, w, *, colour=WHITE, alpha=256):
         (x1,y1), (x2, y2) = p1, p2
@@ -171,6 +173,49 @@ class DrawImage:
         #self.draw_circle((x1,y1), 3, colour=RED)
         #self.draw_circle((x2,y2), 3, colour=GREEN)
         #self.draw_circle((x3,y3), 3, colour=BLUE)
+
+    def draw_polygon(self, *ps:tuple[Point], colour=WHITE, alpha=256):
+        first = lambda items: items[0]
+        second = lambda items: items[1]
+        minx, maxx = min(map(first, ps)), max(map(first, ps))
+        miny, maxy = min(map(second, ps)), max(map(second, ps))
+        for i in range(int(minx), int(maxx+1)):
+            for j in range(int(miny), int(maxy+1)):
+                if not self._in_polygon(ps, (i, j)):
+                    continue
+                self.pix[i,j] = colour+(alpha,)
+
+    @staticmethod
+    def _lines_from_verts(verts:tuple[Point]) -> Iterable[Line]:
+        verts:list[Point] = list(verts)
+        for a, b in zip(verts, [verts[-1]]+verts):
+            yield a, b
+
+    @staticmethod
+    def _in_polygon(ps:tuple[Point], test:Point) -> bool:
+        testx, testy = test
+        c:int = 0 # Can be any size int even 1 bit
+        for pointa, pointb in DrawImage._lines_from_verts(ps):
+            pointax, pointay = pointa
+            pointbx, pointby = pointb
+            if (pointax == testx) and (pointay == testy):
+                return True
+            if (pointbx == testx) and (pointby == testy):
+                return True
+            if (pointay>testy) == (pointby>testy):
+                continue
+            if (testx < pointax < pointbx) or (testx < pointbx < pointax):
+                c += 1
+                continue
+            if (pointax < pointbx < testx) or (pointbx < pointax < testx):
+                continue
+            gp:float = line_gradient(pointax, pointay, pointbx, pointby)
+            x_intercept:float = (pointax-testx)-(pointay-testy)/gp
+            if -ε < x_intercept < ε:
+                return True
+            if x_intercept > 0:
+                c += 1
+        return bool(c&1)
 
 
 def draw_pause(a:int, b:int, c:int, d:int, size:int) -> DrawImage:
@@ -322,6 +367,8 @@ def init(size:int, show_size:int, inner_size:int,
         sprites["stop"] = draw_stop(75, 135, 20, 15, 100, size)
     if "close" in sprites_wanted:
         sprites["close"] = draw_close(65, 15, 100, size)
+    if "close2" in sprites_wanted:
+        sprites["close2"] = draw_close2(65, 15, 100, size)
     if "restart" in sprites_wanted:
         sprites["restart"] = draw_restart(50, 65, 50, 40, None, 15, 100, size)
     if "kill" in sprites_wanted:
@@ -355,8 +402,10 @@ class SpritesCache:
 
 
 if __name__ == "__main__":
+    DEBUG:bool = True
     size:int = 256
-    sprites:dict[str:Image.Image] = init(size, size>>1, 220, {"info"})
+    wanted:set[str] = {"info", "play", "close", "warning", "error", "kill"}
+    sprites:dict[str:Image.Image] = init(size, size>>1, 220, wanted)
 
     root = tk.Tk()
     root.geometry("+0+0")
@@ -365,8 +414,10 @@ if __name__ == "__main__":
     tksprites = {name:ImageTk.PhotoImage(img) for name,img in sprites.items()}
 
     labels = []
-    for _, image in tksprites.items():
-        label = tk.Label(root, bd=0, highlightthickness=0, bg="black")
-        label.pack(side="left")
-        label.config(image=image)
-        label.bind("<Button-1>", lambda e: print(e.x, e.y))
+    for i, name in enumerate(wanted):
+        image = tksprites[name]
+        im = tk.Label(root, bd=0, highlightthickness=0, bg="black", image=image)
+        im.grid(row=0, column=i)
+        im.bind("<Button-1>", lambda e: print(e.x, e.y))
+        label = tk.Label(root, text=name, bg="black", fg="white")
+        label.grid(row=1, column=i, sticky="ew")

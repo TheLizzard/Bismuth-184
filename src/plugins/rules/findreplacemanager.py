@@ -70,11 +70,12 @@ class Checkbox(tk.Frame):
 class FindReplaceManager(Rule):
     __slots__ = "text", "window", "find", "replace", "regex", "matchcase", \
                 "wholeword", "button", "shown", "geom", "replace_label", \
-                "replace_str", "find_cache"
+                "replace_str", "find_cache", "swap"
     MAX_FINDS:int = 100
     HIT_TAG:str = "hit"
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> None:
+        self.swap:bool = False
         evs:tuple[str] = (
                            # Find
                            "<Control-F>", "<Control-f>",
@@ -119,6 +120,7 @@ class FindReplaceManager(Rule):
         self.find.grid(row=1, column=2, columnspan=3, pady=5, sticky="news")
         self.find.bind("<Tab>", self.tab_pressed)
         self.find.bind("<Return>", self.return_pressed)
+        self.find.bind("<Shift-Return>", self.unreturn_pressed)
         self.find.bind("<KP_Enter>", self.return_pressed)
         self.find.bind("<Escape>", lambda e: self.hide())
         MiniPlugin(self.find).attach()
@@ -242,10 +244,16 @@ class FindReplaceManager(Rule):
         self.window.withdraw()
         self.text.focus_set()
 
-    def _find(self, start:str="insert") -> None:
+    def _find(self, start:str=None) -> None:
+        if start is None:
+            fst, snd = self.plugin.get_selection()
+            start:str = fst if self.swap else snd
         find, flags = self.get_find_params()
         if (find, flags) == self.find_cache:
-            res = self.text.tag_nextrange(self.HIT_TAG, start)
+            if self.swap:
+                res = self.text.tag_prevrange(self.HIT_TAG, start)
+            else:
+                res = self.text.tag_nextrange(self.HIT_TAG, start)
             if res:
                 a, b = res
             else:
@@ -355,6 +363,12 @@ class FindReplaceManager(Rule):
 
     def return_pressed(self, event:tk.Event=None) -> str:
         self.button.invoke()
+        return "break"
+
+    def unreturn_pressed(self, event:tk.Event=None) -> str:
+        self.swap:bool = True
+        self.button.invoke()
+        self.swap:bool = False
         return "break"
 
     def format_str(self, string:str) -> str:

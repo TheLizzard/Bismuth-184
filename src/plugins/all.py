@@ -10,6 +10,7 @@ try:
     from rules.selectmanager import SelectManager
     from rules.commentmanager import CommentManager
     from rules.undomanager import UndoManager
+    from rules.findreplacemanager import FindReplaceManager
     from rules.reparentmanager import WidgetReparenterManager
     from rules.xrawidgets import BarManager, LineManager, ScrollbarManager
     # from rules.xrawidgets import MenuManager
@@ -26,6 +27,7 @@ except ImportError:
     from .rules.selectmanager import SelectManager
     from .rules.commentmanager import CommentManager
     from .rules.undomanager import UndoManager
+    from .rules.findreplacemanager import FindReplaceManager
     from .rules.reparentmanager import WidgetReparenterManager
     from .rules.xrawidgets import BarManager, LineManager, ScrollbarManager
     # from .rules.xrawidgets import MenuManager
@@ -47,8 +49,8 @@ class BasicPlugin(AllPlugin):
                              ClipboardManager,
                              WhiteSpaceManager,
                              BracketManager,
+                             FindReplaceManager,
                              SaveLoadManager,
-                             # FindReplaceManager,
                              RemoveShortcuts,
                              # Other widgets:
                              WidgetReparenterManager,

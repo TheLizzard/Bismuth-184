@@ -210,7 +210,7 @@ class LineNumbers(tk.Canvas):
         super().create_line((self.width-3, 0, self.width-3, max_y), width=1,
                             fill=self.fg, tags=("separator", ))
 
-        self.redraw_loop()
+        # self.redraw_loop()
 
     def redraw_loop(self) -> None:
         try:

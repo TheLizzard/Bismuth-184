@@ -33,7 +33,7 @@ INDENTATION:int = 15
 PADX:int = 10
 PADY:int = 5
 DEBUG:bool = False
-UPDATE_DELAY:int = 2000
+UPDATE_DELAY:int = 5000
 HIGHLIGHT_UPDATES:bool = False
 COLLAPSE_BEFORE_MOVE:bool = True
 REDRAW_HIGHLIGHT_DELAY:int = 1000
@@ -285,8 +285,8 @@ class Explorer:
         if frame.item.name == MAX_ITEMS_ITENT:
             return None
         if DEBUG: print(f"[DEBUG]: Expanding {frame.item}")
-        frame.item.expanded:bool = True
         frame.expandeder.config(text="-")
+        frame.item.expanded:bool = True
         self.update(soft=True)
 
     def _collapse(self, frame:tk.Frame) -> None:
@@ -294,8 +294,8 @@ class Explorer:
             return None
         if frame.item.name == MAX_ITEMS_ITENT:
             return None
-        frame.item.expanded:bool = False
         frame.expandeder.config(text="+")
+        frame.item.expanded:bool = False
         self.update(soft=True)
 
     def expand(self, item:Item) -> None:
@@ -303,11 +303,13 @@ class Explorer:
         self._expand(self.item_to_frame[item])
 
     # Functions you can call:
-    def add(self, path:str) -> None:
+    def add(self, path:str, expand:bool=False) -> None:
         folder:Folder = self.root.add(path)
         if folder is not None:
             folder.update()
             self.update(soft=True)
+            if expand:
+                self.expand(folder)
 
     def remove(self, path:str) -> None:
         self.root.remove(path)

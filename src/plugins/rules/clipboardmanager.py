@@ -1,6 +1,7 @@
 from __future__ import annotations
 import tkinter as tk
 
+from bettertk.messagebox import tell as telluser
 from .baserule import Rule
 
 
@@ -46,7 +47,9 @@ class ClipboardManager(Rule):
             try:
                 copied:str = self.text.clipboard_get()
             except tk.TclError:
-                print("Clipboard contents too large")
+                msg:str = "Clipboard contents too large"
+                telluser(self.text, title="Can't paste", message=msg,
+                         center=True, icon="error")
                 return True
             # If they are the same, just move the cursor
             if selected == copied:
@@ -54,7 +57,11 @@ class ClipboardManager(Rule):
                 self.text.event_generate("<<Move-Insert>>", data=(end,))
             # else delete selected and insert the clipboard text
             else:
+                # If we can see "end", we should scroll to the bottom
+                see_end:bool = (self.text.yview()[1] == 1)
                 self.text.delete(start, end)
                 self.text.insert("insert", copied)
+                if see_end:
+                    self.text.see("end")
             return True
         raise RuntimeError(f"Unhandled {op} in {self.__class__.__name__}")
