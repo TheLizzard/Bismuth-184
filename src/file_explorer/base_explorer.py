@@ -19,7 +19,7 @@ DEBUG:bool = False
 TEST:bool = False
 WARNINGS:bool = True
 
-MAX_ITEMS_IN_DIR:int = 40
+MAX_ITEMS_IN_DIR:int = float("inf") # 40
 MAX_ITEMS_TAKES:int = 5
 MAX_ITEMS_ITENT:str = "..."
 assert MAX_ITEMS_TAKES <= MAX_ITEMS_IN_DIR, "Make sure this assertion holds"

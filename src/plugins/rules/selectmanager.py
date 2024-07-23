@@ -26,6 +26,10 @@ class SelectManager(Rule):
         evs = (
                 # Arrow
                 "<Left>", "<Right>", "<Up>", "<Down>",
+                # Other keyboard buttons
+                "<Home>", "<End>", "<KP_End>", "<KP_Home>", "<KP_1>", "<KP_7>",
+                # My shortcuts
+                "<KeyPress-i>", "<KeyPress-k>",
                 # Mouse
                 "<Double-Button-1>", "<Triple-Button-1>",
                 "<ButtonPress-1>", "<ButtonRelease-1>", "<B1-Motion>",
@@ -70,6 +74,10 @@ class SelectManager(Rule):
         return str(text.tk.call("::tk::TextClosestGap", text._w, x, y))
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
+        ctrl:bool = event.state & CTRL
+        shift:bool = event.state & SHIFT
+        alt:bool = event.state & ALT
+
         if on in ("backspace", "delete"):
             start, end = self.plugin.get_selection()
             if start == end:
@@ -88,6 +96,7 @@ class SelectManager(Rule):
             idx:int = self.get_index_from_pos(self.text, event.x, event.y)
             on:str = "mouse-" + on.removeprefix("button").removesuffix("-1")
 
+        # Mouse select
         elif on == "b1-motion":
             on:str = "mouse-motion"
             idx:int = self.get_index_from_pos(self.text, event.x, event.y)
@@ -104,14 +113,33 @@ class SelectManager(Rule):
                 drag_y:int = +1
             drag:tuple = drag_x, drag_y
 
-        if on == "<before-insert>":
+        # ???
+        elif on == "<before-insert>":
             if event.data[2] is not None:
                 return False
 
-        if on == "<move-insert>":
+        # ???
+        elif on == "<move-insert>":
             data:tuple = event.data
 
-        return on, event.state&CTRL, event.state&SHIFT, idx, drag, data, True
+        # Keypad home/end
+        elif on.startswith("kp_"):
+            on:str = on.removeprefix("kp_")
+            if shift:
+                on:str = {"end":"1", "home":"7"}.get(on, on)
+            if on in ("1", "7"):
+                if not ctrl:
+                    return False
+                on:str = {"1":"end", "7":"home"}.get(on, on)
+                ctrl:bool = alt
+
+        # Control-i and Control-k
+        elif on.startswith("keypress-"):
+            if not ctrl:
+                return False
+            on:str = on.removeprefix("keypress-")
+
+        return on, ctrl, shift, idx, drag, data, True
 
     def do(self, _, on, ctrl, shift, idx:str, drag:tuple, data:tuple) -> Break:
         if on in ("backspace", "delete"):
@@ -184,10 +212,50 @@ class SelectManager(Rule):
                 self.plugin.delete_selection()
             return False
 
+        if on == "i":
+            if self.text.compare("insert linestart", "==", "1.0"):
+                return False
+            new_pos:str = "insert -1l lineend"
+            self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
+            self.text.event_generate("<Return>")
+            return True
+        if on == "k":
+            if self.text.compare("insert lineend", "==", "end -1c"):
+                return False
+            new_pos:str = "insert lineend"
+            self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
+            self.text.event_generate("<Return>")
+            return True
+
+        # Selection stuff
         cur:str = self.text.index("insert")
         new:str = self.get_movement(on, ctrl, cur)
 
-        if on in ("left", "right"):
+        if on == "home":
+            if ctrl:
+                new:str = "1.0"
+            else:
+                line:str = self.text.get(f"{cur} linestart", cur)
+                if len(line) == 0:
+                    line:str = self.text.get(cur, f"{cur} lineend")
+                spaces:int = len(line) - len(line.lstrip(" \t"))
+                if spaces == len(line):
+                    spaces:int = 0
+                new:str = f"{cur} linestart +{spaces}c"
+        elif on == "end":
+            if ctrl:
+                new:str = "end -1c"
+            else:
+                fline:str = self.text.get(f"{cur} linestart", f"{cur} lineend")
+                line:str = self.plugin.get_virline(f"{cur} lineend")
+                cur_char:int = int(self.text.index(cur).split(".")[1])
+                if (cur_char < len(line)) or (len(fline) == cur_char):
+                    comment:int = len(fline) - len(line)
+                    new:str = f"{cur} lineend -{comment}c"
+                else:
+                    new:str = f"{cur} lineend"
+
+        elif on in ("left", "right"):
             start, end = self.plugin.get_selection()
             if (start == end) or shift:
                 if self.text.compare(new, "==", "end"):

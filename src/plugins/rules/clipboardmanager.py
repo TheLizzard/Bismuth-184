@@ -57,11 +57,8 @@ class ClipboardManager(Rule):
                 self.text.event_generate("<<Move-Insert>>", data=(end,))
             # else delete selected and insert the clipboard text
             else:
-                # If we can see "end", we should scroll to the bottom
-                see_end:bool = (self.text.yview()[1] == 1)
-                self.text.delete(start, end)
-                self.text.insert("insert", copied)
-                if see_end:
-                    self.text.see("end")
+                with self.plugin.see_end:
+                    self.text.delete(start, end)
+                    self.text.insert("insert", copied)
             return True
         raise RuntimeError(f"Unhandled {op} in {self.__class__.__name__}")

@@ -26,11 +26,12 @@ notebook.CONTROL_NUMBERS_CONTROLS:bool = True
 notebook.CONTROL_NUMBERS_RESTRICT:bool = False
 notebook.HIDE_SCROLLBAR:bool = False
 
+
 class App:
     __slots__ = "root", "explorer", "notebook", "text_to_page", \
                 "explorer_frame"
 
-    def __init__(self) -> App:
+    def __init__(self, message_queue:MsgQueue) -> App:
         self.text_to_page:dict[tk.Text:notebook.NotebookPage] = {}
         window_settings:BetterTkSettings = BetterTkSettings()
         window_settings.config(use_border=False)
@@ -40,6 +41,7 @@ class App:
         self.root.iconphoto(True, "sprites/Bismuth_184.ico")
         self.root.protocol("WM_DELETE_WINDOW", self.root_close)
         self.root.geometry(f"+{settings.window.x}+{settings.window.y}")
+        self.root.after(100, self._check_msg_queue, message_queue)
         pannedwindow = tk.PanedWindow(self.root, orient="horizontal", bd=0,
                                       height=settings.window.height,
                                       sashwidth=4, bg="grey")
@@ -191,6 +193,17 @@ class App:
                 page.focus()
                 return None
         self.new_tab(path)
+
+    def open(self, path:str) -> None:
+        """
+        Open a file/folder with this editor
+        """
+        if os.path.isfile(path):
+            self.open_tab(path)
+        elif os.path.isdir(path):
+            self.explorer.add(path, expand=True)
+        else:
+            raise RuntimeError("Unknown type for {path!r}")
 
     # Save close
     def request_save(self, event:tk.Event) -> None:
@@ -355,26 +368,73 @@ class App:
     def mainloop(self) -> None:
         self.root.mainloop()
 
+    # IPC Messages
+    def _check_msg_queue(self, message_queue:MsgQueue) -> None:
+        try:
+            while message_queue:
+                command, *args = message_queue.pop(0)
+                if command == "focus":
+                    assert len(args) == 0, "There should be no args"
+                    self.root.attributes("-topmost", True)
+                    self.root.attributes("-topmost", False)
+                    self.root.focus_force()
+                elif command == "open":
+                    assert len(args) == 1, "There should only be 1 arg"
+                    self.open(args[0])
+                else:
+                    raise RuntimeError("Unknown {command=!r}")
+        finally:
+            self.root.after(200, self._check_msg_queue, message_queue)
+
 
 if __name__ == "__main__":
-    from runner import ErrorManager
+    from runner.runner import RunManager
 
-    def start() -> App:
-        return App()
+    def start(message_queue=None, onclose=None) -> tuple[App,OnClose]:
+        if message_queue is None:
+            message_queue:MsgQueue = []
+        if onclose is None:
+            onclose:OnClose = lambda: None
+        return App(message_queue), onclose
 
-    def init(app:App) -> App:
+    def init(app:App, onclose:OnClose) -> tuple[App,OnClose]:
         app.init()
-        for path in filter(os.path.isfile, sys.argv[1:]):
-            app.open_tab(path)
-        for path in filter(os.path.isdir, sys.argv[1:]):
-            app.explorer.add(path, expand=True)
-        return app
+        for path in sys.argv[1:]:
+            app.open(path)
+        return app, onclose
 
-    def run(app:App) -> None:
+    def run(app:App, onclose:Onclose) -> None:
         try:
             app.mainloop()
         except KeyboardInterrupt:
             return None
+        finally:
+            onclose()
 
-    manager:ErrorManager = ErrorManager(start=start, init=init, run=run)
-    manager.exec()
+    def force_singleton() -> MsgQueue:
+        return None
+        from runner.singleton import singleton
+
+        is_main, writer_or_buffer, onclose = singleton()
+        if is_main:
+            # Return a queue of the messages
+            return writer_or_buffer, onclose
+        else:
+            # Send args to main, tell it to focus, and kill self
+            try:
+                writer_or_buffer(("focus",))
+                for arg in sys.argv[1:]:
+                    writer_or_buffer(("open", arg))
+            finally:
+                onclose()
+            raise SystemExit()
+
+    manager:RunManager = RunManager()
+    manager.register(force_singleton)
+    manager.register(start, exit_on_error=True)
+    manager.register(init)
+    manager.register(run)
+    try:
+        manager.exec()
+    except SystemExit:
+        pass

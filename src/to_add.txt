@@ -4,8 +4,7 @@ Editor:
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
 * Java's `RunManager` should also handle testing.
 * `FindReplaceManager` removes hit tag when the user adds/removes text near the hit
-* If you can see end, pressing return should scroll to the end
-* Implement Home/End/Control-Up/Control-Down
+* Implement Control-Up/Control-Down
 * Commenting a block with a comment inside it, uncomments the comment
 * Horizonal scrollbar shows and hides rapidly in rare circumstances
 * Control(-Shift)?-z doesn't scroll if there is text selected

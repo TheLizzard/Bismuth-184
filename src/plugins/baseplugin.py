@@ -17,7 +17,8 @@ class BasePlugin:
         self.rules:list[Rule] = []
 
     def attach(self) -> None:
-        assert getattr(self.widget, "plugin", None) is None, "already has a plugin"
+        has_plugin:bool = getattr(self.widget, "plugin", None) is None
+        assert has_plugin, "already has a plugin"
         self.widget.plugin:BasePlugin = self
         for rule in self.rules:
             Rule:type[rule] = rule.__class__
@@ -72,10 +73,28 @@ class BasePlugin:
                 print(f"[WARNING] {msg} {requester} might malfunction.")
 
 
-# Don't change order, mod2 might mean "key press"
+# Don't change order; mod2 might mean "key press"
 ALL_MODIFIERS = ("shift", "caps", "control",
                  "alt", "mod2", "mod3", "mod4", "alt_gr",
                  "button1", "button2", "button3", "button4", "button5")
+
+
+class SeeEndContext:
+    __slots__ = "text", "see_end", "see_x_char"
+
+    def __init__(self, text:tk.Text) -> SeeEndContext:
+        self.see_x_char:str = text.index("insert").split(".")[1]
+        self.see_end:bool = (text.yview()[1] == 1)
+        self.text:tk.Text = text
+
+    def __enter__(self) -> SeeEndContext:
+        return self
+
+    def __exit__(self, exc_t:type, exc_val:BaseException, tb:Traceback) -> bool:
+        if self.see_end:
+            idx:str = f"end -1c linestart +{self.see_x_char}c"
+            self.text.after(1, self.text.see, idx)
+        return False
 
 
 class AllPlugin(BasePlugin):
@@ -88,6 +107,10 @@ class AllPlugin(BasePlugin):
         self.text:tk.Text = text
         super().__init__(text)
         super().add_rules(rules)
+
+    @property
+    def see_end(self) -> SeeEndContext:
+        return SeeEndContext(self.text)
 
     @classmethod
     def can_handle(Cls:type, filepath:str|None) -> bool:
@@ -102,8 +125,12 @@ class AllPlugin(BasePlugin):
         self.virtual_events.paused:bool = True
         super().detach()
 
-    def is_inside(self, tag:str, idx:str) -> bool:
+    def left_has_tag(self, tag:str, idx:str) -> bool:
         return tag in self.text.tag_names(f"{idx} -1c")
+    # is_inside = left_has_tag # Depricated
+
+    def right_has_tag(self, tag:str, idx:str) -> bool:
+        return tag in self.text.tag_names(idx)
 
     def get_virline(self, end:str) -> str:
         """
@@ -113,7 +140,7 @@ class AllPlugin(BasePlugin):
         current:str = self.text.index(end)
         linenumber:int = int(float(current))
         while (linenumber == int(float(current))) and (current != "1.0"):
-            is_comment:bool = self.is_inside("comment", current)
+            is_comment:bool = self.left_has_tag("comment", current)
             is_space:bool = self.text.get(f"{current} -1c", current) in " \t"
             if not (is_comment or is_space):
                 return self.text.get(f"{current} linestart", current)
@@ -200,8 +227,8 @@ class AllPlugin(BasePlugin):
 
     def find_bracket_match(self, open:str, close:str, end:str="insert"):
         # If we are in a comment or a string, stay in the comment/string
-        is_comment:bool = self.is_inside("comment", end)
-        is_string:bool = self.is_inside("string", f"{end} +1c")
+        is_comment:bool = self.left_has_tag("comment", end)
+        is_string:bool = self.right_has_tag("string", end)
         if is_string or is_comment:
             if is_string:
                 tag:str = "string"

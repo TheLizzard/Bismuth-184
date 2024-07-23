@@ -73,8 +73,8 @@ class BracketManager(Rule):
             return self.plugin.undo_wrapper(self.open_bracket, on,
                                             self.BRACKETS_DICT[on])
         if on in self.RBRACKETS_DICT.keys():
-            return self.plugin.undo_wrapper(self.close_bracket, on,
-                                            self.RBRACKETS_DICT[on])
+            return self.plugin.undo_wrapper(self.close_bracket,
+                                            self.RBRACKETS_DICT[on], on)
         if on == "backspace":
             return self.plugin.undo_wrapper(self.backspace)
         raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
@@ -87,8 +87,33 @@ class BracketManager(Rule):
                 return True
         return False
 
+    def _check_closing_after_open(self, close:str) -> bool:
+        # For people (like me) who type ")" right after "(":
+        double_press:bool = self.plugin.left_has_tag(self.BACKET_HIGHLIGHT_TAG,
+                                                     "insert")
+        if not double_press:
+            return False
+        if self.text.get("insert", "insert +1c") != close:
+            return False
+        self.text.event_generate("<<Move-Insert>>", data=("insert +1c",))
+        return True
+
     def open_bracket(self, open:str, close:str) -> Break:
         if open == close:
+            is_comment:bool = self.plugin.left_has_tag("comment", "insert")
+            left_is_string:bool = self.plugin.left_has_tag("string", "insert")
+            right_is_string:bool = self.plugin.right_has_tag("string", "insert")
+            BHT:str = self.BACKET_HIGHLIGHT_TAG
+            double_press:bool = self.plugin.left_has_tag(BHT, "insert")
+            if left_is_string or right_is_string:
+                if self._check_closing_after_open(close):
+                    return True
+                return False
+            if is_comment and (open == "'"):
+                return False
+            if self._check_closing_after_open(close):
+                return True
+            """
             is_comment:bool = self.plugin.is_inside("comment", "insert")
             is_string:bool = self.plugin.is_inside("string", "insert")
             if (is_comment and (open == "'")) or is_string:
@@ -99,6 +124,7 @@ class BracketManager(Rule):
                                                  data=("insert +1c",))
                         return True
                 return False
+            # """
         start, end = self.plugin.get_selection()
         self.plugin.remove_selection()
         self.text.mark_set("bracket_end", end)
@@ -108,13 +134,18 @@ class BracketManager(Rule):
         self.highlight(start, "bracket_end")
         return True
 
-    def close_bracket(self, close:str, open:str) -> Break:
+    def close_bracket(self, open:str, close:str) -> Break:
+        if self._check_closing_after_open(close):
+            return True
+        """
         # For people (like me) who type ")" right after "(":
         if self.plugin.is_inside(self.BACKET_HIGHLIGHT_TAG, "insert +1c") and \
            not self.plugin.is_inside(self.BACKET_HIGHLIGHT_TAG, "insert +2c"):
             if self.text.get("insert", "insert +1c") == close:
-                self.text.event_generate("<<Move-Insert>>", data=("insert +1c",))
+                self.text.event_generate("<<Move-Insert>>",
+                                         data=("insert +1c",))
                 return True
+        # """
         # Find the closest match, insert the ")" and highlight the brackets
         start_t:float = perf_counter()
         start:str = self.plugin.find_bracket_match(open, close, "insert")

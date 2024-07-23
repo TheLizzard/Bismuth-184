@@ -70,31 +70,28 @@ class WhiteSpaceManager(Rule):
 
     # Return
     def return_pressed(self, shift:bool) -> tuple[Break,...]:
-        # If we can see "end", we should scroll to the bottom
-        see_end:bool = (self.text.yview()[1] == 1)
-        # Get all of the data we need:
-        before:str = self.text.get("insert linestart", "insert")
-        after:str = self.text.get("insert", "insert lineend")
-        indentation_type, size = self.get_indentation(before or after)
-        if before == "":
-            size:int = 0 # counter the before or after
+        with self.plugin.see_end:
+            # Get all of the data we need:
+            before:str = self.text.get("insert linestart", "insert")
+            after:str = self.text.get("insert", "insert lineend")
+            indentation_type, size = self.get_indentation(before or after)
+            if before == "":
+                size:int = 0 # counter the before or after
 
-        # Delete the whitespaces at the end of the line and after the cursor
-        ws_before, ws_after = self.get_whites_delete(before, after, shift,
-                                                     indentation_type)
-        if ws_before + ws_after > 0:
-            self.text.delete(f"insert -{ws_before}c", f"insert +{ws_after}c")
+            # Delete the whitespaces at the end of the line and after the cursor
+            ws_before, ws_aftr = self.get_whites_delete(before, after, shift,
+                                                         indentation_type)
+            if ws_before + ws_aftr > 0:
+                self.text.delete(f"insert -{ws_before}c", f"insert +{ws_aftr}c")
 
-        # Copy the last indentation
-        if not shift:
-            chars:str = self.get_new_line(before, after, indentation_type, size)
-            self.text.insert("insert", chars)
-            if see_end:
-                self.text.see("end")
-            return (True, size, indentation_type, chars, see_end)
-        if see_end:
-            self.text.after(1, self.text.see, "end")
-        return (False,)
+            # Copy the last indentation
+            if not shift:
+                chars:str = self.get_new_line(before, after, indentation_type,
+                                              size)
+                self.text.insert("insert", chars)
+                return (True, size, indentation_type, chars)
+            else:
+                return (False,)
 
     def get_whites_delete(self, before, after, shift, indentation_type):
         """

@@ -75,8 +75,8 @@ def make_pat() -> re.compile:
     multiline_comment = r"/\*[^\*]*((\*(?!/))[^\*]*)*(\*/)?"
     comment = idleany("comment", [r"//[^\n]*", multiline_comment])
 
-    sstring = r"'[^'\\\n]*(\\.[^'\\\n]*)*'?"
-    dstring = r'"[^"\\\n]*(\\.[^"\\\n]*)*"?'
+    sstring = r"'[^'\\\n]*(\\.[^'\\\n]*)*(?:'|\n|$)"
+    dstring = r'"[^"\\\n]*(\\.[^"\\\n]*)*(?:"|\n|$)'
     string = idleany("string", [sstring, dstring])
 
     reg:str = kw + "|" + builtins + "|" + comment + "|" + \
