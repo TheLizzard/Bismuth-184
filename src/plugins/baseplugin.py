@@ -61,7 +61,11 @@ class BasePlugin:
         if isinstance(method, bool):
             return method
         function = getattr(self.widget.__class__, method_name, None)
-        return getattr(method, "__func__", function) is not function
+        # If something goes wrong with the library system, change
+        #   `getattr(method, "__func__", method) is not function` back to
+        #   `getattr(method, "__func__", function) is not function`
+        #   and then fix XViewFixManager
+        return getattr(method, "__func__", method) is not function
 
     def request_library(self, method:str, requester:str, strict:bool=False):
         if not self.is_library_loaded(method):
@@ -92,7 +96,7 @@ class SeeEndContext:
 
     def __exit__(self, exc_t:type, exc_val:BaseException, tb:Traceback) -> bool:
         if self.see_end:
-            idx:str = f"end -1c linestart +{self.see_x_char}c"
+            idx:str = f"end -1l +{self.see_x_char}c"
             self.text.after(1, self.text.see, idx)
         return False
 

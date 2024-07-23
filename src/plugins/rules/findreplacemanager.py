@@ -4,7 +4,8 @@ import re
 
 from bettertk.messagebox import tell as telluser
 from bettertk import BetterTk
-from .baserule import Rule
+
+from .baserule import Rule, SHIFT, ALT, CTRL
 
 from ..baseplugin import AllPlugin
 from .undomanager import UndoManager
@@ -14,11 +15,6 @@ from .selectmanager import SelectManager
 from .shortcutmanager import RemoveShortcuts
 from .clipboardmanager import ClipboardManager
 from .whitespacemanager import WhiteSpaceManager
-
-# tk.Event.state constants
-SHIFT:int = 1
-ALT:int = 8
-CTRL:int = 4
 
 ESCAPED:dict[str,str] = {
                           "a": "\a",
@@ -257,7 +253,10 @@ class FindReplaceManager(Rule):
             if res:
                 a, b = res
             else:
-                res = self.text.tag_nextrange(self.HIT_TAG, "1.0", "end")
+                if self.swap:
+                    res = self.text.tag_prevrange(self.HIT_TAG, "end", "1.0")
+                else:
+                    res = self.text.tag_nextrange(self.HIT_TAG, "1.0", "end")
                 if res:
                     a, b = res
                 else:
@@ -279,13 +278,20 @@ class FindReplaceManager(Rule):
             text:str = self.text.get(start, "end")
             l, c, size = self._search(text, find, flags)
             if size == -1:
-                self.report_error(l, c)
+                self.find_cache:tuple[str,int] = None
+                telluser(self.text, title="Bad regex", center=True,
+                         message=f"The regex has an error at {c=}:\n{l!r}",
+                         center_widget=self.text, icon="error")
                 return first_a, first_b
             if size == 0:
                 a, b = 1, 0
                 text:str = self.text.get("1.0", start)
                 l, c, size = self._search(text, find, flags)
             if size == 0:
+                self.find_cache:tuple[str,int] = None
+                telluser(self.text, message="There are matches of size 0",
+                         title="Found a match of size 0", center=True,
+                         icon="error")
                 return first_a, first_b
             if l == 0:
                 a:str = f"{a}.{b+c}"
@@ -326,12 +332,6 @@ class FindReplaceManager(Rule):
         else:
             chars:int = len(before)-before.rfind("\n")-1
         return line, chars, size
-
-    def report_error(self, msg:str, pos:int) -> None:
-        title:str = "Bad regex"
-        msg:str = f"The regex has an error at {pos=}:\n{msg!r}"
-        telluser(self.text, title=title, message=msg, center=True,
-                 center_widget=self.text, icon="error")
 
     def get_find_params(self) -> tuple[str,int]:
         find:str = self.format_str(self.find.get("1.0", "end -1c"))

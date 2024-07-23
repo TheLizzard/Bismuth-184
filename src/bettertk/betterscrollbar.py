@@ -4,8 +4,8 @@ import tkinter as tk
 
 
 class BaseBetterScrollBar:
-    __slots__ = ("thumb_colour", "active_thumb_colour", "bg",
-                 "show_arrows", "command")
+    __slots__ = "thumb_colour", "active_thumb_colour", "bg", \
+                "show_arrows", "command"
 
     def __init__(self, width:int=12, bg:str="black", command=None,
                  thumb_colour:str="#555555", show_arrows:bool=False,
@@ -28,7 +28,7 @@ class BaseBetterScrollBar:
 
 
 class BetterScrollBarVertical(tk.Canvas, BaseBetterScrollBar):
-    __slots__ = ("mouse_pressed", "y0", "y1")
+    __slots__ = "mouse_pressed", "y0", "y1"
 
     def __init__(self, master, orient="vertical", **kwargs):
         if orient != "vertical":
@@ -146,7 +146,7 @@ class BetterScrollBarHorizontal(tk.Canvas, BaseBetterScrollBar):
 
 
 class ScrolledText:
-    __slots__ = ("text_widget", "vscroll", "hscroll", "line_numbers")
+    __slots__ = "text_widget", "vscroll", "hscroll", "line_numbers"
 
     def __init__(self, master:tk.Misc, text_widget:tk.Text, vscroll:bool=True,
                  hscroll:bool=False, lines_numbers:bool=False,
@@ -210,7 +210,7 @@ class LineNumbers(tk.Canvas):
         super().create_line((self.width-3, 0, self.width-3, max_y), width=1,
                             fill=self.fg, tags=("separator", ))
 
-        # self.redraw_loop()
+        self.redraw_loop()
 
     def redraw_loop(self) -> None:
         try:

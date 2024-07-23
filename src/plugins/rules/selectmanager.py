@@ -2,14 +2,10 @@ from __future__ import annotations
 import tkinter as tk
 import string
 
-from .baserule import Rule
+from .baserule import Rule, SHIFT, ALT, CTRL
 from settings.settings import curr as settings
 
 DEBUG:bool = False
-# tk.Event.state constants
-SHIFT:int = 1
-ALT:int = 8
-CTRL:int = 4
 MOUSE_DRAG_PIXELS:int = 10
 SCROLL_SPEED:int = 1
 
@@ -28,8 +24,6 @@ class SelectManager(Rule):
                 "<Left>", "<Right>", "<Up>", "<Down>",
                 # Other keyboard buttons
                 "<Home>", "<End>", "<KP_End>", "<KP_Home>", "<KP_1>", "<KP_7>",
-                # My shortcuts
-                "<KeyPress-i>", "<KeyPress-k>",
                 # Mouse
                 "<Double-Button-1>", "<Triple-Button-1>",
                 "<ButtonPress-1>", "<ButtonRelease-1>", "<B1-Motion>",
@@ -67,9 +61,24 @@ class SelectManager(Rule):
     def get_index_from_pos(text:tk.Text, x:int, y:int) -> str:
         # This function is a wrapper for tk's TextClosestGap function
         # an example of it's implementation:
-        # https://opensource.apple.com/source/tcl/tcl-107.40.1/tk/tk/library/text.tcl.auto.html
+        #   https://core.tcl-lang.org/tk/tktview?name=b461c70399
+        #   /usr/share/tcltk/tk8.6/text.tcl
+        """
+        proc ::tk::TextClosestGap {w x y} {
+            set pos [$w index @$x,$y]
+            set bbox [$w bbox $pos]
+            if {$bbox eq ""} {
+                return $pos
+            }
+            if {($x - [lindex $bbox 0]) < ([lindex $bbox 2]/2)} {
+                return $pos
+            }
+            $w index "$pos + 1i"
+        }
+        """
         idx:str = text.index(f"@{x},{y}")
-        if text.compare(idx, "==", f"{idx} lineend"):
+        # In later versions of Tcl if they fix this
+        if text.compare(idx, "==", f"{idx} display lineend"):
             return idx
         return str(text.tk.call("::tk::TextClosestGap", text._w, x, y))
 
@@ -132,12 +141,6 @@ class SelectManager(Rule):
                     return False
                 on:str = {"1":"end", "7":"home"}.get(on, on)
                 ctrl:bool = alt
-
-        # Control-i and Control-k
-        elif on.startswith("keypress-"):
-            if not ctrl:
-                return False
-            on:str = on.removeprefix("keypress-")
 
         return on, ctrl, shift, idx, drag, data, True
 
@@ -212,25 +215,10 @@ class SelectManager(Rule):
                 self.plugin.delete_selection()
             return False
 
-        if on == "i":
-            if self.text.compare("insert linestart", "==", "1.0"):
-                return False
-            new_pos:str = "insert -1l lineend"
-            self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
-            self.text.event_generate("<Return>")
-            return True
-        if on == "k":
-            if self.text.compare("insert lineend", "==", "end -1c"):
-                return False
-            new_pos:str = "insert lineend"
-            self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
-            self.text.event_generate("<Return>")
-            return True
-
         # Selection stuff
         cur:str = self.text.index("insert")
         new:str = self.get_movement(on, ctrl, cur)
-
+        # Home/End
         if on == "home":
             if ctrl:
                 new:str = "1.0"
@@ -254,7 +242,7 @@ class SelectManager(Rule):
                     new:str = f"{cur} lineend -{comment}c"
                 else:
                     new:str = f"{cur} lineend"
-
+        # Left/Right
         elif on in ("left", "right"):
             start, end = self.plugin.get_selection()
             if (start == end) or shift:
@@ -262,10 +250,13 @@ class SelectManager(Rule):
                     new:str = "end -1c"
             else:
                 new:str = start if on == "left" else end
-
-        elif on not in ("up", "down"):
+        # Up/Down
+        elif on in ("up", "down"):
+            pass
+        # Unknown
+        else:
             raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
-
+        # Actual computation
         if shift:
             start, end = self.plugin.get_selection()
             # Calculate the new selection range

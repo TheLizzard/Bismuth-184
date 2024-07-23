@@ -1,6 +1,5 @@
 Editor:
 * Implement the replace part of `FindReplaceManager`
-* `FindReplaceManager` should report matches of length 0 as an error?
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
 * Java's `RunManager` should also handle testing.
 * `FindReplaceManager` removes hit tag when the user adds/removes text near the hit

@@ -4,6 +4,7 @@ import tkinter as tk
 try:
     from baseplugin import AllPlugin
     # from rules.seeinsertmanager import SeeInsertManager
+    from rules.controlijklmanager import ControlIJKLManager
     from rules.wrapmanager import WrapManager
     from rules.clipboardmanager import ClipboardManager
     from rules.shortcutmanager import RemoveShortcuts
@@ -14,6 +15,7 @@ try:
     from rules.findreplacemanager import FindReplaceManager
     from rules.reparentmanager import WidgetReparenterManager
     from rules.xrawidgets import BarManager, LineManager, ScrollbarManager
+    from rules.xviewfixmanager import XViewFixManager
     # from rules.xrawidgets import MenuManager
     from rules.python.commentmanager import CommentManager
     from rules.python.colourmanager import ColourManager
@@ -23,6 +25,7 @@ try:
 except ImportError:
     from .baseplugin import AllPlugin
     # from .rules.seeinsertmanager import SeeInsertManager
+    from .rules.controlijklmanager import ControlIJKLManager
     from .rules.wrapmanager import WrapManager
     from .rules.clipboardmanager import ClipboardManager
     from .rules.shortcutmanager import RemoveShortcuts
@@ -32,6 +35,7 @@ except ImportError:
     from .rules.findreplacemanager import FindReplaceManager
     from .rules.reparentmanager import WidgetReparenterManager
     from .rules.xrawidgets import BarManager, LineManager, ScrollbarManager
+    from .rules.xviewfixmanager import XViewFixManager
     # from .rules.xrawidgets import MenuManager
     from .rules.python.commentmanager import CommentManager
     from .rules.python.colourmanager import ColourManager
@@ -48,6 +52,7 @@ class PythonPlugin(AllPlugin):
         rules:list[Rule] = [
                              WrapManager,
                              UndoManager,
+                             ControlIJKLManager,
                              ColourManager,
                              SelectManager,
                              ClipboardManager,
@@ -63,6 +68,7 @@ class PythonPlugin(AllPlugin):
                              BarManager,
                              ScrollbarManager,
                              LineManager,
+                             XViewFixManager,
                              # MenuManager,
                            ]
         super().__init__(text, rules)

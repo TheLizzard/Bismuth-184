@@ -2,13 +2,9 @@ from __future__ import annotations
 import tkinter as tk
 import string
 
-from .baserule import Rule
+from .baserule import Rule, SHIFT, ALT, CTRL
 
 DEBUG:bool = False
-# tk.Event.state constants
-SHIFT:int = 1
-ALT:int = 8
-CTRL:int = 4
 ALPHANUMERIC_ = string.ascii_letters + string.digits + "_"
 TIME_DELAY_UNDO_SEP:int = 300
 

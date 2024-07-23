@@ -7,6 +7,11 @@ import tkinter as tk
 Break = Applies = bool
 DEBUG:bool = False
 
+# tk.Event.state constants
+SHIFT:int = 1
+ALT:int = 8
+CTRL:int = 4
+
 
 class Rule:
     __slots__ = "ons", "widget", "ids", "plugin", "attached"

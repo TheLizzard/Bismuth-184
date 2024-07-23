@@ -6,12 +6,7 @@ import os
 from bettertk.terminaltk.terminaltk import TerminalTk
 from bettertk.messagebox import tell as telluser
 from bettertk import BetterTkSettings
-from .baserule import Rule
-
-# tk.Event.state constants
-SHIFT:int = 1
-ALT:int = 8
-CTRL:int = 4
+from .baserule import Rule, SHIFT, ALT, CTRL
 
 
 class RunManager(Rule):

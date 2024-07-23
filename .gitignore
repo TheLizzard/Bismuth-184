@@ -147,3 +147,4 @@ src/bettertk/terminaltk/test.py
 src/bettertk/terminaltk/sprites/copyrighted/
 src/bettertk/terminaltk/pty terminal/test.cpp
 src/bettertk/terminaltk/pty terminal/old/
+bad.py

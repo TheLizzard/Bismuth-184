@@ -5,12 +5,7 @@ import os
 
 from bettertk.messagebox import tell as telluser, askyesno
 from bettertk.terminaltk.terminaltk import TerminalTk
-from .baserule import Rule
-
-# tk.Event.state constants
-SHIFT:int = 1
-ALT:int = 8
-CTRL:int = 4
+from .baserule import Rule, SHIFT, ALT, CTRL
 
 NO_SAVE:bool = False # for debug purposes
 

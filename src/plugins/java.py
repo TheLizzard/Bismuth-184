@@ -4,6 +4,7 @@ import tkinter as tk
 try:
     from baseplugin import AllPlugin
     # from rules.seeinsertmanager import SeeInsertManager
+    from rules.controlijklmanager import ControlIJKLManager
     from rules.wrapmanager import WrapManager
     from rules.clipboardmanager import ClipboardManager
     from rules.shortcutmanager import RemoveShortcuts
@@ -23,6 +24,7 @@ try:
 except ImportError:
     from .baseplugin import AllPlugin
     # from .rules.seeinsertmanager import SeeInsertManager
+    from .rules.controlijklmanager import ControlIJKLManager
     from .rules.wrapmanager import WrapManager
     from .rules.clipboardmanager import ClipboardManager
     from .rules.shortcutmanager import RemoveShortcuts
@@ -49,6 +51,7 @@ class JavaPlugin(AllPlugin):
         rules:list[Rule] = [
                              WrapManager,
                              UndoManager,
+                             ControlIJKLManager,
                              ColourManager,
                              SelectManager,
                              ClipboardManager,
