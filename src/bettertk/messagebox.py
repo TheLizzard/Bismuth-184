@@ -160,6 +160,9 @@ def tell(master:tk.Misc, *args, block:bool=True, **kwargs) -> None:
     if block:
         tell.mainloop()
 
+def debug(text:str) -> None:
+    Tell(None, "Debug", text, icon="info", center=False, block=False)
+
 
 if __name__ == "__main__":
     def tksleep(time:int) -> None:

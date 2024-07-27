@@ -241,7 +241,7 @@ class NotebookPage:
         self.notch:TabNotch = notch
         self.frame:tk.Misc = frame
 
-    def add_frame(self, frame:tk.Frame) -> NotebookPage:
+    def add_frame(self, frame:tk.Misc) -> NotebookPage:
         frame.pack(in_=self.frame, fill="both", expand=True)
         if TAB_CONTROLS:
             #frame.bind("<Control-Key><Tab>", self.notebook.switch_next_tab)

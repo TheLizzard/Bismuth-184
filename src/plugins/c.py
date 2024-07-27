@@ -3,8 +3,9 @@ import tkinter as tk
 import os
 
 try:
-    from baseplugin import AllPlugin
-    # from rules.seeinsertmanager import SeeInsertManager
+    from baseplugin import BasePlugin
+    from rules.insertdeletemanager import InsertDeleteManager
+    from rules.seeinsertmanager import SeeInsertManager
     from rules.controlijklmanager import ControlIJKLManager
     from rules.wrapmanager import WrapManager
     from rules.clipboardmanager import ClipboardManager
@@ -23,8 +24,9 @@ try:
     from rules.c.saveloadmanager import SaveLoadManager
     from rules.c.runmanager import RunManager
 except ImportError:
-    from .baseplugin import AllPlugin
-    # from .rules.seeinsertmanager import SeeInsertManager
+    from .baseplugin import BasePlugin
+    from .rules.insertdeletemanager import InsertDeleteManager
+    from .rules.seeinsertmanager import SeeInsertManager
     from .rules.controlijklmanager import ControlIJKLManager
     from .rules.wrapmanager import WrapManager
     from .rules.clipboardmanager import ClipboardManager
@@ -44,18 +46,20 @@ except ImportError:
     from .rules.c.runmanager import RunManager
 
 
-class CPlugin(AllPlugin):
+class CPlugin(BasePlugin):
     __slots__ = ()
     DEFAULT_CODE:str = '#include <stdio.h>\n\nint main(){\n    // comment\n    printf("Hello, World!\\n");\n    return 0;\n}'
 
-    def __init__(self, text:tk.Text) -> PythonPlugin:
+    def __init__(self, *args:tuple) -> CPlugin:
         rules:list[Rule] = [
+                             InsertDeleteManager,
                              WrapManager,
                              UndoManager,
                              ControlIJKLManager,
                              ColourManager,
                              SelectManager,
                              ClipboardManager,
+                             SeeInsertManager,
                              WhiteSpaceManager,
                              BracketManager,
                              CommentManager,
@@ -70,7 +74,7 @@ class CPlugin(AllPlugin):
                              LineManager,
                              # MenuManager,
                            ]
-        super().__init__(text, rules)
+        super().__init__(*args, rules)
 
     @classmethod
     def can_handle(Cls:type, filepath:str|None) -> bool:

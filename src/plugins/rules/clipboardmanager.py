@@ -7,8 +7,6 @@ from .baserule import Rule
 
 class ClipboardManager(Rule):
     __slots__ = "text"
-    REQUESTED_LIBRARIES:tuple[str] = "event_generate", "bind", "unbind"
-    REQUESTED_LIBRARIES_STRICT:bool = False
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
         super().__init__(plugin, text, ("<Control-C>", "<Control-c>",
@@ -40,10 +38,7 @@ class ClipboardManager(Rule):
             return True
         if op == "v":
             # Get the selected text and the text from the clipboard
-            if start == end:
-                selected:str = None
-            else:
-                selected:str = self.text.get(start, end)
+            selected:str = None if start == end else self.text.get(start, end)
             try:
                 copied:str = self.text.clipboard_get()
             except tk.TclError:

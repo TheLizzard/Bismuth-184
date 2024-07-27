@@ -2,8 +2,9 @@ from __future__ import annotations
 import tkinter as tk
 
 try:
-    from baseplugin import AllPlugin
-    # from rules.seeinsertmanager import SeeInsertManager
+    from baseplugin import BasePlugin
+    from rules.insertdeletemanager import InsertDeleteManager
+    from rules.seeinsertmanager import SeeInsertManager
     from rules.controlijklmanager import ControlIJKLManager
     from rules.wrapmanager import WrapManager
     from rules.clipboardmanager import ClipboardManager
@@ -22,8 +23,9 @@ try:
     from rules.java.saveloadmanager import SaveLoadManager
     from rules.java.runmanager import RunManager
 except ImportError:
-    from .baseplugin import AllPlugin
-    # from .rules.seeinsertmanager import SeeInsertManager
+    from .baseplugin import BasePlugin
+    from .rules.insertdeletemanager import InsertDeleteManager
+    from .rules.seeinsertmanager import SeeInsertManager
     from .rules.controlijklmanager import ControlIJKLManager
     from .rules.wrapmanager import WrapManager
     from .rules.clipboardmanager import ClipboardManager
@@ -43,18 +45,20 @@ except ImportError:
     from .rules.java.runmanager import RunManager
 
 
-class JavaPlugin(AllPlugin):
+class JavaPlugin(BasePlugin):
     __slots__ = ()
     DEFAULT_CODE:str = 'import java.util.Scanner;\n\npublic class Main{\n    public static void main(String[] args){\n        /* comment */\n        System.out.println("Hello World!"); // comment\n    }\n}'
 
-    def __init__(self, text:tk.Text) -> PythonPlugin:
+    def __init__(self, *args:tuple) -> JavaPlugin:
         rules:list[Rule] = [
+                             InsertDeleteManager,
                              WrapManager,
                              UndoManager,
                              ControlIJKLManager,
                              ColourManager,
                              SelectManager,
                              ClipboardManager,
+                             SeeInsertManager,
                              WhiteSpaceManager,
                              BracketManager,
                              CommentManager,
@@ -70,7 +74,7 @@ class JavaPlugin(AllPlugin):
                              LineManager,
                              # MenuManager,
                            ]
-        super().__init__(text, rules)
+        super().__init__(*args, rules)
 
     @classmethod
     def can_handle(Cls:type, filepath:str|None) -> bool:

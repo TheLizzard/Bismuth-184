@@ -115,7 +115,6 @@ def _display1(string:str) -> None:
 def _setup_window(root, string:str) -> tuple[tk.Frame,tk.Text]:
     def close() -> None:
         root.destroy()
-        root.quit()
 
     root.title("Error")
     root.protocol("WM_DELETE_WINDOW", close)
@@ -165,8 +164,10 @@ def _try_set_iconphoto(root:tk.Tk|BetterTk) -> HasErrorer:
 
 if __name__ == "__main__":
     def start() -> int:
-        tk.Tk().after(200, lambda: 1/0)
-        raise
+        global root
+        root = tk.Tk()
+        root.after(200, lambda: 1/0)
+        root.bind("<Delete>", lambda e: 1/0)
         return 1
 
     def init(arg:int) -> tuple[str,bool]:
@@ -175,7 +176,7 @@ if __name__ == "__main__":
 
     def run(arg1:str, arg2:bool) -> None:
         try:
-            assert not arg2
+            root.mainloop()
         except KeyboardInterrupt:
             return None
 

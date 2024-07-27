@@ -1,6 +1,5 @@
 from __future__ import annotations
 from time import perf_counter
-from typing import Iterable
 import tkinter as tk
 
 
@@ -73,7 +72,7 @@ class Rule:
         start:float = perf_counter()
         data = self.applies(event, on)
         if DEBUG: print(f"[DEBUG {perf_counter()-start:.2f}]: Checking if {on} applies to {self.__class__.__name__}")
-        if not isinstance(data, Iterable):
+        if not isinstance(data, tuple|list):
             data = (data,)
         *data, applies = data
         if applies:

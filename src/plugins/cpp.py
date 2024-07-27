@@ -3,8 +3,9 @@ import tkinter as tk
 import os
 
 try:
-    from baseplugin import AllPlugin
-    # from rules.seeinsertmanager import SeeInsertManager
+    from baseplugin import BasePlugin
+    from rules.insertdeletemanager import InsertDeleteManager
+    from rules.seeinsertmanager import SeeInsertManager
     from rules.controlijklmanager import ControlIJKLManager
     from rules.wrapmanager import WrapManager
     from rules.clipboardmanager import ClipboardManager
@@ -23,8 +24,9 @@ try:
     from rules.cpp.saveloadmanager import SaveLoadManager
     from rules.cpp.runmanager import RunManager
 except ImportError:
-    from .baseplugin import AllPlugin
-    # from .rules.seeinsertmanager import SeeInsertManager
+    from .baseplugin import BasePlugin
+    from .rules.insertdeletemanager import InsertDeleteManager
+    from .rules.seeinsertmanager import SeeInsertManager
     from .rules.controlijklmanager import ControlIJKLManager
     from .rules.wrapmanager import WrapManager
     from .rules.clipboardmanager import ClipboardManager
@@ -44,18 +46,20 @@ except ImportError:
     from .rules.cpp.runmanager import RunManager
 
 
-class CppPlugin(AllPlugin):
+class CppPlugin(BasePlugin):
     __slots__ = ()
     DEFAULT_CODE:str = '#include <iostream>\n\nusing namespace std;\n\nint main(){\n    // comment\n    cout << "Hello, world!" << endl;\n    return 0;\n}'
 
-    def __init__(self, text:tk.Text) -> PythonPlugin:
+    def __init__(self, *args:tuple) -> CppPlugin:
         rules:list[Rule] = [
+                             InsertDeleteManager,
                              WrapManager,
                              UndoManager,
                              ControlIJKLManager,
                              ColourManager,
                              SelectManager,
                              ClipboardManager,
+                             SeeInsertManager,
                              WhiteSpaceManager,
                              BracketManager,
                              CommentManager,
@@ -70,7 +74,7 @@ class CppPlugin(AllPlugin):
                              LineManager,
                              # MenuManager,
                            ]
-        super().__init__(text, rules)
+        super().__init__(*args, rules)
 
     @classmethod
     def can_handle(Cls:type, filepath:str|None) -> bool:

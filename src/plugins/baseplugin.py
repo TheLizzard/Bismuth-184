@@ -6,46 +6,102 @@ try:
 except ImportError:
     from .virtualevents import VirtualEvents
 
+
 WARNINGS:bool = True
+DEBUG:bool = False
 
 
-class BasePlugin:
+class ProtoPlugin:
     __slots__ = "rules", "widget"
 
-    def __init__(self, widget:tk.Misc) -> BasePlugin:
+    def __init__(self, widget:tk.Misc) -> ProtoPlugin:
         self.widget:tk.Misc = widget
         self.rules:list[Rule] = []
 
     def attach(self) -> None:
         has_plugin:bool = getattr(self.widget, "plugin", None) is None
         assert has_plugin, "already has a plugin"
-        self.widget.plugin:BasePlugin = self
-        for rule in self.rules:
-            Rule:type[rule] = rule.__class__
-            libraries:tuple[str]|str = rule.__class__.REQUESTED_LIBRARIES
-            if isinstance(libraries, str):
-                libraries:tuple[str] = (libraries,)
-            for lib in libraries:
-                self.request_library(lib, Rule.__name__,
-                                     strict=Rule.REQUESTED_LIBRARIES_STRICT)
-            rule.attach()
+        self.widget.plugin:ProtoPlugin = self
+        rules:list[Rule] = self.rules.copy()
+        for _pass in ("safe", "warn", "error"):
+            self._load_rules(rules, _pass=_pass)
+
+    def _load_rules(self, rules:list[Rule], _pass:str) -> None:
+        while True:
+            for i, rule in enumerate(rules):
+                Rule:type = rule.__class__
+                unmet:tuple[str] = self._try_load_rule(Rule)
+                if not unmet:
+                    if DEBUG: print(f"[DEBUG]: attaching {Rule.__name__}")
+                    rule.attach()
+                    rules.pop(i)
+                    break
+                msg:str = f"{Rule.__name__} requested {unmet[0]!r} library " \
+                          f"but it's not loaded."
+                if _pass == "warn":
+                    if Rule.REQUESTED_LIBRARIES_STRICT:
+                        continue
+                    print(f"[WARNING] {msg} {Rule.__name__} might "
+                          f"malfunction.")
+                    if DEBUG: print(f"[DEBUG]: attaching {Rule.__name__}")
+                    rule.attach()
+                    rules.pop(i)
+                    break
+                if _pass == "error":
+                    raise RuntimeError(msg)
+            else:
+                break
+
+    def _try_load_rule(self, Rule:type) -> tuple[str]:
+        libraries:tuple[str] = self._get_rule_dependencies(Rule)
+        unmet:tuple[str] = self._unmet_dependencies(libraries)
+        return unmet
+
+    def _unmet_dependencies(self, libraries:tuple[str]) -> tuple[str]:
+        unmet:list[str] = []
+        for lib in libraries:
+            if not self.is_library_loaded(lib):
+                unmet.append(lib)
+        return tuple(unmet)
+
+    def _get_rule_dependencies(self, Rule:type) -> tuple[str]:
+        libraries:tuple[str]|str = Rule.REQUESTED_LIBRARIES
+        if isinstance(libraries, str):
+            libraries:tuple[str] = (libraries,)
+        assert isinstance(libraries, tuple|list), "TypeError"
+        for lib in libraries:
+            assert isinstance(lib, str), "TypeError"
+        return libraries
+
+    def request_library(self, method:str, requester:str, strict:bool=False):
+        if not self.is_library_loaded(method):
+            msg:str = f"{requester} requested the library {method!r} " \
+                      f"but it's not loaded."
+            if strict:
+                raise RuntimeError(msg)
+            elif WARNINGS:
+                print(f"[WARNING] {msg} {requester} might malfunction.")
 
     def detach(self) -> None:
         if self.widget.plugin == self:
-            self.widget.plugin:BasePlugin = None
+            self.widget.plugin:ProtoPlugin = None
         for rule in self.rules:
             rule.detach()
 
     def destroy(self) -> None:
         if self.widget.plugin == self:
-            self.widget.plugin:BasePlugin = None
+            self.widget.plugin:ProtoPlugin = None
         for rule in self.rules:
             rule.destroy()
         self.rules.clear()
         self.widget:tk.Misc = None
 
     def add(self, Rule:type[Rule]) -> None:
-        self.rules.append(Rule(self, self.widget))
+        try:
+            self.rules.append(Rule(self, self.widget))
+        except BaseException as error:
+            print(f"[ERROR]: {Rule.__name__} errored out")
+            raise
 
     def add_rules(self, rules:Iterable[type[Rule]]) -> None:
         for Rule in rules:
@@ -66,15 +122,6 @@ class BasePlugin:
         #   `getattr(method, "__func__", function) is not function`
         #   and then fix XViewFixManager
         return getattr(method, "__func__", method) is not function
-
-    def request_library(self, method:str, requester:str, strict:bool=False):
-        if not self.is_library_loaded(method):
-            msg:str = f"{requester} requested the library {method!r} " \
-                      f"but it's not loaded."
-            if strict:
-                raise RuntimeError(msg)
-            elif WARNINGS:
-                print(f"[WARNING] {msg} {requester} might malfunction.")
 
 
 # Don't change order; mod2 might mean "key press"
@@ -101,13 +148,15 @@ class SeeEndContext:
         return False
 
 
-class AllPlugin(BasePlugin):
-    __slots__ = "text", "virtual_events"
+class BasePlugin(ProtoPlugin):
+    __slots__ = "text", "master", "virtual_events"
     DEFAULT_CODE:str = ""
     SEL_TAG:str = "selected" # used in SelectManager
 
-    def __init__(self, text:tk.Text, rules:list[Rule]) -> PythonPlugin:
+    def __init__(self, master:tk.Misc, text:tk.Text,
+                 rules:list[Rule]) -> BasePlugin:
         self.virtual_events:VirtualEvents = VirtualEvents(text)
+        self.master:tk.Misc = master
         self.text:tk.Text = text
         super().__init__(text)
         super().add_rules(rules)
@@ -123,7 +172,10 @@ class AllPlugin(BasePlugin):
     def attach(self) -> None:
         self.virtual_events.paused:bool = False
         super().attach()
-        self.text.tag_raise(self.text.plugin.SEL_TAG)
+        try:
+            self.text.tag_raise(self.text.plugin.SEL_TAG)
+        except tk.TclError:
+            pass
 
     def detach(self) -> None:
         self.virtual_events.paused:bool = True
@@ -131,7 +183,6 @@ class AllPlugin(BasePlugin):
 
     def left_has_tag(self, tag:str, idx:str) -> bool:
         return tag in self.text.tag_names(f"{idx} -1c")
-    # is_inside = left_has_tag # Depricated
 
     def right_has_tag(self, tag:str, idx:str) -> bool:
         return tag in self.text.tag_names(idx)
@@ -207,24 +258,60 @@ class AllPlugin(BasePlugin):
         return raw_modifiers & (1 << ALL_MODIFIERS.index(modifier))
 
     def undo_wrapper(self, func:Function, *args):
-        self.text.event_generate("<<Add-Separator>>")
-        self.text.event_generate("<<Pause-Separator>>")
-        return_val = func(*args)
-        self.text.event_generate("<<Unpause-Separator>>")
-        self.text.event_generate("<<Add-Separator>>", data=(True,))
-        self.text.event_generate("<<Modified-Change>>")
-        return return_val
+        """
+        The argument `func` is called with the rest of the given arguments
+          and all of the changes made to `self.text` are grouped and atomic
+          in terms of undo/redo.
+        """
+        def inner():
+            try:
+                self.text.event_generate("<<Add-Separator>>", data=(True,))
+                self.text.event_generate("<<Pause-Separator>>")
+                return func(*args)
+            finally:
+                self.text.event_generate("<<Unpause-Separator>>")
+                self.text.event_generate("<<Add-Separator>>", data=(True,))
+                self.text.event_generate("<<Modified-Change>>")
+        return self.select_wrapper(inner)
+
+    def select_wrapper(self, func:Function, *args):
+        try:
+            # Get the selection
+            start, end = self.get_selection()
+            selected:bool = (start != end)
+            if selected:
+                self.text.mark_unset("sav1", "sav2")
+                self.text.mark_set("sav1", start)
+                self.text.mark_set("sav2", end)
+                self.text.mark_gravity("sav1", "right")
+                self.text.mark_gravity("sav2", "left")
+                if self.text.compare("sav1", "==", "insert"):
+                    sav3:str = "sav1"
+                else:
+                    sav3:str = "sav2"
+            return func(*args)
+        finally:
+            if selected:
+                try:
+                    start, end = self.get_selection()
+                except AssertionError:
+                    # Set the selection
+                    self.set_selection("sav1", "sav2")
+                    self.text.event_generate("<<Move-Insert>>", data=(sav3,))
 
     def virual_event_wrapper(self, func:Function, *args):
         if self.virtual_events.paused:
             return func(*args)
-        else:
+        try:
             self.virtual_events.paused:bool = True
-            return_val = func(*args)
+            return func(*args)
+        finally:
             self.virtual_events.paused:bool = False
-            return return_val
 
     def double_wrapper(self, func:Function, *args):
+        """
+        Both `undo_wrapper` and `virual_event_wrapper`.
+        """
         def wrapper():
             return self.virual_event_wrapper(func, *args)
         return self.undo_wrapper(wrapper)

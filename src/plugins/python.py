@@ -2,8 +2,9 @@ from __future__ import annotations
 import tkinter as tk
 
 try:
-    from baseplugin import AllPlugin
-    # from rules.seeinsertmanager import SeeInsertManager
+    from baseplugin import BasePlugin
+    from rules.insertdeletemanager import InsertDeleteManager
+    from rules.seeinsertmanager import SeeInsertManager
     from rules.controlijklmanager import ControlIJKLManager
     from rules.wrapmanager import WrapManager
     from rules.clipboardmanager import ClipboardManager
@@ -15,7 +16,6 @@ try:
     from rules.findreplacemanager import FindReplaceManager
     from rules.reparentmanager import WidgetReparenterManager
     from rules.xrawidgets import BarManager, LineManager, ScrollbarManager
-    from rules.xviewfixmanager import XViewFixManager
     # from rules.xrawidgets import MenuManager
     from rules.python.commentmanager import CommentManager
     from rules.python.colourmanager import ColourManager
@@ -23,8 +23,9 @@ try:
     from rules.python.saveloadmanager import SaveLoadManager
     from rules.python.runmanager import RunManager
 except ImportError:
-    from .baseplugin import AllPlugin
-    # from .rules.seeinsertmanager import SeeInsertManager
+    from .baseplugin import BasePlugin
+    from .rules.insertdeletemanager import InsertDeleteManager
+    from .rules.seeinsertmanager import SeeInsertManager
     from .rules.controlijklmanager import ControlIJKLManager
     from .rules.wrapmanager import WrapManager
     from .rules.clipboardmanager import ClipboardManager
@@ -35,7 +36,6 @@ except ImportError:
     from .rules.findreplacemanager import FindReplaceManager
     from .rules.reparentmanager import WidgetReparenterManager
     from .rules.xrawidgets import BarManager, LineManager, ScrollbarManager
-    from .rules.xviewfixmanager import XViewFixManager
     # from .rules.xrawidgets import MenuManager
     from .rules.python.commentmanager import CommentManager
     from .rules.python.colourmanager import ColourManager
@@ -44,34 +44,35 @@ except ImportError:
     from .rules.python.runmanager import RunManager
 
 
-class PythonPlugin(AllPlugin):
+class PythonPlugin(BasePlugin):
     __slots__ = ()
     DEFAULT_CODE:str = 'import this\n\nprint("Hello world")'
 
-    def __init__(self, text:tk.Text) -> PythonPlugin:
+    def __init__(self, *args:tuple) -> PythonPlugin:
         rules:list[Rule] = [
+                             RunManager,
                              WrapManager,
                              UndoManager,
-                             ControlIJKLManager,
                              ColourManager,
                              SelectManager,
-                             ClipboardManager,
-                             WhiteSpaceManager,
                              BracketManager,
                              CommentManager,
-                             FindReplaceManager,
                              SaveLoadManager,
-                             RunManager,
                              RemoveShortcuts,
+                             ClipboardManager,
+                             SeeInsertManager,
+                             WhiteSpaceManager,
+                             ControlIJKLManager,
+                             InsertDeleteManager,
+                             FindReplaceManager,
                              # Other widgets:
-                             WidgetReparenterManager,
                              BarManager,
-                             ScrollbarManager,
                              LineManager,
-                             XViewFixManager,
+                             ScrollbarManager,
+                             WidgetReparenterManager,
                              # MenuManager,
                            ]
-        super().__init__(text, rules)
+        super().__init__(*args, rules)
 
     @classmethod
     def can_handle(Cls:type, filepath:str|None) -> bool:

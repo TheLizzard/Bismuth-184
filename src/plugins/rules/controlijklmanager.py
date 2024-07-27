@@ -29,14 +29,17 @@ class ControlIJKLManager(Rule):
     def do(self, _:str, on:str, ctrl:bool) -> Break:
         if on == "i":
             if self.text.compare("insert linestart", "==", "1.0"):
-                return False
-            new_pos:str = "insert -1l lineend"
+                file_start:bool = True
+                new_pos:str = "1.0"
+            else:
+                file_start:bool = False
+                new_pos:str = "insert -1l lineend"
             self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
             self.text.event_generate("<Return>")
+            if file_start:
+                self.text.event_generate("<Left>")
             return True
         if on == "k":
-            if self.text.compare("insert lineend", "==", "end -1c"):
-                return False
             new_pos:str = "insert lineend"
             self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
             self.text.event_generate("<Return>")

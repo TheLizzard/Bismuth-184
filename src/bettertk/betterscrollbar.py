@@ -23,6 +23,7 @@ class BaseBetterScrollBar:
             self.itemconfig(self.thumb, fill=self.thumb_colour)
 
     def _set(self, value:float) -> None:
+        value:float = min(1.0, max(0.0, value))
         if self.command is not None:
             self.command("moveto", value)
 
@@ -35,8 +36,8 @@ class BetterScrollBarVertical(tk.Canvas, BaseBetterScrollBar):
             raise ValueError("Invalid orient for a vertical scroll bar")
         BaseBetterScrollBar.__init__(self, **kwargs)
 
-        self.mouse_pressed = False
-        self.offset = 0
+        self.mouse_pressed:bool = False
+        self.offset:int = 0
 
         super().__init__(master, width=self.width, height=1,
                          bg=self.bg, highlightthickness=0, bd=0)
@@ -50,19 +51,19 @@ class BetterScrollBarVertical(tk.Canvas, BaseBetterScrollBar):
 
     def set(self, low:str, high:str) -> None:
         low, high = float(low), float(high)
-        height = self.winfo_height()
-        self.y0 = max(int(height * low), 0)
-        self.y1 = min(int(height * high), height)
+        height:int = self.winfo_height()
+        self.y0:int = max(int(height*low+0.5), 0)
+        self.y1:int = min(int(height*high+0.5), height)
         super().coords(self.thumb, 0, self.y0, self.winfo_width(), self.y1)
 
     def on_click(self, event:tk.Event) -> None:
         if self.y0 < event.y < self.y1:
-            self.mouse_pressed = True
-            self.offset = event.y - self.y0
+            self.mouse_pressed:bool = True
+            self.offset:int = event.y - self.y0
             self.on_motion(event)
 
     def on_release(self, event:tk.Event) -> None:
-        self.mouse_pressed = False
+        self.mouse_pressed:bool = False
         if not (self.y0 < event.y < self.y1):
             self.reset_thumb_colour()
 
@@ -72,8 +73,7 @@ class BetterScrollBarVertical(tk.Canvas, BaseBetterScrollBar):
         else:
             self.reset_thumb_colour()
         if self.mouse_pressed:
-            y = (event.y - self.offset) / self.winfo_height()
-            self._set(y)
+            self._set((event.y-self.offset) / self.winfo_height())
 
 
 class BetterScrollBarHorizontal(tk.Canvas, BaseBetterScrollBar):
@@ -84,8 +84,9 @@ class BetterScrollBarHorizontal(tk.Canvas, BaseBetterScrollBar):
             raise ValueError("Invalid orient for a horizontal scroll bar")
         BaseBetterScrollBar.__init__(self, **kwargs)
 
-        self.mouse_pressed = False
-        self.offset = 0
+        self.mouse_pressed:bool = False
+        self.no_first_set:bool = True
+        self.offset:int = 0
 
         super().__init__(master, width=1, height=self.width,
                          bg=self.bg, highlightthickness=0, bd=0)
@@ -109,30 +110,36 @@ class BetterScrollBarHorizontal(tk.Canvas, BaseBetterScrollBar):
             super().grid(**self.grid_kwargs)
             self.shown:bool = True
 
-        width = super().winfo_width()
-        self.x0 = max(int(width * float(low)), 0)
-        self.x1 = min(int(width * float(high)), width)
+        width:int = super().winfo_width()
+        self.x0:int = max(int(width*float(low)+0.5), 0)
+        self.x1:int = min(int(width*float(high)+0.5), width)
         super().coords(self.thumb, self.x0, 0, self.x1, self.winfo_height())
+        self.no_first_set:bool = False
 
     def on_click(self, event:tk.Event) -> None:
+        if self.no_first_set:
+            return None
         if self.x0 < event.x < self.x1:
-            self.mouse_pressed = True
-            self.offset = event.x - self.x0
+            self.offset:int = event.x - self.x0
+            self.mouse_pressed:bool = True
             self.on_motion(event)
 
     def on_release(self, event:tk.Event) -> None:
-        self.mouse_pressed = False
+        if not self.mouse_pressed:
+            return None
+        self.mouse_pressed:bool = False
         if not (self.x0 < event.x < self.x1):
             self.reset_thumb_colour()
 
     def on_motion(self, event:tk.Event) -> None:
+        if not self.mouse_pressed:
+            return None
         if self.x0 < event.x < self.x1:
             super().itemconfig(self.thumb, fill=self.active_thumb_colour)
         else:
             self.reset_thumb_colour()
         if self.mouse_pressed:
-            x = (event.x - self.offset) / self.winfo_width()
-            self._set(x)
+            self._set((event.x-self.offset) / self.winfo_width())
 
     def pack(self, **kwargs) -> None:
         if self.hide:
@@ -152,7 +159,7 @@ class ScrolledText:
                  hscroll:bool=False, lines_numbers:bool=False,
                  line_numbers_width:int=32):
         self.assert_assertions(master, text_widget)
-        self.text_widget = text_widget
+        self.text_widget:tk.Text = text_widget
         master.grid_rowconfigure(0, weight=1)
         master.grid_columnconfigure(1, weight=1)
         self.text_widget.grid(row=0, column=1, sticky="news")
@@ -186,9 +193,9 @@ class LineNumbers(tk.Canvas):
     def __init__(self, master:tk.Misc, width:int=32, **kwargs):
         super().__init__(master, bd=0, highlightthickness=0, bg="black",
                          width=width, **kwargs)
-        self.width:int = width
         self.text_widget:ScrolledText = None
         self.last_redrawn:tuple[int] = None
+        self.width:int = width
 
     def attach(self, text_widget:ScrolledText) -> None:
         if self.text_widget is not None:

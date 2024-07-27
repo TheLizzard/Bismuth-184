@@ -1,9 +1,14 @@
 from __future__ import annotations
 from tkinter.filedialog import askdirectory
+from time import perf_counter
 import tkinter as tk
 import sys
 import os
 os.chdir(os.path.dirname(__file__))
+
+DEBUG_TIME:bool = False
+if DEBUG_TIME: from bettertk.messagebox import debug
+if DEBUG_TIME: timer:list[float] = [perf_counter()]
 
 from file_explorer.expanded_explorer import ExpandedExplorer, isfolder
 from bettertk.betterframe import make_bind_frame
@@ -12,6 +17,7 @@ from bettertk.betterscrollbar import BetterScrollBarVertical, \
                                      BetterScrollBarHorizontal
 from bettertk.messagebox import askyesno, tell as telluser
 from bettertk import BetterTk, BetterTkSettings
+from bettertk.bettertext import BetterText
 from bettertk import notebook
 from plugins import VirtualEvents
 from settings.settings import curr as settings
@@ -26,13 +32,16 @@ notebook.CONTROL_NUMBERS_CONTROLS:bool = True
 notebook.CONTROL_NUMBERS_RESTRICT:bool = False
 notebook.HIDE_SCROLLBAR:bool = False
 
+TextClass = BetterText
+# TextClass = tk.Text
+
 
 class App:
     __slots__ = "root", "explorer", "notebook", "text_to_page", \
                 "explorer_frame"
 
     def __init__(self, message_queue:MsgQueue) -> App:
-        self.text_to_page:dict[tk.Text:notebook.NotebookPage] = {}
+        self.text_to_page:dict[BetterText:notebook.NotebookPage] = {}
         window_settings:BetterTkSettings = BetterTkSettings()
         window_settings.config(use_border=False)
         self.root:BetterTk = BetterTk(settings=window_settings,
@@ -109,7 +118,7 @@ class App:
             return "Untitled"
         return filepath.split("/")[-1].split("\\")[-1]
 
-    def page_to_text(self, page:notebook.NotebookPage) -> tk.Text:
+    def page_to_text(self, page:notebook.NotebookPage) -> BetterText:
         if page is None:
             return None
         for text, p in self.text_to_page.items():
@@ -118,12 +127,16 @@ class App:
         raise KeyError("InternalError")
 
     # Tab management
-    def new_tab(self, filepath:str=None) -> tk.Text:
-        text = tk.Text(self.notebook, highlightthickness=0, bd=0)
+    def new_tab(self, filepath:str=None) -> BetterText:
+        page:NotebookPage = self.notebook.tab_create()
+        text:BetterText = TextClass(page.frame, highlightthickness=0, bd=0)
+        if isinstance(text, BetterText):
+            text._xviewfix.dlineinfo.assume_monospaced()
+            text.ignore_tags_with_bg:bool = True
+        page.add_frame(text)
         text.filesystem_data:str = ""
         text.save_module:bool = True
         text.filepath:str = filepath
-        page = self.notebook.tab_create().add_frame(text)
         self.text_to_page[text] = page
         page.focus()
         self.plugin_manage(text)
@@ -132,17 +145,16 @@ class App:
         text.bind("<<Request-Open>>", self.request_open, add=True)
         text.bind("<<Modified-Change>>", self.rename_tab, add=True)
         if filepath:
-            text.edit_modified(False)
             text.filepath:str = filepath
             text.event_generate("<<Trigger-Open>>")
-            if text.get("0.0", "end -1c") != "":
-                return text
-        text.insert("end", text.plugin.DEFAULT_CODE)
-        text.edit_modified(False)
-        text.event_generate("<<Modified-Change>>")
+        else:
+            text.insert("end", text.plugin.DEFAULT_CODE)
+            text.event_generate("<<Clear-Separators>>")
+            text.edit_modified(False)
+            text.event_generate("<<Modified-Change>>")
         return text
 
-    def plugin_manage(self, text:tk.Text) -> None:
+    def plugin_manage(self, text:BetterText) -> None:
         old:Plugin = getattr(text, "plugin", None)
         for Plugin in plugins:
             if Plugin.can_handle(text.filepath):
@@ -153,8 +165,8 @@ class App:
                 if old is not None:
                     old.detach()
                 # Attach the new
-                Plugin(text).attach()
-                break
+                Plugin(self.text_to_page[text].frame, text).attach()
+                return None
 
     def change_selected_tab(self, event:tk.Event=None) -> None:
         if self.notebook.curr_page is None:
@@ -168,7 +180,7 @@ class App:
         self.text_to_page[event.widget].rename(filename)
 
     def close_tab(self, page:NotebookPage) -> bool:
-        text:tk.Text = self.page_to_text(page)
+        text:BetterText = self.page_to_text(page)
         if text.edit_modified():
             title:str = "Close unsaved text?"
             msg:str = "Are you sure you want to\nclose this unsaved page?"
@@ -255,7 +267,7 @@ class App:
         _, x, y = self.root.geometry().split("+")
         added, expanded = self._get_explorer_state()
         true_explorer_frame:tk.Frame = self.explorer_frame.master_frame
-        curr_text:tk.Text = self.page_to_text(self.notebook.curr_page)
+        curr_text:BetterText = self.page_to_text(self.notebook.curr_page)
         curr_text_path:str = None if curr_text is None else curr_text.filepath
 
         settings.window.update(height=self.root.winfo_height(), x=x, y=y)
@@ -271,7 +283,7 @@ class App:
     def _get_notebook_state(self) -> list[tuple]:
         opened:list[tuple] = []
         for page in self.notebook.iter_pages():
-            text:tk.Text = self.page_to_text(page)
+            text:BetterText = self.page_to_text(page)
             file:str = text.filepath
             xview:str = text.xview()[0]
             yview:str = text.yview()[0]
@@ -296,14 +308,13 @@ class App:
                          icon="warning")
             elif file is not None:
                 files.add(file)
-            text:tk.Text = self.new_tab(file)
+            text:BetterText = self.new_tab(file)
             if modified:
                 text.filesystem_data:str = saved
                 text.delete("0.0", "end")
                 text.insert("end", data)
                 text.edit_modified(True)
-                text.edit_reset()
-                text.edit_separator()
+                text.event_generate("<<Clear-Separators>>")
                 text.event_generate("<<Modified-Change>>")
             text.event_generate("<<Move-Insert>>", data=(insert,))
             text.mark_set("insert", insert)
@@ -391,6 +402,8 @@ if __name__ == "__main__":
     from runner.runner import RunManager
 
     def start(message_queue=None, onclose=None) -> tuple[App,OnClose]:
+        if DEBUG_TIME: debug(f"Imports: {perf_counter()-timer[0]:.2f}")
+        if DEBUG_TIME: timer[0] = perf_counter()
         if message_queue is None:
             message_queue:MsgQueue = []
         if onclose is None:
@@ -398,12 +411,20 @@ if __name__ == "__main__":
         return App(message_queue), onclose
 
     def init(app:App, onclose:OnClose) -> tuple[App,OnClose]:
+        if DEBUG_TIME: debug(f"App create: {perf_counter()-timer[0]:.2f}")
+        if DEBUG_TIME: timer[0] = perf_counter()
         app.init()
         for path in sys.argv[1:]:
             app.open(path)
         return app, onclose
 
     def run(app:App, onclose:Onclose) -> None:
+        if DEBUG_TIME: debug(f"App init: {perf_counter()-timer[0]:.2f}")
+        if DEBUG_TIME: timer[0] = perf_counter()
+        for i in range(100):
+            app.root.update()
+        if DEBUG_TIME: debug(f"App 100 updates: {perf_counter()-timer[0]:.2f}")
+        if DEBUG_TIME: timer[0] = perf_counter()
         try:
             app.mainloop()
         except KeyboardInterrupt:

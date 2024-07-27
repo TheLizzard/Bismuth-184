@@ -174,6 +174,7 @@ class ExpandedExplorer(Explorer):
         self.menu.add("Open (externally)", self.open_item)
         self.menu.add("Open in explorer", self.open_in_explorer)
         self.menu.add("Open in terminal", self.open_in_terminal)
+        self.menu.add("Copy full path", self.copy_path)
         self.menu.add_separator()
         self.set_cwd_id:int = self.menu.add("Set as working dir", self.set_cwd)
         self.menu.on_cancel:Function[None] = self.menu_cancel
@@ -338,6 +339,12 @@ class ExpandedExplorer(Explorer):
         if OPEN_DEFAULT is not None:
             cmd:str = OPEN_DEFAULT.format(path=self.selected.item.fullpath)
             Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+        self.changing:tk.Frame = None
+
+    # Copy path
+    def copy_path(self) -> None:
+        self.master.clipboard_clear()
+        self.master.clipboard_append(self.selected.item.fullpath)
         self.changing:tk.Frame = None
 
 

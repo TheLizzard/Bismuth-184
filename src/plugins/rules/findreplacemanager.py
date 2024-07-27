@@ -7,14 +7,16 @@ from bettertk import BetterTk
 
 from .baserule import Rule, SHIFT, ALT, CTRL
 
-from ..baseplugin import AllPlugin
+from ..baseplugin import BasePlugin
 from .undomanager import UndoManager
 from .wrapmanager import WrapManager
 from .colourmanager import ColourManager
 from .selectmanager import SelectManager
 from .shortcutmanager import RemoveShortcuts
 from .clipboardmanager import ClipboardManager
+from .seeinsertmanager import SeeInsertManager
 from .whitespacemanager import WhiteSpaceManager
+from .insertdeletemanager import InsertDeleteManager
 
 ESCAPED:dict[str,str] = {
                           "a": "\a",
@@ -27,19 +29,21 @@ ESCAPED:dict[str,str] = {
                         }
 
 
-class MiniPlugin(AllPlugin):
+class MiniPlugin(BasePlugin):
     __slots__ = ()
 
-    def __init__(self, text:tk.Text) -> PythonPlugin:
+    def __init__(self, *args:tuple) -> PythonPlugin:
         rules:list[Rule] = [
                              WrapManager,
                              UndoManager,
                              ColourManager,
                              SelectManager,
-                             ClipboardManager,
                              RemoveShortcuts,
+                             SeeInsertManager,
+                             ClipboardManager,
+                             InsertDeleteManager,
                            ]
-        super().__init__(text, rules)
+        super().__init__(*args, rules)
 
 
 class Checkbox(tk.Frame):
@@ -67,6 +71,8 @@ class FindReplaceManager(Rule):
     __slots__ = "text", "window", "find", "replace", "regex", "matchcase", \
                 "wholeword", "button", "shown", "geom", "replace_label", \
                 "replace_str", "find_cache", "swap"
+    REQUESTED_LIBRARIES:tuple[str] = "coloriser"
+    REQUESTED_LIBRARIES_STRICT:bool = True
     MAX_FINDS:int = 100
     HIT_TAG:str = "hit"
 
@@ -119,7 +125,7 @@ class FindReplaceManager(Rule):
         self.find.bind("<Shift-Return>", self.unreturn_pressed)
         self.find.bind("<KP_Enter>", self.return_pressed)
         self.find.bind("<Escape>", lambda e: self.hide())
-        MiniPlugin(self.find).attach()
+        MiniPlugin(left, self.find).attach()
         # Checkboxes
         l = tk.Label(left, text="Options:", bg="black", fg="white", anchor="w")
         l.grid(row=3, column=1, padx=5, pady=(0,5))
@@ -201,7 +207,7 @@ class FindReplaceManager(Rule):
                                           bg="black", fg="white", anchor="w")
             self.replace_label.grid(row=2, column=1, sticky="news", padx=5,
                                     pady=(0,5))
-            MiniPlugin(self.replace).attach()
+            MiniPlugin(self.find.master, self.replace).attach()
             self.replace.insert("end", self.replace_str)
             self.replace.bind("<Escape>", lambda e: self.hide())
         self.window.focus_force()
@@ -289,9 +295,10 @@ class FindReplaceManager(Rule):
                 l, c, size = self._search(text, find, flags)
             if size == 0:
                 self.find_cache:tuple[str,int] = None
-                telluser(self.text, message="There are matches of size 0",
-                         title="Found a match of size 0", center=True,
-                         icon="error")
+                msg:str = "There are no matches or\ninfinitely many matches."
+                telluser(self.text, message=msg, icon="error", center=True,
+                         title="No/infinitely many matches",
+                         center_widget=self.text)
                 return first_a, first_b
             if l == 0:
                 a:str = f"{a}.{b+c}"

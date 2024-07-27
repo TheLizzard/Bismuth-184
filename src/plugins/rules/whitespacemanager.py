@@ -10,8 +10,8 @@ DEBUG:bool = False
 
 class WhiteSpaceManager(Rule):
     __slots__ = "text", "indentation", "after_id"
-    REQUESTED_LIBRARIES:tuple[str] = "event_generate", "bind", "unbind"
-    REQUESTED_LIBRARIES_STRICT:bool = False
+    REQUESTED_LIBRARIES:tuple[str] = "insertdel_events"
+    REQUESTED_LIBRARIES_STRICT:bool = True
 
     INDENTATIONS:dict[str,int] = {" ":4, "\t":1}
     INDENTATION_DELTAS:dict[str,int] = {}
@@ -44,7 +44,7 @@ class WhiteSpaceManager(Rule):
             self.after_id:str = None
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
-        if (on == "<after-insert>") and (len(event.data[1]) < 50):
+        if (on == "<after-insert>") and (len(event.data["raw"][1]) < 50):
             return False
         return event.state&SHIFT, True
 
@@ -158,22 +158,18 @@ class WhiteSpaceManager(Rule):
     # Indent/Deindent
     def indent_deintent_section(self, on:str) -> Break:
         on:str = on.removeprefix("control-")
-        # Get the selection
-        start, end = self.plugin.get_selection()
-        self.text.mark_set("sav1", start)
-        self.text.mark_set("sav2", end)
-        self.text.mark_set("sav3", "insert")
-        getline = lambda idx: int(idx.split(".")[0])
-        # For each line in the selection
-        if on == "bracketright":
-            for line in range(getline(start), getline(end)+1):
-                self.indent_line(line)
-            self.plugin.set_selection("sav1", "sav2")
-        elif on == "bracketleft":
-            for line in range(getline(start), getline(end)+1):
-                self.deindent_line(line)
-        self.text.event_generate("<<Move-Insert>>", data=("sav3",))
-        return True
+        def inner() -> bool:
+            start, end = self.plugin.get_selection()
+            getline = lambda idx: int(idx.split(".")[0])
+            # For each line in the selection
+            if on == "bracketright":
+                for line in range(getline(start), getline(end)+1):
+                    self.indent_line(line)
+            elif on == "bracketleft":
+                for line in range(getline(start), getline(end)+1):
+                    self.deindent_line(line)
+            return True
+        return self.plugin.select_wrapper(inner)
 
     def indent_line(self, linenumber:int) -> None:
         line:str = self.text.get(f"{linenumber}.0", f"{linenumber}.0 lineend")

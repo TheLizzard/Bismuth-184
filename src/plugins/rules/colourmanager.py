@@ -1,6 +1,5 @@
 from __future__ import annotations
 from idlelib.colorizer import ColorDelegator, make_pat
-from idlelib.percolator import Percolator
 import tkinter as tk
 import re
 
@@ -20,61 +19,33 @@ class ColourConfig(dict):
                         })
 
 
-# /usr/lib/python3.10/idlelib/colorizer.py
-class Colorizer(ColorDelegator):
-    def __init__(self) -> Colorizer:
-        super().__init__()
-        self.tagdefs:dict[str,str] = ColourConfig()
-        self.idprog = re.compile(r"\s+(\w+)")
-        self.text:tk.Text = None
-        self.prog = re.compile("(?:.*)", re.M|re.S) # Kind of matches nothing
-        self.close()
-
-    def close(self) -> None:
-        self.colorizer_on:bool = False
-        return super().close()
-
-    def apply_colorizer(self, text:tk.Text) -> None:
-        self.percolator:Percolator = Percolator(text)
-        self.percolator.insertfilter(self)
-        self.text:tk.Text = text
-        self.text.tag_raise("hit")
-
-    def _add_tag(self, start, end, head, tag):
-        tag:str = "SYNC" if tag == "SYNC" else tag.lower()
-        kw_groups = ("match_softkw", "case_softkw", "case_softkw2",
-                     "case_default_underscore")
-        self.tag_add("keyword" if tag in kw_groups else tag,
-                     f"{head}+{start:d}c", f"{head}+{end:d}c")
-
-    def toggle_colorize_event(self, event:tk.Event=None) -> str:
-        self.colorizer_on:bool = not self.colorizer_on
-        return super().toggle_colorize_event(event)
-
-    def insert(self, index:str, chars:str, tags=None) -> None:
-        data:tuple = (index, chars, tags)
-        self.text.event_generate("<<Before-Insert>>", data=data)
-        super().insert(index, chars, tags)
-        self.text.event_generate("<<After-Insert>>", data=data)
-
-    def delete(self, index1:str, index2:str=None) -> None:
-        data:tuple = (index1, index2)
-        self.text.event_generate("<<Before-Delete>>", data=data)
-        super().delete(index1, index2)
-        self.text.event_generate("<<After-Delete>>", data=data)
-
-
-class ColourManager(Rule):
+class ColourManager(Rule, ColorDelegator):
     __slots__ = "old_bg", "old_fg", "old_insertbg", "colorizer", "text"
+    REQUESTED_LIBRARIES:tuple[str] = "insertdel_events"
+    REQUESTED_LIBRARIES_STRICT:bool = True
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> ColourManager:
-        super().__init__(plugin, text, ons=())
-        self.text:tk.Text = self.widget
-        self.colorizer:Colorizer = getattr(self.text, "colorizer", None)
-        if self.colorizer is None:
-            self.colorizer:Colorizer = Colorizer()
-            self.text.colorizer = self.colorizer
-            self.colorizer.apply_colorizer(self.text)
+        evs:tuple[str] = (
+                           "<<Raw-After-Insert>>", "<<Raw-After-Delete>>",
+                         )
+        super().__init__(plugin, text, ons=evs)
+        self.delegate:tk.Text = text
+        self.text:tk.Text = text
+        self.text.coloriser:bool = False
+        ColorDelegator.init_state(self)
+        ColorDelegator.close(self)
+        self.init()
+
+    def init(self) -> None:
+        self.tagdefs:dict[str,str] = ColourConfig()
+        self.idprog = re.compile(r"\s+(\w+)")
+        self.prog = re.compile("(?:.*)", re.M|re.S) # Kind of matches nothing
+
+    def __getattr__(self, key:str) -> object:
+        return getattr(self.text, key)
+
+    def setdelegate(self, delegate:object) -> None:
+        raise RuntimeError("Unreachable")
 
     def attach(self) -> None:
         super().attach()
@@ -83,8 +54,46 @@ class ColourManager(Rule):
         self.old_insertbg:str = self.text.cget("insertbackground")
         self.text.config(bg="black", fg="white", insertbackground="white",
                          takefocus=True)
+        # Start recolorising
+        self.config_colors()
+        if not self.text.coloriser:
+            self.text.coloriser:bool = True
+            self.toggle_colorize_event(self)
+        self.notify_range("1.0", "end")
+        # Bring forward hit tag
+        try:
+            self.text.tag_raise("hit")
+        except tk.TclError:
+            pass
 
     def detach(self) -> None:
         super().detach()
+        self.text.coloriser:bool = False
+        ColorDelegator.close(self)
+        self.removecolors()
         self.text.config(bg=self.old_bg, fg=self.old_fg,
                          insertbackground=self.old_insertbg)
+
+    def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
+        if on == "<raw-after-insert>":
+            start, data, _ = event.data["abs"]
+            end:str = self.text.index(f"{start} +{len(data)}c")
+        elif on == "<raw-after-delete>":
+            start, _ = event.data["abs"]
+            end:str = None
+        return start, end, True
+
+    def do(self, _:str, start:str, end:str|None) -> Break:
+        self.notify_range(start, end)
+        return False
+
+    # def notify_range(self, start:str, end:str|None=None) -> None:
+    #     print((start, end))
+    #     super().notify_range(start, end)
+
+    def _add_tag(self, start, end, head, tag):
+        tag:str = "SYNC" if tag == "SYNC" else tag.lower()
+        kw_groups = ("match_softkw", "case_softkw", "case_softkw2",
+                     "case_default_underscore")
+        self.tag_add("keyword" if tag in kw_groups else tag,
+                     f"{head}+{start:d}c", f"{head}+{end:d}c")

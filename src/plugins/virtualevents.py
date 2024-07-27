@@ -69,7 +69,7 @@ class _VirtualEvents:
                 if WARNINGS and drop:
                     print(f"[WEARNING]: No handlers for {event_name} so " \
                           "sending to original event_generate.")
-            elif self.paused:
+            elif self.paused and (not event_name.lower().startswith("<<raw-")):
                 return ""
             else:
                 event:VirtualEvent = VirtualEvent(self.widget, **kwargs)

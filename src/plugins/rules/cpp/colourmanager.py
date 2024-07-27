@@ -61,27 +61,7 @@ def make_pat() -> re.compile:
 class ColourManager(BaseColourManager):
     __slots__ = ()
 
-    def init_colorizer(self) -> None:
-        self.colorizer.tagdefs:dict[str,str] = ColourConfig()
-        self.colorizer.idprog = re.compile(r"\s+(\w+)")
-        self.colorizer.prog = make_pat()
-
-    def attach(self) -> None:
-        super().attach()
-        self.init_colorizer()
-        self.colorizer.config_colors()
-        self.turnon_colorizer()
-        self.colorizer.notify_range("1.0", "end")
-
-    def detach(self) -> None:
-        super().detach()
-        self.turnoff_colorizer()
-        self.colorizer.removecolors()
-
-    def turnon_colorizer(self) -> None:
-        if self.colorizer.colorizer_on:
-            return None
-        self.colorizer.toggle_colorize_event()
-
-    def turnoff_colorizer(self) -> None:
-        self.colorizer.close()
+    def init(self) -> None:
+        self.tagdefs:dict[str,str] = ColourConfig()
+        self.idprog = re.compile(r"\s+(\w+)")
+        self.prog = make_pat()

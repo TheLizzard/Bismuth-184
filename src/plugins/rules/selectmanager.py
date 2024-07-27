@@ -15,7 +15,7 @@ SEL_TAG:str = "selected" # Copied from PythonPlugin
 class SelectManager(Rule):
     __slots__ = "text", "old_sel_fg", "old_sel_bg", "old_inactivebg", \
                 "selecting"
-    REQUESTED_LIBRARIES:tuple[str] = "event_generate", "bind", "unbind"
+    REQUESTED_LIBRARIES:tuple[str] = "insertdel_events"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
@@ -122,9 +122,9 @@ class SelectManager(Rule):
                 drag_y:int = +1
             drag:tuple = drag_x, drag_y
 
-        # ???
+        # If there are any tags in the insert, don't delete selected text
         elif on == "<before-insert>":
-            if event.data[2] is not None:
+            if len(event.data["raw"][2]):
                 return False
 
         # ???
@@ -152,9 +152,6 @@ class SelectManager(Rule):
         if on == "<move-insert>":
             idx:str = data[0]
             if DEBUG: print(f"[DEBUG]: insert set {idx}")
-            self.text.see(idx)
-            if idx != "insert":
-                self.text.mark_set("insert", idx)
             # Set linsert unless specifically told not to:
             if (len(data) == 1) or (not data[1]):
                 if DEBUG: print(f"[DEBUG]: linsert set {idx}")
@@ -195,7 +192,8 @@ class SelectManager(Rule):
             # reimplement this using `xview`/`yview`
             delta:str = None
             if drag[0] != 0:
-                delta:str = f"{SCROLL_SPEED*drag[0]}c"
+                if self.text.compare(idx, "!=", f"{idx} lineend"):
+                    delta:str = f"{SCROLL_SPEED*drag[0]}c"
             elif drag[1] != 0:
                 delta:str = f"{SCROLL_SPEED*drag[1]}l"
             if delta is not None:
@@ -239,7 +237,10 @@ class SelectManager(Rule):
                 cur_char:int = int(self.text.index(cur).split(".")[1])
                 if (cur_char < len(line)) or (len(fline) == cur_char):
                     comment:int = len(fline) - len(line)
-                    new:str = f"{cur} lineend -{comment}c"
+                    if len(fline.rstrip(" \t")) == len(line):
+                        new:str = f"{cur} lineend"
+                    else:
+                        new:str = f"{cur} lineend -{comment}c"
                 else:
                     new:str = f"{cur} lineend"
         # Left/Right
@@ -315,10 +316,15 @@ class SelectManager(Rule):
         chars_skipped:int = 0
         # Check what we are looking for:
         if strides > 0:
-            current_char:str = self.text.get(start, start+"+1c")
+            left, right = start, f"{start} +1c"
+            iscomment:bool = self.plugin.left_has_tag("comment", start)
         else:
-            current_char:str = self.text.get(start+"-1c", start)
-        isalphanumeric = lambda s: s.isidentifier() or s.isdigit() # also "_"
+            left, right = f"{start} -1c", start
+            iscomment:bool = self.plugin.right_has_tag("comment", start)
+            if self.text.compare(start, "==", f"{start} lineend"):
+                iscomment:bool = self.plugin.left_has_tag("comment", start)
+        current_char:str = self.text.get(left, right)
+        isalphanumeric = lambda s: s.isidentifier() or s.isdigit()
         looking_for_alphabet:bool = not isalphanumeric(current_char)
         if looking_for_alphabet and text:
             new_start:str = f"{start} +{-strides}c"
@@ -335,6 +341,14 @@ class SelectManager(Rule):
             current_char:str = self.text.get(left, right)
             if current_char in "'\"(){}[]\n":
                 break
+            # Deal with the comments
+            # Note: left_has_tag(right) is the same as right_has_tag(left)
+            if strides > 0:
+                if self.plugin.left_has_tag("comment", right) != iscomment:
+                    break
+            else:
+                if self.plugin.left_has_tag("comment", left) != iscomment:
+                    break
         return chars_skipped
 
     def sel_calc(self, start:str, end:str, cur:str, new:str) -> tuple[str,str]:

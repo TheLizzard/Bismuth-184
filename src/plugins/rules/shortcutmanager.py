@@ -21,7 +21,7 @@ class RemoveShortcuts(Rule):
             tk.simpletag:bool = True
 
         text_tags:tuple[str] = self.text.bindtags()
-        text_tags:tuple[str] = tuple(SIMPLE_TEXT if t == "Text" else t \
+        text_tags:tuple[str] = tuple({"Text":SIMPLE_TEXT}.get(t, t) \
                                      for t in text_tags)
         self.text.bindtags(text_tags)
 

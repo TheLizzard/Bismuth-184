@@ -10,14 +10,14 @@ from bettertk.betterscrollbar import BetterScrollBarVertical, \
 
 class BarManager(Rule):
     __slots__ = "label"
-    REQUESTED_LIBRARIES:tuple[str] = "add_widget", "wrapped"
+    REQUESTED_LIBRARIES:tuple[str] = "add_widget"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     FORMAT:str = "Ln: {line} Col: {column}"
 
     def __init__(self, plugin:BasePlugin, widget:tk.Misc) -> BarManager:
         super().__init__(plugin, widget, ons=("<<Move-Insert>>",))
-        self.label:tk.Label = tk.Label(widget.master, text="", bg="black",
+        self.label:tk.Label = tk.Label(plugin.master, text="", bg="black",
                                        fg="white", anchor="e")
 
     def __new__(Cls, plugin:BasePlugin, widget:tk.Misc, *args, **kwargs):
@@ -59,7 +59,7 @@ class LineManager(Rule, LineNumbers):
                          )
         Rule.__init__(self, plugin, text, ons=evs)
         self.text:tk.Text = text
-        self.parent:tk.Misc = text.master
+        self.parent:tk.Misc = plugin.master
         LineNumbers.init_widgets(self)
 
         bounce:tuple[str] = (
@@ -93,15 +93,15 @@ class LineManager(Rule, LineNumbers):
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
         data:tuple[str,str] = None
         if on == "<after-insert>":
-            if "\n" not in event.data[1]:
+            if "\n" not in event.data["raw"][1]:
                 return False
         if on == "<y-scroll>":
-            data:tuple[str,str] = event.data
+            data:str = event.data[0]
         return data, True
 
-    def do(self, on:str, data:tuple[str,str]) -> Break:
+    def do(self, on:str, data:str) -> Break:
         if on == "<y-scroll>":
-            self.sidebar_text.yview("moveto", data[0])
+            self.sidebar_text.yview("moveto", data)
             return False
         if on in ("<after-insert>", "<after-delete>",
                   "<undo-triggered>", "<redo-triggered>"):
@@ -138,10 +138,10 @@ class ScrollbarManager(Rule):
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> ScrollBarManager:
         super().__init__(plugin, text, ons=())
-        self.yscrollbar = BetterScrollBarVertical(text.master,
+        self.yscrollbar = BetterScrollBarVertical(plugin.master,
                                                   command=text.yview)
         if self.HORIZONTAL_BAR:
-            self.xscrollbar = BetterScrollBarHorizontal(text.master,
+            self.xscrollbar = BetterScrollBarHorizontal(plugin.master,
                                                         command=text.xview)
             self.xscrollbar.hide:bool = True
 
@@ -186,7 +186,7 @@ class MenuManager(Rule):
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> ScrollBarManager:
         super().__init__(plugin, text, ons=())
-        self.menu:BetterMenu = BetterMenu(text.master, direction="horizontal")
+        self.menu:BetterMenu = BetterMenu(plugin.master, direction="horizontal")
         self._create_menu()
 
     def __new__(Cls, plugin:BasePlugin, widget:tk.Misc, *args, **kwargs):
