@@ -42,9 +42,9 @@ class DLineInfoWrapper:
 
     def get_width(self, line:int, char:str="0") -> int:
         assert self._inside, "You can only call this if inside the context"
+        line += 1 # lines in tkinter start from 1
         if self._monospaced_size != 0:
             return self._monospaced_get_width(line)
-        line += 1 # lines in tkinter start from 1
         self.text.see(f"{line}.{char}", no_xscroll=True)
         width:int = self.text.dlineinfo(f"{line}.0")[2]
         if self._assume_monospaced:
@@ -64,8 +64,8 @@ class DLineInfoWrapper:
           using Text.xview, Text.yview, Text.see, and Text.dlineinfo
           which sometimes cause flickering and is super slow
         """
-        line:str = self.text.get(f"{line} linestart", f"{line} lineend")
-        return len(line) * self._monospaced_size
+        chars:str = self.text.get(f"{line}.0", f"{line}.0 lineend")
+        return len(chars) * self._monospaced_size
 
     def assume_monospaced(self) -> None:
         """
@@ -209,7 +209,7 @@ class XViewFix(Delegator):
 #   which barely works. It calls dlineinfo on each line to figure out the
 #   width of all of the lines which it caches and updates only when
 #   necessary It can go through around 4.6k lines (tkinter/__init__.py from
-#   cpython) in 1.08 sec (without assuming monospaced font)
+#   cpython) in 0.43 sec (without assuming monospaced font)
 class BetterText(tk.Text):
     def __init__(self, master:tk.Misc=None, **kwargs:dict) -> BetterText:
         self._tags_with_bg:dict[str:str] = {"sel":"#c3c3c3"}
@@ -230,7 +230,8 @@ class BetterText(tk.Text):
         self._frame = tk.Frame(self._canvas, highlightthickness=0, bd=0)
         self._frame.pack_propagate(False)
         super().__init__(self._frame, bd=0, highlightthickness=0, wrap="none",
-                         xscrollcommand=self._on_xscroll_cmd, **kwargs)
+                         xscrollcommand=self._on_xscroll_cmd, padx=0, pady=0,
+                         **kwargs)
         self._tags_with_bg["sel"] = super().tag_cget("sel", "background")
         super().pack(fill="both", expand=True)
         self._canvas.create_window((0,0), anchor="nw", window=self._frame,
@@ -295,6 +296,8 @@ class BetterText(tk.Text):
         """
         assert kwargs.pop("wrap", "none") == "none", "wrap must be none"
         assert not kwargs.pop("border", 0), "border must be 0"
+        assert not kwargs.pop("padx", 0), "padx must be 0"
+        assert not kwargs.pop("pady", 0), "pady must be 0"
         assert not kwargs.pop("bd", 0), "border must be 0"
         assert not kwargs.pop("highlightthickness", 0), \
                                              "highlightthickness must be 0"
@@ -650,6 +653,7 @@ class BetterText(tk.Text):
 
 if __name__ == "__main__":
     from time import perf_counter
+    from os.path import dirname, join
 
     start:float = perf_counter()
     root:tk.Tk = tk.Tk()
@@ -659,17 +663,17 @@ if __name__ == "__main__":
     text.pack(fill="both", expand=True)
     # text._xviewfix.dlineinfo.assume_monospaced()
 
-    with open(tk.__file__, "r") as file:
+    filepath:str = tk.__file__
+    # filepath:str = join(dirname(dirname(dirname(__file__))), "bad.py")
+    with open(filepath, "r") as file:
         text.insert("end", file.read())
 
     evs:tuple[str] = ("<<XViewFix-Before-Insert>>", "<<XViewFix-After-Insert>>",
                       "<<XViewFix-After-Delete>>", "<Left>", "<Right>", "<Up>",
                       "<Down>", "<KeyRelease-Left>", "<KeyRelease-Right>",
                       "<KeyRelease-Up>", "<KeyRelease-Down>")
-    def see_insert(event:tk.Event=None) -> None:
-        text.see("insert")
     for ev in evs:
-        text.bind(ev, see_insert)
+        text.bind(ev, lambda e: text.see("insert"))
 
     # Note that at the start, it might have a graphical glitch, not my fault
     #   ~~probably~~ maybe
