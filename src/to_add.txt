@@ -5,10 +5,7 @@ Editor:
 * `FindReplaceManager` removes hit tag when the user adds/removes text near the hit
 * Implement Control-Up/Control-Down
 * Commenting a block with a comment inside it, uncomments the comment
-
-* Horizonal scrollbar shows and hides rapidly in rare circumstances
 * Control(-Shift)?-z doesn't scroll if there is text selected
-* Paste scrolls to the begining of the line
 
 Terminal:
 * Windows support (pty_terminal)

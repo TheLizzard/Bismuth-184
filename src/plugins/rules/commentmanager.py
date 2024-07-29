@@ -49,9 +49,8 @@ class CommentManager(Rule):
             if (line[end:end+1] == " ") and (line[end+1:end+2] != " "):
                 self.text.delete(f"{linenumber}.{whites}")
         else:
-            whites:int = min(whites, minwhites)
-            self.text.insert(f"{linenumber}.{whites}", self.COMMENT_STR+" ",
-                             f"program")
+            idx:str = f"{linenumber}.{min(whites, minwhites)}"
+            self.text.insert(idx, self.COMMENT_STR+" ", "program")
 
     def get_whites(self, linenumber:int) -> int:
         line:str = self.text.get(f"{linenumber}.0", f"{linenumber}.0 lineend")

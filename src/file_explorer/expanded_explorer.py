@@ -81,7 +81,8 @@ class Menu:
         if not self.shown:
             return None
         self.shown:bool = False
-        self.master.focus_set()
+        # Explorer items should be selectable but never focusable
+        # self.master.focus_set()
         self.root.withdraw()
         if cancelled:
             self.on_cancel()
@@ -147,7 +148,7 @@ class ExpandedExplorer(Explorer):
         self.cwd:tk.Frame = None
         self.master.bind_all("<Escape>", self.finish_rename, add=True)
         self.master.bind_all("<Button-1>", self.maybe_cancel_rename, add=True)
-        self.master.bind_all("<<CancelAll>>", self.maybe_cancel_rename, add=True)
+        self.master.bind_all("<<CancelAll>>", self.maybe_cancel_rename, add=1)
         self.master.bind_all("<<Explorer-Report-CWD>>", self.report_cwd)
 
     # Bin
@@ -171,11 +172,11 @@ class ExpandedExplorer(Explorer):
         self.menu.add("New file", self.newfile)
         self.menu.add("New folder", self.newfolder)
         self.menu.add_separator()
-        self.menu.add("Open (externally)", self.open_item)
+        # self.menu.add("Open (externally)", self.open_item)
         self.menu.add("Open in explorer", self.open_in_explorer)
         self.menu.add("Open in terminal", self.open_in_terminal)
-        self.menu.add("Copy full path", self.copy_path)
         self.menu.add_separator()
+        self.menu.add("Copy full path", self.copy_path)
         self.set_cwd_id:int = self.menu.add("Set as working dir", self.set_cwd)
         self.menu.on_cancel:Function[None] = self.menu_cancel
 
@@ -188,6 +189,7 @@ class ExpandedExplorer(Explorer):
             self.changing = self.selected = None
             return None
         self.changing = self.selected = frame
+        self.changing.focused_widget:tk.Misc = self.changing.focus_get()
         if super()._get_closest_folder(frame) == self.cwd:
             self.menu.config(self.set_cwd_id, text="Remove exec path (cwd)",
                              command=self.remove_cwd)
@@ -284,6 +286,7 @@ class ExpandedExplorer(Explorer):
         if self.changing.item.name == NEW_ITEM_NAME:
             super().delete_item(self.changing.item, apply_filesystem=False)
         self.changing.entry.destroy()
+        self.changing.focused_widget.focus_set()
         self.changing:tk.Frame = None
         self.renaming:bool = False
         self.creating:bool = False

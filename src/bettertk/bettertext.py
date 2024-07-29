@@ -229,6 +229,7 @@ class BetterText(tk.Text):
                                            height=self._height, cursor="xterm")
         self._frame = tk.Frame(self._canvas, highlightthickness=0, bd=0)
         self._frame.pack_propagate(False)
+        # https://stackoverflow.com/q/78802587/11106801
         super().__init__(self._frame, bd=0, highlightthickness=0, wrap="none",
                          xscrollcommand=self._on_xscroll_cmd, padx=0, pady=0,
                          **kwargs)
@@ -261,7 +262,7 @@ class BetterText(tk.Text):
         self._canvas.bind("<Double-Button-1>", self._redirect_event)
         self._canvas.bind("<Triple-Button-1>", self._redirect_event)
 
-        super().after(100, lambda: self._update_viewport(xoffset=self._xoffset))
+        # super().after(100, lambda: self._update_viewport(xoffset=self._xoffset))
 
     def _redraw_sel_bg(self, event:tk.Event=None) -> None:
         """
@@ -294,6 +295,8 @@ class BetterText(tk.Text):
           function so we can call it later
         Intercept changes to background and apply them to the canvas as well
         """
+        if len(kwargs) == 0:
+            return super().config()
         assert kwargs.pop("wrap", "none") == "none", "wrap must be none"
         assert not kwargs.pop("border", 0), "border must be 0"
         assert not kwargs.pop("padx", 0), "padx must be 0"
@@ -327,6 +330,11 @@ class BetterText(tk.Text):
         Gets the length of the longest visible line on the screen in pixels.
         Used in `BetterText.textx`
         """
+        xview:tuple[str,str]|None = super().xview()
+        if xview is None:
+            return -1
+        return int(self._width/(float(xview[1])-float(xview[0]))+0.5)
+
         # Get the current viewport (y-axis)
         top:str = super().index("@0,0")
         bottom:str = super().index(f"@0,{self._height-1}")
@@ -594,20 +602,20 @@ class BetterText(tk.Text):
         w_over_f:float = self._width/lln
         if xoffset is None:
             assert low is not None, "pass in either low or xoffset"
-            low:float = min(1-w_over_f, low)
+            low:float = max(0.0, min(1-w_over_f, low))
             self._xoffset:int = int(low*lln + 0.5)
         elif low is None:
             self._xoffset = min(max(self._xviewfix.line_lengths)-self._width,
                                 max(0, xoffset))
-            low:float = min(1-w_over_f, self._xoffset/lln)
+            low:float = max(0.0, min(1-w_over_f, self._xoffset/lln))
         else:
             raise RuntimeError("pass in either low or xoffset")
-        high:float = low + w_over_f
+        high:float = min(1.0, max(0.0, low+w_over_f))
 
         # Set xview
         lvln:int = max(1, self._get_longest_visible_line_length())
-        vis_low:float = str(low*lln/lvln)
-        super().xview("moveto", (1.0 if high > 0.999 else vis_low))
+        vis_low:float = str(self._xoffset/lvln)
+        super().xview("moveto", str(1.0 if high > 0.995 else vis_low))
 
         # Get the current textx(0)
         curr_xoffset:int = self.textx(0, real=False)
@@ -617,7 +625,7 @@ class BetterText(tk.Text):
         if self._canvasx != 0:
             self._redraw_tags_with_bg(update_idletasks=False)
         if self._xscrollcmd is not None:
-            self._xscrollcmd(low, high)
+            self._xscrollcmd(str(low), str(high))
 
     def _redraw_tags_with_bg(self, update_idletasks:bool=True, tag:str=None):
         if self._lock_tags_with_bg or self.ignore_tags_with_bg:
@@ -652,8 +660,9 @@ class BetterText(tk.Text):
 
 
 if __name__ == "__main__":
-    from time import perf_counter
     from os.path import dirname, join
+    from time import perf_counter
+
 
     start:float = perf_counter()
     root:tk.Tk = tk.Tk()

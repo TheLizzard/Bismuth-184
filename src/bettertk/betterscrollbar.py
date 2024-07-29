@@ -2,144 +2,136 @@
 # https://stackoverflow.com/a/57350295/11106801
 import tkinter as tk
 
-
-class BaseBetterScrollBar:
-    __slots__ = "thumb_colour", "active_thumb_colour", "bg", \
-                "show_arrows", "command"
-
-    def __init__(self, width:int=12, bg:str="black", command=None,
-                 thumb_colour:str="#555555", show_arrows:bool=False,
-                 active_thumb_colour:str="#777777"):
-        self.bg = bg
-        self.width = width
-        self.command = command
-        self.thumb_colour = thumb_colour
-        self.active_thumb_colour = active_thumb_colour
-        if show_arrows:
-            raise NotImplementedError("Arrows aren't supported right now.")
-
-    def reset_thumb_colour(self, event:tk.Event=None) -> None:
-        if not self.mouse_pressed:
-            self.itemconfig(self.thumb, fill=self.thumb_colour)
-
-    def _set(self, value:float) -> None:
-        value:float = min(1.0, max(0.0, value))
-        if self.command is not None:
-            self.command("moveto", value)
+DEBUG:bool = False
 
 
-class BetterScrollBarVertical(tk.Canvas, BaseBetterScrollBar):
-    __slots__ = "mouse_pressed", "y0", "y1"
+class BaseBetterScrollBar(tk.Canvas):
+    __slots__ = "_thumb_colour", "_active_thumb_colour", "_thumb_colour", \
+                "_command", "_thumb", "_mouse_pressed", "_p0", "_p1", \
+                "_grid_kwargs", "_shown", "hide", "_offset", "_height", \
+                "_width", "_height", "_high", "_low"
 
-    def __init__(self, master, orient="vertical", **kwargs):
-        if orient != "vertical":
-            raise ValueError("Invalid orient for a vertical scroll bar")
-        BaseBetterScrollBar.__init__(self, **kwargs)
+    def __init__(self, master:tk.Misc, thickness:int=12, can_hide:bool=False,
+                 thumb_colour:str="#555555", active_thumb_colour:str="#777777",
+                 bg:str="black", command=None, **kwargs) -> None:
+        super().__init__(master, highlightthickness=0, bd=0, bg=bg,
+                         width=thickness, height=thickness, **kwargs)
+        # Scrollbar specific args
+        self._active_thumb_colour:str = active_thumb_colour
+        self._thumb_colour:str = thumb_colour
+        self._command = command
+        # For dragding
+        self._mouse_pressed:bool = False
+        # Hide/Show
+        self._grid_kwargs:dict = None
+        self._shown:bool = True
+        self.hide:bool = False
+        self._offset:int = 0
+        # For calculations
+        self._height:int = 0
+        self._width:int = 0
+        self._high:float = 0
+        self._low:float = 0
+        self._p0:int = 0
+        self._p1:int = 0
+        # Create thumb
+        self._thumb = super().create_rectangle(0, 0, 1, 1, outline="",
+                                               fill=self._thumb_colour)
+        # Set up bindings
+        super().bind("<B1-Motion>", self._on_drag)
+        super().bind("<ButtonPress-1>", self._on_click)
+        super().bind("<ButtonRelease-1>", self._on_release)
+        super().bind("<Leave>", self._reset_thumb_colour)
+        super().bind("<Configure>", self._on_resize)
 
-        self.mouse_pressed:bool = False
-        self.offset:int = 0
+    def config(self, **kwargs:dict) -> dict:
+        """
+        On config, intercept:
+                              can_hide
+                              _thumb_colour
+                              _active_thumb_colour
+        """
+        if len(kwargs) == 0:
+            return super().config()
+        self._thumb_colour:str = kwargs.pop("thumb_colour", self._thumb_colour)
+        self._active_thumb_colour:str = kwargs.pop("_active_thumb_colour",
+                                                   self._active_thumb_colour)
+        self.hide:str = kwargs.pop("can_hide", self.hide)
+    configure = config
 
-        super().__init__(master, width=self.width, height=1,
-                         bg=self.bg, highlightthickness=0, bd=0)
+    def _reset_thumb_colour(self, event:tk.Event=None) -> None:
+        if not self._mouse_pressed:
+            self.itemconfig(self._thumb, fill=self._thumb_colour)
 
-        self.thumb = super().create_rectangle(0, 0, 1, 1, outline="",
-                                              fill=self.thumb_colour)
-        super().bind("<ButtonPress-1>", self.on_click)
-        super().bind("<ButtonRelease-1>", self.on_release)
-        super().bind("<Motion>", self.on_motion)
-        super().bind("<Leave>", self.reset_thumb_colour)
+    def _on_resize(self, event:tk.Event) -> None:
+        self._width, self._height = event.width, event.height
+        self._recalc_redraw()
+
+    def _on_click(self, event:tk.Event) -> None:
+        event_p:int = self.get_arg_from_event(event)
+        if self._p0 < event_p < self._p1:
+            self._offset:int = event_p - self._p0
+            self._mouse_pressed:bool = True
+            self._on_drag(event)
+
+    def _on_release(self, event:tk.Event) -> None:
+        if not self._mouse_pressed:
+            return None
+        self._mouse_pressed:bool = False
+        if self._p0 < self.get_arg_from_event(event) < self._p1:
+            super().itemconfig(self._thumb, fill=self._active_thumb_colour)
+        else:
+            self._reset_thumb_colour()
+
+    def _on_drag(self, event:tk.Event) -> None:
+        if not self._mouse_pressed:
+            return None
+        event_p:int = self.get_arg_from_event(event)
+        if self._command is not None:
+            value:float = (event_p-self._offset) / self.get_major_length()
+            self._command("moveto", str(min(1.0, max(0.0, value))))
+
+    def _recalculate(self) -> None:
+        """
+        Re-calculates the position+size of the thumb. Doesn't redraw anything
+        """
+        length:int = self.get_major_length()
+        self._p0:int = max(int(length*self._low+0.5), 0)
+        self._p1:int = min(int(length*self._high+0.5), length)
+        if DEBUG: print(f"[DEBUG]: Draw {self._p0}, {self._p1}")
+
+    def _recalc_redraw(self) -> None:
+        """
+        Re-calculates and redraws the thumb
+        """
+        self._recalculate()
+        self._redraw()
 
     def set(self, low:str, high:str) -> None:
         low, high = float(low), float(high)
-        height:int = self.winfo_height()
-        self.y0:int = max(int(height*low+0.5), 0)
-        self.y1:int = min(int(height*high+0.5), height)
-        super().coords(self.thumb, 0, self.y0, self.winfo_width(), self.y1)
+        self._low, self._high = low, high
+        if self.hide:
+            if self._shown:
+                if (low == 0) and (high == 1):
+                    self._grid_kwargs = super().grid_info()
+                    self.grid_forget()
+                    return None
+            else:
+                if (low != 0) or (high != 1):
+                    if self._grid_kwargs is not None:
+                        self.grid(**self._grid_kwargs)
+                    return None
+        self._recalc_redraw()
 
-    def on_click(self, event:tk.Event) -> None:
-        if self.y0 < event.y < self.y1:
-            self.mouse_pressed:bool = True
-            self.offset:int = event.y - self.y0
-            self.on_motion(event)
+    def grid(self, **kwargs:dict) -> None:
+        self._grid_kwargs:dict = kwargs
+        self._shown:bool = True
+        super().grid(**kwargs)
+        self._recalc_redraw()
 
-    def on_release(self, event:tk.Event) -> None:
-        self.mouse_pressed:bool = False
-        if not (self.y0 < event.y < self.y1):
-            self.reset_thumb_colour()
-
-    def on_motion(self, event:tk.Event) -> None:
-        if self.y0 < event.y < self.y1:
-            super().itemconfig(self.thumb, fill=self.active_thumb_colour)
-        else:
-            self.reset_thumb_colour()
-        if self.mouse_pressed:
-            self._set((event.y-self.offset) / self.winfo_height())
-
-
-class BetterScrollBarHorizontal(tk.Canvas, BaseBetterScrollBar):
-    __slots__ = "mouse_pressed", "x0", "x1", "hide", "shown", "grid_kwargs"
-
-    def __init__(self, master, orient="horizontal", **kwargs):
-        if orient != "horizontal":
-            raise ValueError("Invalid orient for a horizontal scroll bar")
-        BaseBetterScrollBar.__init__(self, **kwargs)
-
-        self.mouse_pressed:bool = False
-        self.no_first_set:bool = True
-        self.offset:int = 0
-
-        super().__init__(master, width=1, height=self.width,
-                         bg=self.bg, highlightthickness=0, bd=0)
-
-        self.thumb = super().create_rectangle(0, 0, 1, 1, outline="",
-                                              fill=self.thumb_colour)
-        super().bind("<ButtonPress-1>", self.on_click)
-        super().bind("<ButtonRelease-1>", self.on_release)
-        super().bind("<Motion>", self.on_motion)
-        super().bind("<Leave>", self.reset_thumb_colour)
-
-        self.hide:bool = False
-        self.shown:bool = True
-
-    def set(self, low:str, high:str) -> None:
-        if (low == "0.0") and (high == "1.0") and self.hide and self.shown:
-            self.grid_kwargs = super().grid_info()
-            super().grid_forget()
-            self.shown:bool = False
-        elif ((low != "0.0") or (high != "1.0")) and self.hide and (not self.shown):
-            super().grid(**self.grid_kwargs)
-            self.shown:bool = True
-
-        width:int = super().winfo_width()
-        self.x0:int = max(int(width*float(low)+0.5), 0)
-        self.x1:int = min(int(width*float(high)+0.5), width)
-        super().coords(self.thumb, self.x0, 0, self.x1, self.winfo_height())
-        self.no_first_set:bool = False
-
-    def on_click(self, event:tk.Event) -> None:
-        if self.no_first_set:
-            return None
-        if self.x0 < event.x < self.x1:
-            self.offset:int = event.x - self.x0
-            self.mouse_pressed:bool = True
-            self.on_motion(event)
-
-    def on_release(self, event:tk.Event) -> None:
-        if not self.mouse_pressed:
-            return None
-        self.mouse_pressed:bool = False
-        if not (self.x0 < event.x < self.x1):
-            self.reset_thumb_colour()
-
-    def on_motion(self, event:tk.Event) -> None:
-        if not self.mouse_pressed:
-            return None
-        if self.x0 < event.x < self.x1:
-            super().itemconfig(self.thumb, fill=self.active_thumb_colour)
-        else:
-            self.reset_thumb_colour()
-        if self.mouse_pressed:
-            self._set((event.x-self.offset) / self.winfo_width())
+    def grid_forget(self) -> None:
+        self._shown:bool = False
+        super().grid_forget()
 
     def pack(self, **kwargs) -> None:
         if self.hide:
@@ -148,8 +140,60 @@ class BetterScrollBarHorizontal(tk.Canvas, BaseBetterScrollBar):
 
     def place(self, **kwargs) -> None:
         if self.hide:
-            raise NotImplementedError("Hide only works with grid")
+            raise NotImplementedError("Hide only works with grid (I am lazy)")
         super().place(**kwargs)
+
+    def get_arg_from_event(self, event:tk.Event) -> int:
+        raise NotImplementedError("Overwrite this method or use " \
+                                  "BetterScrollBarHorizontal or " \
+                                  "BetterScrollBarVertical instead")
+
+    def get_major_length(self) -> int:
+        raise NotImplementedError("Overwrite this method or use " \
+                                  "BetterScrollBarHorizontal or " \
+                                  "BetterScrollBarVertical instead")
+
+    def _redraw(self) -> None:
+        """
+        Redraw the thumb using:
+          self._p0, self._p1, self._width, and self._height
+        """
+
+
+class BetterScrollBarHorizontal(BaseBetterScrollBar):
+    __slots__ = ()
+
+    def __init__(self, master:tk.Misc, orient:str="horizontal", **kwargs):
+        if orient != "horizontal":
+            raise ValueError("Invalid orient for a horizontal scroll bar")
+        super().__init__(master, **kwargs)
+
+    def _redraw(self) -> None:
+        super().coords(self._thumb, self._p0, 0, self._p1, self._height)
+
+    def get_arg_from_event(self, event:tk.Event) -> int:
+        return event.x
+
+    def get_major_length(self) -> int:
+        return self._width
+
+
+class BetterScrollBarVertical(BaseBetterScrollBar):
+    __slots__ = ()
+
+    def __init__(self, master:tk.Misc, orient:str="vertical", **kwargs):
+        if orient != "vertical":
+            raise ValueError("Invalid orient for a horizontal scroll bar")
+        super().__init__(master, **kwargs)
+
+    def _redraw(self) -> None:
+        super().coords(self._thumb, 0, self._p0, self._width, self._p1)
+
+    def get_arg_from_event(self, event:tk.Event) -> int:
+        return event.y
+
+    def get_major_length(self) -> int:
+        return self._height
 
 
 class ScrolledText:

@@ -141,8 +141,9 @@ class SaveLoadManager(Rule):
 
     def _open(self) -> None:
         self._internal_open()
-        self.text.see("end -1c linestart")
+        # self.text.see("end -1c linestart")
         self.text.event_generate("<<Opened-File>>")
+        self.text.event_generate("<<Move-Insert>>", data=("1.0",))
 
     # reload
     def _reload(self) -> None:

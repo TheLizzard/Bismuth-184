@@ -89,7 +89,7 @@ class TabNotches(BetterFrame):
         self.notebook:Notebook = notebook
         super().__init__(notebook, bg=NOTCH_BG, hscroll=True, vscroll=False,
                          HScrollBarClass=BetterScrollBarHorizontal,
-                         hscrolltop=True, scrollbar_kwargs=dict(width=4))
+                         hscrolltop=True, scrollbar_kwargs={"thickness":4})
         self.add_notch:TabNotch = TabNotch(self)
         self.add_notch.grid(row=1, column=1)
         self.add_notch.rename("+")

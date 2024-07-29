@@ -32,13 +32,16 @@ class InsertDeleteManager(Rule, Delegator):
         self.text.percolator.removefilter(self)
 
     def insert(self, index:str, chars:str, tags:tuple[str]|str=None) -> None:
+        # change tags:tuple[str]|str|None => _tags:tuple[str]
         _tags:tuple[str] = (tags,) if isinstance(tags, str) else tags
         _tags:tuple[str] = () if _tags is None else _tags
+        tags:tuple[str] = tuple(set(_tags)-{"program"})
         data:dict[str:tuple] = {"raw": (index,chars,_tags)}
         data["abs"] = (self._index(index), chars, _tags)
+        # Raw events can't be stopped by _VirtualEvents.paused
         self.text.event_generate("<<Raw-Before-Insert>>", data=data)
         self.text.event_generate("<<Before-Insert>>", data=data)
-        self.delegate.insert(index, chars, tags)
+        self.delegate.insert(index, chars, tags if tags else None)
         self.text.event_generate("<<After-Insert>>", data=data)
         self.text.event_generate("<<Raw-After-Insert>>", data=data)
 
@@ -55,7 +58,7 @@ class InsertDeleteManager(Rule, Delegator):
         if idx is None:
             return None
         idx:str = self.text.index(idx)
-        if idx.split(".")[1] == "0": # Slight optimisation
+        if idx.endswith(".0"): # Slight optimisation
             if self.text.compare(idx, "==", "end"):
                 idx:str = self.text.index("end -1c")
         return idx

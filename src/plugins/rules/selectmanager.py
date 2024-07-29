@@ -192,8 +192,13 @@ class SelectManager(Rule):
             # reimplement this using `xview`/`yview`
             delta:str = None
             if drag[0] != 0:
-                if self.text.compare(idx, "!=", f"{idx} lineend"):
-                    delta:str = f"{SCROLL_SPEED*drag[0]}c"
+                delta:str = f"{SCROLL_SPEED*drag[0]}c"
+                if self.text.compare(idx, "==", f"{idx} lineend"):
+                    if drag[0] > 0:
+                        delta:str = None
+                if self.text.compare(idx, "==", f"{idx} linestart"):
+                    if drag[0] < 0:
+                        delta:str = None
             elif drag[1] != 0:
                 delta:str = f"{SCROLL_SPEED*drag[1]}l"
             if delta is not None:

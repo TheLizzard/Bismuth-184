@@ -47,7 +47,7 @@ class App:
         self.root:BetterTk = BetterTk(settings=window_settings,
                                       className="Bismuth-184")
         self.root.title("Bismuth-184")
-        self.root.iconphoto(True, "sprites/Bismuth_184.ico")
+        self.root.iconphoto(False, "sprites/Bismuth_184.ico")
         self.root.protocol("WM_DELETE_WINDOW", self.root_close)
         self.root.geometry(f"+{settings.window.x}+{settings.window.y}")
         self.root.after(100, self._check_msg_queue, message_queue)
@@ -64,10 +64,11 @@ class App:
 
         left_frame:tk.Frame = tk.Frame(pannedwindow, bd=0, bg="black",
                                        highlightthickness=0)
+        left_frame.grid_columnconfigure((1,3), uniform=1)
         add = tk.Button(left_frame, text="Add Folder", bg="black", fg="white",
                         activebackground="grey", activeforeground="white",
-                        highlightthickness=0, takefocus=False, width=15,
-                        command=self.explorer_add_folder, relief="flat")
+                        highlightthickness=0, takefocus=False, relief="flat",
+                        command=self.explorer_add_folder)
         add.grid(row=1, column=1, sticky="news")
         sep = tk.Canvas(left_frame, bg="grey", bd=0, highlightthickness=0,
                         width=1, height=1)
@@ -75,9 +76,9 @@ class App:
         sep = tk.Canvas(left_frame, bg="grey", bd=0, highlightthickness=0,
                         width=1, height=1)
         sep.grid(row=2, column=1, columnspan=3, sticky="news")
-        rem = tk.Button(left_frame, text="Remove Folder", bg="black", fg="white",
+        rem = tk.Button(left_frame, text="Remove Folder", bg="black",
                         activebackground="grey", activeforeground="white",
-                        highlightthickness=0, takefocus=False, width=15,
+                        highlightthickness=0, takefocus=False, fg="white",
                         command=self.explorer_remove_folder, relief="flat")
         rem.grid(row=1, column=3, sticky="news")
         left_frame.grid_rowconfigure(3, weight=1)
@@ -386,9 +387,7 @@ class App:
                 command, *args = message_queue.pop(0)
                 if command == "focus":
                     assert len(args) == 0, "There should be no args"
-                    self.root.attributes("-topmost", True)
-                    self.root.attributes("-topmost", False)
-                    self.root.focus_force()
+                    self.focus_force()
                 elif command == "open":
                     assert len(args) == 1, "There should only be 1 arg"
                     self.open(args[0])
@@ -396,6 +395,18 @@ class App:
                     raise RuntimeError("Unknown {command=!r}")
         finally:
             self.root.after(200, self._check_msg_queue, message_queue)
+
+    def focus_force(self) -> None:
+        # Bring to top
+        self.root.attributes("-topmost", True)
+        self.root.attributes("-topmost", False)
+        # Focus the root
+        self.root.focus_force()
+        # Focus the correct text box
+        for text, page in self.text_to_page.items():
+            if page == self.notebook.curr_page:
+                text.focus_set()
+                return None
 
 
 if __name__ == "__main__":
@@ -433,7 +444,7 @@ if __name__ == "__main__":
             onclose()
 
     def force_singleton() -> MsgQueue:
-        return None
+        # return None # For debugging
         from runner.singleton import singleton
 
         is_main, writer_or_buffer, onclose = singleton()
