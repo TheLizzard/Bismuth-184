@@ -316,7 +316,21 @@ class BasePlugin(ProtoPlugin):
             return self.virual_event_wrapper(func, *args)
         return self.undo_wrapper(wrapper)
 
-    def find_bracket_match(self, open:str, close:str, end:str="insert"):
+    def get_line_remove_comment_string(self, idx:str) -> str:
+        """
+        Returns the line up to the index passed, replacing comments
+          and strings with "\xff" characters
+        """
+        text:str = self.text.get(f"{idx} linestart", idx)
+        idx:str = self.text.index(f"{idx} linestart")
+        for i in range(len(text)):
+            comment:bool = self.right_has_tag("comment", f"{idx} +{i}c")
+            string:bool = self.right_has_tag("string", f"{idx} +{i}c")
+            if comment or string:
+                text:str = text[:i] + "\xff" + text[i+1:]
+        return text
+
+    def find_bracket_match(self, open:str, close:str, end:str="insert") -> str:
         # If we are in a comment or a string, stay in the comment/string
         is_comment:bool = self.left_has_tag("comment", end)
         is_string:bool = self.right_has_tag("string", end)

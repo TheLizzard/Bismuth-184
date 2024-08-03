@@ -8,18 +8,25 @@ UPDATE_INDENTATION_DELAY:int = 15000
 DEBUG:bool = False
 
 
+BRACKETS:dict[str:str] = {"(":")", "[":"]", "{":"}", "'":"'", '"':'"'}
+RBRACKETS:dict[str:str] = {v:k for k,v in BRACKETS.items()}
+
+
 class WhiteSpaceManager(Rule):
     __slots__ = "text", "indentation", "after_id"
     REQUESTED_LIBRARIES:tuple[str] = "insertdel_events"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     INDENTATIONS:dict[str,int] = {" ":4, "\t":1}
+
+    INDENTATION_NEWLINE_IGN:set[str] = set()
     INDENTATION_DELTAS:dict[str,int] = {}
-    DEFAULT_INDENTATION:str = " "
+    INDENTATION_CP:set[str] = set()
+    INDENTATION_DEFAULT:str = " "
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
+        self.indentation:str = self.INDENTATION_DEFAULT
         self.after_id:str = None
-        self.indentation:str = self.DEFAULT_INDENTATION
         evs:tuple[str] = (
                            # Returns
                            "<Return>", "<KP_Enter>",
@@ -28,7 +35,7 @@ class WhiteSpaceManager(Rule):
                            # Key bindings
                            "<Control-bracketleft>", "<Control-bracketright>",
                            # Get default indentation
-                           "<<After-Insert>>")
+                           "<<Raw-After-Insert>>")
         super().__init__(plugin, text, evs)
         self.text:tk.Text = self.widget
 
@@ -44,7 +51,7 @@ class WhiteSpaceManager(Rule):
             self.after_id:str = None
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
-        if (on == "<after-insert>") and (len(event.data["raw"][1]) < 50):
+        if (on == "<raw-after-insert>") and (len(event.data["raw"][1]) < 50):
             return False
         return event.state&SHIFT, True
 
@@ -58,81 +65,43 @@ class WhiteSpaceManager(Rule):
             return self.plugin.undo_wrapper(self.tab_pressed)
         elif on in ("control-bracketleft", "control-bracketright"):
             return self.plugin.double_wrapper(self.indent_deintent_section, on)
-        elif on == "<after-insert>":
+        elif on == "<raw-after-insert>":
             self.update_default_indentation()
             return False
         raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
 
     # Return
-    def return_pressed(self, shift:bool) -> tuple[Break,...]:
-        with self.plugin.see_end:
-            # Get all of the data we need:
-            before:str = self.text.get("insert linestart", "insert")
-            after:str = self.text.get("insert", "insert lineend")
-            indentation_type, size = self.get_indentation(before or after)
-            if before == "":
-                size:int = 0 # counter the before or after
-
-            # Delete the whitespaces at the end of the line and after the cursor
-            ws_before, ws_aftr = self.get_whites_delete(before, after, shift,
-                                                         indentation_type)
-            if ws_before + ws_aftr > 0:
-                self.text.delete(f"insert -{ws_before}c", f"insert +{ws_aftr}c")
-
-            # Copy the last indentation
-            if not shift:
-                chars:str = self.get_new_line(before, after, indentation_type,
-                                              size)
-                self.text.insert("insert", chars)
-                return (True, size, indentation_type, chars)
+    def return_pressed(self, shift:bool) -> tuple[Break,str]:
+        inds:str = "".join(self.INDENTATIONS)
+        # """
+        # If before insert, only spaces, copy them and break
+        if not self.text.get("insert linestart", "insert").strip(inds):
+            self.text.insert("insert linestart", "\n", "program")
+            return True, ""
+        # Delete trailing whitespaces
+        while True:
+            if self.text.get("insert -1c", "insert") in self.INDENTATIONS:
+                self.text.delete("insert -1c", "insert")
             else:
-                return (False,)
-
-    def get_whites_delete(self, before, after, shift, indentation_type):
-        """
-        Returns the characters to delete before and after the cursor when
-          return is pressed from a line line this:
-          ```
-          def f(x):..|...
-          ```
-          where "." is any whitespace character in self.INDENTATIONS and "|"
-          is the cursor. In this case returns (2, 3)
-        Arguments:
-          before            The line before the cursor
-          after             The rest of the line after the cursor
-          shift             A boolean showing if shift is pressed
-          indentation_type  The indentation type (eg " " or "\t")
-        """
-        # Remove all of the whites before the cursor and after the cursor
-        whites_before:int = self.count(before, self.INDENTATIONS.keys(), -1)
-        whites_after_1:int = self.count(after, self.INDENTATIONS.keys(), +1)
-        whites_after_2:int = self.count(after, indentation_type, +1)
-        whites_after:int = whites_after_1 if whites_after_1 == len(after) else \
-                           whites_after_2
-        # if the cursor is inside the indentation of a non empty line
-        if (len(after) != whites_after) and (len(before) == whites_before):
-            whites_after:int = 0
-        # Respect shift:
+                break
+        # If shift, insert \n and return
         if shift:
-            whites_after:int = 0
-        return whites_before, whites_after
-
-    def get_new_line(self, before, after, indentation_type, size) -> str:
-        """
-        Get the characters to insert when return is pressed. Must return
-          a string. The newline is going to be blocked after this function
-          so this function is advised to return a string containing "\n"
-        Arguments:
-          before            The line before the cursor
-          after             The rest of the line after the cursor
-          indentation_type  The indentation type (eg " " or "\t")
-          size              The number of `indentation_type` characters
-                              at the start of `before`
-        """
+            return False, ""
+        # Delete whitespaces after the cursor but before EOL
+        while True:
+            if self.text.get("insert", "insert +1c") in self.INDENTATIONS:
+                self.text.delete("insert", "insert +1c")
+            else:
+                break
+        # Figure out the indentation change (in python ":")
         last_char:str = self.plugin.get_virline("insert")[-1:]
-        type_size:int = self.INDENTATIONS[indentation_type]
-        size += self.INDENTATION_DELTAS.get(last_char, 0)*type_size
-        return "\n" + indentation_type*size
+        indent_delta:str = self.indentation * \
+                           self.INDENTATIONS[self.indentation] * \
+                           self.INDENTATION_DELTAS.get(last_char, 0)
+        # Figure out the prev indentation:
+        ind_before:str = self.get_new_indentation("insert")
+        self.text.insert("insert", "\n"+ind_before+indent_delta)
+        return True, ind_before
 
     # Backspace
     def backspace_pressed(self) -> Break:
@@ -218,13 +187,12 @@ class WhiteSpaceManager(Rule):
     # Helpers
     def get_indentation(self, line:str) -> tuple[str,int]:
         """
-        Returns the indentation_type, size, type_size.
+        Returns the indentation_type, size.
             indentation_type   the type of indentation. Must be one of
                                self.INDENTATIONS. The default is
                                plugin.default_indentation
             size               the number of `indentation_type` chars
                                at the start of the line
-            type_size          the usual number of indentation_type chars
         """
         indentation_type:str = line[:1]
         if indentation_type not in self.INDENTATIONS.keys():
@@ -232,10 +200,36 @@ class WhiteSpaceManager(Rule):
         size:int = len(line) - len(line.lstrip(indentation_type))
         return indentation_type, size
 
-    def count(self, line:str, characters:str, direction:int) -> int:
-        assert abs(direction) == 1, "ValueError"
-        if direction > 0:
-            stripped_line:str = line.lstrip("".join(characters))
-        else:
-            stripped_line:str = line.rstrip("".join(characters))
-        return len(line) - len(stripped_line)
+    def get_new_indentation(self, idx:str) -> str:
+        """
+        Gets the indentation of the new line without applying
+          self.INDENTATION_DELTAS
+        """
+        inds:str = "".join(self.INDENTATIONS)
+        stack:list[str] = []
+        while self.text.compare(f"{idx} linestart", "!=", "1.0"):
+            line:str = self.plugin.get_line_remove_comment_string(idx)
+            target:str = line[:len(line)-len(line.lstrip(inds))]
+            for j, char in enumerate(reversed(line)):
+                if char in self.INDENTATION_CP:
+                    # If the stack is empty (eg "f(x", ")" not in stack)
+                    #   copy the indentation of the line + more spaces
+                    if not stack:
+                        return target + " "*(len(line)-j-len(target))
+                    # If in stack, (eg. "f()")
+                    if char == stack[-1]:
+                        stack.pop()
+                    # If stack is different (eg. "(]")
+                    else:
+                        return ""
+                elif char in RBRACKETS:
+                    # Add the char to the stack
+                    op_char:str = RBRACKETS[char]
+                    if op_char in self.INDENTATION_CP:
+                        stack.append(op_char)
+            idx:str = self.text.index(f"{idx} -1l lineend")
+            if not stack:
+                char:str = self.text.get(f"{idx} -1c", idx)
+                if char not in self.INDENTATION_NEWLINE_IGN:
+                    return target
+        return ""

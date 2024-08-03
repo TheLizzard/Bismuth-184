@@ -27,6 +27,7 @@ class ControlIJKLManager(Rule):
         return on, ctrl, True
 
     def do(self, _:str, on:str, ctrl:bool) -> Break:
+        self.plugin.remove_selection()
         if on == "i":
             if self.text.compare("insert linestart", "==", "1.0"):
                 file_start:bool = True

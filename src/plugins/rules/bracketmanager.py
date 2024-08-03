@@ -109,18 +109,6 @@ class BracketManager(Rule):
                 return False
             if self._check_closing_after_open(close):
                 return True
-            """
-            is_comment:bool = self.plugin.is_inside("comment", "insert")
-            is_string:bool = self.plugin.is_inside("string", "insert")
-            if (is_comment and (open == "'")) or is_string:
-                # For people (like me) who double press ":
-                if self.plugin.is_inside(self.BACKET_HIGHLIGHT_TAG, "insert +1c"):
-                    if self.text.get("insert", "insert +1c") == close:
-                        self.text.event_generate("<<Move-Insert>>",
-                                                 data=("insert +1c",))
-                        return True
-                return False
-            # """
         start, end = self.plugin.get_selection()
         self.plugin.remove_selection()
         self.text.mark_set("bracket_end", end)
@@ -133,15 +121,6 @@ class BracketManager(Rule):
     def close_bracket(self, open:str, close:str) -> Break:
         if self._check_closing_after_open(close):
             return True
-        """
-        # For people (like me) who type ")" right after "(":
-        if self.plugin.is_inside(self.BACKET_HIGHLIGHT_TAG, "insert +1c") and \
-           not self.plugin.is_inside(self.BACKET_HIGHLIGHT_TAG, "insert +2c"):
-            if self.text.get("insert", "insert +1c") == close:
-                self.text.event_generate("<<Move-Insert>>",
-                                         data=("insert +1c",))
-                return True
-        # """
         # Find the closest match, insert the ")" and highlight the brackets
         start_t:float = perf_counter()
         start:str = self.plugin.find_bracket_match(open, close, "insert")

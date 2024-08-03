@@ -353,6 +353,7 @@ if __name__ == "__main__":
                            bd=0, highlightthickness=0, insertbackground="white",
                            wrap="none")
 
-    text.insert("end", "\n".join(" ".join(map(str, range(i+1))) for i in range(100)))
+    test:str = "\n".join(" ".join(map(str, range(i+1))) for i in range(100))
+    text.insert("end", test)
 
     make_scrolled(root, text, vscroll=True, hscroll=True, lines_numbers=True)

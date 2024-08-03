@@ -322,39 +322,31 @@ class SelectManager(Rule):
         # Check what we are looking for:
         if strides > 0:
             left, right = start, f"{start} +1c"
-            iscomment:bool = self.plugin.left_has_tag("comment", start)
         else:
             left, right = f"{start} -1c", start
-            iscomment:bool = self.plugin.right_has_tag("comment", start)
             if self.text.compare(start, "==", f"{start} lineend"):
                 iscomment:bool = self.plugin.left_has_tag("comment", start)
-        current_char:str = self.text.get(left, right)
-        isalphanumeric = lambda s: s.isidentifier() or s.isdigit()
-        looking_for_alphabet:bool = not isalphanumeric(current_char)
-        if looking_for_alphabet and text:
+        curr:str = self.text.get(left, right)
+        isalpha = lambda s: s.isidentifier() or s.isdigit()
+        iscomment = lambda loc: self.plugin.left_has_tag("comment", loc)
+        looking_comment:bool = not self.plugin.left_has_tag("comment", start)
+        looking_alphabet:bool = not isalpha(curr)
+        looking_space:bool = (curr != " ")
+        if looking_alphabet and text:
             new_start:str = f"{start} +{-strides}c"
             return self.get_word_size(strides, new_start, stop, text=False) - 1
-        if current_char in "'\"(){}[]\n":
-            return 1
 
-        while looking_for_alphabet ^ isalphanumeric(current_char):
+        while (looking_alphabet ^ isalpha(curr)) and \
+              (looking_space ^ (curr == " ")) and \
+              (curr not in "'\"(){}[]\n") and \
+              (looking_comment ^ iscomment(right if strides > 0 else left)):
             chars_skipped += 1
             left:str = f"{start} +{chars_skipped*strides}c"
             right:str = f"{start} +{(chars_skipped+1)*strides}c"
             if strides < 0:
                 left, right = right, left
-            current_char:str = self.text.get(left, right)
-            if current_char in "'\"(){}[]\n":
-                break
-            # Deal with the comments
-            # Note: left_has_tag(right) is the same as right_has_tag(left)
-            if strides > 0:
-                if self.plugin.left_has_tag("comment", right) != iscomment:
-                    break
-            else:
-                if self.plugin.left_has_tag("comment", left) != iscomment:
-                    break
-        return chars_skipped
+            curr:str = self.text.get(left, right)
+        return max(1, chars_skipped)
 
     def sel_calc(self, start:str, end:str, cur:str, new:str) -> tuple[str,str]:
         # Nothing selected
