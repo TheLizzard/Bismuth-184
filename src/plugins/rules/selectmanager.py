@@ -222,32 +222,8 @@ class SelectManager(Rule):
         cur:str = self.text.index("insert")
         new:str = self.get_movement(on, ctrl, cur)
         # Home/End
-        if on == "home":
-            if ctrl:
-                new:str = "1.0"
-            else:
-                line:str = self.text.get(f"{cur} linestart", cur)
-                if len(line) == 0:
-                    line:str = self.text.get(cur, f"{cur} lineend")
-                spaces:int = len(line) - len(line.lstrip(" \t"))
-                if spaces == len(line):
-                    spaces:int = 0
-                new:str = f"{cur} linestart +{spaces}c"
-        elif on == "end":
-            if ctrl:
-                new:str = "end -1c"
-            else:
-                fline:str = self.text.get(f"{cur} linestart", f"{cur} lineend")
-                line:str = self.plugin.get_virline(f"{cur} lineend")
-                cur_char:int = int(self.text.index(cur).split(".")[1])
-                if (cur_char < len(line)) or (len(fline) == cur_char):
-                    comment:int = len(fline) - len(line)
-                    if len(fline.rstrip(" \t")) == len(line):
-                        new:str = f"{cur} lineend"
-                    else:
-                        new:str = f"{cur} lineend -{comment}c"
-                else:
-                    new:str = f"{cur} lineend"
+        if on in ("home", "end"):
+            pass
         # Left/Right
         elif on in ("left", "right"):
             start, end = self.plugin.get_selection()
@@ -280,27 +256,46 @@ class SelectManager(Rule):
         self.text.event_generate("<<Add-Separator>>")
         return True
 
-    def get_movement(self, arrow:str, ctrl, cur:str, text:bool=False) -> str:
-        if (not ctrl) or (arrow in ("up", "down")):
+    def get_movement(self, arrow, ctrl:bool, cur:str, text:bool=False) -> str:
+        if ctrl:
+            # Left/Right
+            if arrow == "left":
+                size:int = self.get_word_size(-1, cur, "1.0", text)
+                return f"{cur} -{size}c"
+            elif arrow == "right":
+                size:int = self.get_word_size(+1, cur, "end -1c", text)
+                return f"{cur} +{size}c"
+            # Up/Down
+            elif arrow == "up":
+                size:int = self.get_para_size(-1, cur, "1.0")
+                return f"{cur} -{size}l linestart"
+            elif arrow == "down":
+                size:int = self.get_para_size(+1, cur, "end -1c")
+                return f"{cur} +{size}l lineend"
+            # Home/End
+            elif arrow == "home":
+                return "1.0"
+            elif arrow == "end":
+                return "end -1c"
+        else:
+            # Left/Right
             if arrow == "left":
                 return f"{cur} -1c"
             elif arrow == "right":
                 return f"{cur} +1c"
+            # Up/Down
             elif arrow == "up":
-                # If at the top line
                 if cur.split(".")[0] == "1":
                     if DEBUG: print("[DEBUG]: linsert set [new == 1.0]")
                     self.text.mark_set("linsert", "1.0")
                     return f"{cur} linestart"
                 charsin:str = self.text.index("linsert").split(".")[1]
-                # Move the cursor up one line
                 new:str = f"{cur} -1l linestart +{charsin}c"
                 if self.text.compare(new, ">", f"{cur} -1l lineend"):
                     return f"{cur} -1l lineend"
                 return f"{cur} -1l linestart +{charsin}c"
             elif arrow == "down":
                 charsin:str = self.text.index("linsert").split(".")[1]
-                # Move the cursor down one line
                 new:str = f"{cur} +1l linestart +{charsin}c"
                 if self.text.compare(f"{cur} lineend", "==", "end -1c"):
                     if DEBUG: print("[DEBUG]: linsert set [new == end-1c]")
@@ -308,13 +303,28 @@ class SelectManager(Rule):
                 if self.text.compare(new, ">", f"{cur} +1l lineend"):
                     return f"{cur} +1l lineend"
                 return f"{cur} +1l linestart +{charsin}c"
-        else:
-            if arrow == "left":
-                size:int = self.get_word_size(-1, cur, "1.0", text)
-                return f"{cur} -{size}c"
-            elif arrow == "right":
-                size:int = self.get_word_size(+1, cur, "end", text)
-                return f"{cur} +{size}c"
+            # Home/End
+            elif arrow == "home":
+                line:str = self.text.get(f"{cur} linestart", cur)
+                if len(line) == 0:
+                    line:str = self.text.get(cur, f"{cur} lineend")
+                spaces:int = len(line) - len(line.lstrip(" \t"))
+                if spaces == len(line):
+                    spaces:int = 0
+                return f"{cur} linestart +{spaces}c"
+            elif arrow == "end":
+                fline:str = self.text.get(f"{cur} linestart", f"{cur} lineend")
+                line:str = self.plugin.get_virline(f"{cur} lineend")
+                cur_char:int = int(self.text.index(cur).split(".")[1])
+                if (cur_char < len(line)) or (len(fline) == cur_char):
+                    comment:int = len(fline) - len(line)
+                    if len(fline.rstrip(" \t")) == len(line):
+                        return f"{cur} lineend"
+                    else:
+                        return f"{cur} lineend -{comment}c"
+                else:
+                    return f"{cur} lineend"
+        raise NotImplementedError(f"Unreachable {ctrl=!r} {arrow=!r}")
 
     def get_word_size(self, strides, start, stop, text:bool=False) -> int:
         assert abs(strides) == 1, "ValueError"
@@ -326,27 +336,40 @@ class SelectManager(Rule):
             left, right = f"{start} -1c", start
             if self.text.compare(start, "==", f"{start} lineend"):
                 iscomment:bool = self.plugin.left_has_tag("comment", start)
-        curr:str = self.text.get(left, right)
+        cur:str = self.text.get(left, right)
         isalpha = lambda s: s.isidentifier() or s.isdigit()
         iscomment = lambda loc: self.plugin.left_has_tag("comment", loc)
-        looking_comment:bool = not self.plugin.left_has_tag("comment", start)
-        looking_alphabet:bool = not isalpha(curr)
-        looking_space:bool = (curr != " ")
-        if looking_alphabet and text:
+        looking_for_comment:bool = not self.plugin.left_has_tag("comment",
+                                                                start)
+        looking_for_alphabet:bool = not isalpha(cur)
+        looking_for_space:bool = not (cur == " ")
+        if looking_for_alphabet and text:
             new_start:str = f"{start} +{-strides}c"
             return self.get_word_size(strides, new_start, stop, text=False) - 1
 
-        while (looking_alphabet ^ isalpha(curr)) and \
-              (looking_space ^ (curr == " ")) and \
-              (curr not in "'\"(){}[]\n") and \
-              (looking_comment ^ iscomment(right if strides > 0 else left)):
+        while (looking_for_alphabet ^ isalpha(cur)) and \
+              (looking_for_space ^ (cur == " ")) and \
+              (cur not in "'\"(){}[]\n") and \
+              (looking_for_comment ^ iscomment(right if strides > 0 else left)):
             chars_skipped += 1
             left:str = f"{start} +{chars_skipped*strides}c"
             right:str = f"{start} +{(chars_skipped+1)*strides}c"
             if strides < 0:
                 left, right = right, left
-            curr:str = self.text.get(left, right)
+            cur:str = self.text.get(left, right)
         return max(1, chars_skipped)
+
+    def get_para_size(self, strides:int, start:str, stop:str) -> int:
+        cur:str = start
+        lines_skipped:int = 0
+        while True:
+            if self.text.compare(f"{cur} linestart", "==", f"{stop} linestart"):
+                break
+            cur:str = self.text.index(f"{cur} +{strides}l")
+            lines_skipped += 1
+            if not self.text.get(f"{cur} linestart", f"{cur} lineend"):
+                break
+        return lines_skipped
 
     def sel_calc(self, start:str, end:str, cur:str, new:str) -> tuple[str,str]:
         # Nothing selected

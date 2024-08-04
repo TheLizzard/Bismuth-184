@@ -262,7 +262,7 @@ class BetterText(tk.Text):
         self._canvas.bind("<Double-Button-1>", self._redirect_event)
         self._canvas.bind("<Triple-Button-1>", self._redirect_event)
 
-        # super().after(100, lambda: self._update_viewport(xoffset=self._xoffset))
+        # self.after(100, lambda: self._update_viewport(xoffset=self._xoffset))
 
     def _redraw_sel_bg(self, event:tk.Event=None) -> None:
         """
@@ -663,6 +663,7 @@ if __name__ == "__main__":
     from os.path import dirname, join
     from time import perf_counter
 
+    from betterscrollbar import BetterScrollBarHorizontal
 
     start:float = perf_counter()
     root:tk.Tk = tk.Tk()
@@ -691,6 +692,7 @@ if __name__ == "__main__":
     #     text.tag_add("mytag", f"{i+1}.0", f"{i+3}.0")
 
     hbar = tk.Scrollbar(root, orient="horizontal", command=text.xview)
+    hbar = BetterScrollBarHorizontal(root, command=text.xview)
     text.config(xscrollcommand=hbar.set)
     hbar.pack(fill="x")
 
