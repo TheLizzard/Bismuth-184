@@ -17,63 +17,72 @@ class ControlIJKLManager(Rule):
         self.text:tk.Text = self.widget
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
-        ctrl:bool = event.state & CTRL
+        if not (event.state&CTRL):
+            return False
+        on:str = on.removeprefix("keypress-")
+        return on, True
 
-        # Control-i and Control-k
-        if on.startswith("keypress-"):
-            if not ctrl:
-                return False
-            on:str = on.removeprefix("keypress-")
+    def do(self, _:str, on:str) -> Break:
+        with self.plugin.see_end:
+            return self.plugin.undo_wrapper(self._do, on)
 
-        return on, ctrl, True
-
-    def do(self, _:str, on:str, ctrl:bool) -> Break:
-        return self.plugin.undo_wrapper(self._do, on, ctrl)
-
-    def _do(self, on:str, ctrl:bool) -> Break:
+    def _do(self, on:str) -> Break:
         self.plugin.remove_selection()
-
-        # Control-i and Control-k
         if on == "i":
-            if self.text.compare("insert linestart", "==", "1.0"):
-                file_start:bool = True
-                new_pos:str = "1.0"
-            else:
-                file_start:bool = False
-                new_pos:str = "insert -1l lineend"
-            self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
-            self.text.event_generate("<Return>")
-            if file_start:
-                self.text.event_generate("<Left>")
-            return True
+            return self.control_i()
         if on == "k":
-            new_pos:str = "insert lineend"
-            self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
-            self.text.event_generate("<Return>")
-            return True
-
-        # Control-j and Control-l
+            return self.control_k()
         if on == "j":
-            if self.text.compare("insert linestart", "==", "1.0"):
-                return False
-            insert:str = self.text.index("insert")
-            line, char = insert.split(".")
-            new_insert:str = f"{int(line)-1}.{char}"
-            text:str = self.text.get("insert linestart", "insert lineend")
-            self.text.delete("insert -1l lineend", "insert lineend")
-            self.text.insert("insert linestart", text+"\n", "program")
-            self.text.event_generate("<<Move-Insert>>", data=(new_insert,))
-            return True
+            return self.control_j()
         if on == "l":
-            if self.text.compare("insert lineend", "==", "end -1c"):
-                return False
-            insert:str = self.text.index("insert")
-            line, char = insert.split(".")
-            new_insert:str = f"{int(line)+1}.{char}"
-            text:str = self.text.get("insert linestart", "insert lineend")
-            self.text.delete("insert linestart", "insert +1l linestart")
-            self.text.insert("insert lineend", "\n"+text, "program")
-            self.text.event_generate("<<Move-Insert>>", data=(new_insert,))
-            return True
-
+            return self.control_l()
         raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+
+    # Control-i and Control-k
+    def control_i(self) -> Break:
+        if self.text.compare("insert linestart", "==", "1.0"):
+            file_start:bool = True
+            new_pos:str = "1.0"
+        else:
+            file_start:bool = False
+            new_pos:str = "insert -1l lineend"
+        self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
+        self.text.event_generate("<Return>")
+        if file_start:
+            self.text.event_generate("<Left>")
+        return True
+
+    def control_k(self) -> Break:
+        new_pos:str = "insert lineend"
+        self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
+        self.text.event_generate("<Return>")
+        return True
+
+    # Control-j and Control-l
+    def control_j(self) -> Break:
+        if self.text.compare("insert linestart", "==", "1.0"):
+            return False
+        insert:str = self.text.index("insert")
+        line, char = insert.split(".")
+        new_insert:str = f"{int(line)-1}.{char}"
+        text:str = self.text.get(f"{insert} linestart", f"{insert} lineend")
+        def do() -> None:
+            self.text.delete(f"{insert} -1l lineend", f"{insert} lineend")
+            self.text.insert(f"{insert} -1l linestart", text+"\n", "program")
+        self.plugin.virual_event_wrapper(do)
+        self.text.event_generate("<<Move-Insert>>", data=(new_insert,))
+        return True
+
+    def control_l(self) -> Break:
+        if self.text.compare("insert lineend", "==", "end -1c"):
+            return False
+        insert:str = self.text.index("insert")
+        line, char = insert.split(".")
+        new_insert:str = f"{int(line)+1}.{char}"
+        text:str = self.text.get(f"{insert} linestart", f"{insert} lineend")
+        def do() -> None:
+            self.text.delete(f"{insert} linestart", f"{insert} +1l linestart")
+            self.text.insert(f"{insert} lineend", "\n"+text, "program")
+        self.plugin.virual_event_wrapper(do)
+        self.text.event_generate("<<Move-Insert>>", data=(new_insert,))
+        return True

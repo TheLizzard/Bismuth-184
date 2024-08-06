@@ -172,12 +172,12 @@ class XViewFix(Delegator):
         idx:str = self.text.index(idx)
         if self.text.compare(idx, "==", "end"):
             idx:str = self.text.index("end -1c")
-        linestart:int = int(idx.split(".")[0])
-        self.dirty.add(linestart-1)
+        linestart:int = int(idx.split(".")[0])-1 # list idxs not text idxs
+        self.dirty.add(linestart)
         for i in range(chars.count("\n")):
-            line:int = linestart+i
-            self.line_lengths.insert(line-1, -1)
-            self.dirty.add(line-1)
+            line:int = linestart + i + 1 # list idxs not text idxs
+            self.line_lengths.insert(line, -1)
+            self.dirty.add(line)
 
     def _on_before_delete(self, idxa:str, idxb:str) -> None:
         if idxb is None:

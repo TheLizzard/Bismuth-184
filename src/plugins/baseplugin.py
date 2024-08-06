@@ -143,8 +143,7 @@ class SeeEndContext:
 
     def __exit__(self, exc_t:type, exc_val:BaseException, tb:Traceback) -> bool:
         if self.see_end:
-            idx:str = f"end -1l +{self.see_x_char}c"
-            self.text.after(1, self.text.see, idx)
+            self.text.see(f"end -1l +{self.see_x_char}c")
         return False
 
 
@@ -316,6 +315,65 @@ class BasePlugin(ProtoPlugin):
             return self.virual_event_wrapper(func, *args)
         return self.undo_wrapper(wrapper)
 
+    def text_replace_tag(self, text:str, start:str, end:str, tag:str,
+                         replace:str) -> str:
+        """
+        Takes in text from `self.text.get(start, end)` and a tag and
+        replaces all of the characters with `tag` with `replace`
+        """
+        assert len(replace) == 1, "ValueError"
+        assert isinstance(text, str), "TypeError"
+        ranges:list[tk._tkinter.Tcl_Obj] = self.text.tag_ranges(tag)
+        ranges:list[str] = list(map(lambda o: o.string, ranges))
+        ranges:list[tuple[str,str]] = [ranges[i:i+2]
+                                       for i in range(0, len(ranges), 2)]
+        idx:int = self._bin_search(ranges, start)
+        if idx == -1:
+            return text
+        for (range_start, range_end) in ranges[idx:]:
+            if self.text.compare(range_start, ">=", end):
+                break
+            idx1:int = self._text_count_chars(start, range_start)
+            if idx1 < 0:
+                idx2:int = self._text_count_chars(start, range_end)
+                assert idx2 > 0, "SanityCheck" # for _bin_search
+                text:str = replace*idx2 + text[idx2:]
+            else:
+                size:int = self._text_count_chars(range_start, range_end)
+                assert size > 0, "SanityCheck"
+                size:int = min(size, len(text)-idx1)
+                text:str = text[:idx1] + replace*size + text[idx1+size:]
+        return text
+
+    def _text_count_chars(self, start:str, end:str) -> int:
+        """
+        Similar to self.text.count(start, end, "chars")[0] but never errors
+        """
+        # https://github.com/python/cpython/issues/97928
+        res:str = self.text.tk.call(self.text._w, "count", "-chars", start, end)
+        return int(res)
+
+    def _bin_search(self, ranges:list[tuple[str,str]], start:str) -> int:
+        """
+        Returns the index of the first range that covers start using
+          modified version of binary search
+        """
+        left:int = 0
+        right:int = len(ranges)-1
+        output:int = -1
+        while left <= right:
+            middle:int = (left+right)//2
+            range_start, range_end = ranges[middle]
+            if self.text.compare(range_end, "<=", start):
+                left:int = middle + 1
+            elif self.text.compare(range_start, ">", start):
+                output:int = middle
+                right:int = middle - 1
+            else:
+                return middle
+        return output
+
+    ''' Depricated
     def get_line_remove_comment_string(self, idx:str) -> str:
         """
         Returns the line up to the index passed, replacing comments
@@ -329,6 +387,7 @@ class BasePlugin(ProtoPlugin):
             if comment or string:
                 text:str = text[:i] + "\xff" + text[i+1:]
         return text
+    '''
 
     def find_bracket_match(self, open:str, close:str, end:str="insert") -> str:
         # If we are in a comment or a string, stay in the comment/string

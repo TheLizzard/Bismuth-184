@@ -57,8 +57,8 @@ class WhiteSpaceManager(Rule):
 
     def do(self, on:str, shift:bool) -> Break:
         if on in ("return", "kp_enter"):
-            ret, *_ = self.plugin.undo_wrapper(self.return_pressed, shift)
-            return ret
+            with self.plugin.see_end:
+                return self.plugin.undo_wrapper(self.return_pressed, shift)[0]
         elif on == "backspace":
             return self.plugin.undo_wrapper(self.backspace_pressed)
         elif on == "tab":
@@ -165,7 +165,9 @@ class WhiteSpaceManager(Rule):
             self.after_id:str = None
         start:float = perf_counter()
         self._update_default_indentation()
-        if DEBUG: print(f"[DEBUG]: update_default_indentation took {perf_counter()-start:.3f} seconds")
+        if DEBUG:
+            time:str = f"{perf_counter()-start:.3f}"
+            print(f"[DEBUG]: update_default_indentation took {time} seconds")
         self.after_id:str = self.text.after(UPDATE_INDENTATION_DELAY,
                                             self.update_default_indentation)
 
@@ -205,11 +207,26 @@ class WhiteSpaceManager(Rule):
         Gets the indentation of the new line without applying
           self.INDENTATION_DELTAS
         """
+        idx_linestart:str = self.text.index(f"{idx} linestart")
         inds:str = "".join(self.INDENTATIONS)
         stack:list[str] = []
-        while self.text.compare(f"{idx} linestart", "!=", "1.0"):
-            line:str = self.plugin.get_line_remove_comment_string(idx)
+        while True:
+            # Get the line up to idx
+            # Remove comments, iff the comments don't span the whole line
+            # Remove strings, iff the comments don't span the whole line
+            line:str = self.text.get(idx_linestart, idx)
+            in_string_or_comment:bool = False
+            for tag in ("comment", "string"):
+                line2:str = self.plugin.text_replace_tag(line, idx_linestart,
+                                                         idx, tag, "\xff")
+                if line2.strip("\xff"+inds):
+                    line:str = line2
+                else:
+                    in_string_or_comment:bool = True
+            # line:str = self.plugin.get_line_remove_comment_string(idx)
             target:str = line[:len(line)-len(line.lstrip(inds))]
+            if in_string_or_comment: # Follow ()s only if not in string/comment
+                return target
             for j, char in enumerate(reversed(line)):
                 if char in self.INDENTATION_CP:
                     # If the stack is empty (eg "f(x", ")" not in stack)
@@ -227,9 +244,12 @@ class WhiteSpaceManager(Rule):
                     op_char:str = RBRACKETS[char]
                     if op_char in self.INDENTATION_CP:
                         stack.append(op_char)
-            idx:str = self.text.index(f"{idx} -1l lineend")
+            idx_linestart:str = self.text.index(f"{idx_linestart} -1l")
+            idx:str = self.text.index(f"{idx_linestart} lineend")
             if not stack:
                 char:str = self.text.get(f"{idx} -1c", idx)
                 if char not in self.INDENTATION_NEWLINE_IGN:
                     return target
+            if self.text.compare(idx_linestart, "==", "1.0"):
+                break
         return ""

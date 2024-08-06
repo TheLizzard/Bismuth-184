@@ -3,9 +3,10 @@ Editor:
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
 * Java's `RunManager` should also handle testing.
 * `FindReplaceManager` removes hit tag when the user adds/removes text near the hit
-* Implement Control-Up/Control-Down
 * Commenting a block with a comment inside it, uncomments the comment
 * Control(-Shift)?-z doesn't scroll if there is text selected
+* Rework BasePlugin.find_bracket_match to use BasePlugin.text_replace_tag
+* On Control-j and Control-l, undo moves insert to the end of the line
 
 Terminal:
 * Windows support (pty_terminal)
@@ -18,7 +19,7 @@ Terminal:
 
 Notebook:
 * Clicking on the "+" should scroll to the end
-* Control-Tab/Control-Shift-Tab doesn't autoscroll the tab notches
+* Control-Tab/Control-Shift-Tab should scroll the tab notches
 
 File Explorer:
 * Make the frame inside the `dummy_canvas` expand to fill the canvas' width/height in `BetterFrame`. This problem also appears in `Notebook`
@@ -26,6 +27,7 @@ File Explorer:
 * Add a tooltip to all children of Root that show their full path
 * Padding on the right of each item
 * Deleting a top level folder causes problems
+* An expanded folder isn't loaded correctly if it's parent is collapsed on start-up
 
 Minor things/Low priority:
 * The lines in `LineManager` go to top when reloading a file.
