@@ -23,19 +23,17 @@ class ControlIJKLManager(Rule):
         return on, True
 
     def do(self, _:str, on:str) -> Break:
-        with self.plugin.see_end:
-            return self.plugin.undo_wrapper(self._do, on)
-
-    def _do(self, on:str) -> Break:
-        self.plugin.remove_selection()
-        if on == "i":
-            return self.control_i()
-        if on == "k":
-            return self.control_k()
-        if on == "j":
-            return self.control_j()
-        if on == "l":
-            return self.control_l()
+        with self.plugin.see_end_wrapper():
+            with self.plugin.undo_wrapper():
+                self.plugin.remove_selection()
+                if on == "i":
+                    return self.control_i()
+                if on == "k":
+                    return self.control_k()
+                if on == "j":
+                    return self.control_j()
+                if on == "l":
+                    return self.control_l()
         raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
 
     # Control-i and Control-k
@@ -46,7 +44,7 @@ class ControlIJKLManager(Rule):
         else:
             file_start:bool = False
             new_pos:str = "insert -1l lineend"
-        self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
+        self.plugin.move_insert(new_pos)
         self.text.event_generate("<Return>")
         if file_start:
             self.text.event_generate("<Left>")
@@ -54,7 +52,7 @@ class ControlIJKLManager(Rule):
 
     def control_k(self) -> Break:
         new_pos:str = "insert lineend"
-        self.text.event_generate("<<Move-Insert>>", data=(new_pos,))
+        self.plugin.move_insert(new_pos)
         self.text.event_generate("<Return>")
         return True
 
@@ -66,11 +64,10 @@ class ControlIJKLManager(Rule):
         line, char = insert.split(".")
         new_insert:str = f"{int(line)-1}.{char}"
         text:str = self.text.get(f"{insert} linestart", f"{insert} lineend")
-        def do() -> None:
+        with self.plugin.virtual_event_wrapper():
             self.text.delete(f"{insert} -1l lineend", f"{insert} lineend")
             self.text.insert(f"{insert} -1l linestart", text+"\n", "program")
-        self.plugin.virual_event_wrapper(do)
-        self.text.event_generate("<<Move-Insert>>", data=(new_insert,))
+        self.plugin.move_insert(new_insert)
         return True
 
     def control_l(self) -> Break:
@@ -80,9 +77,8 @@ class ControlIJKLManager(Rule):
         line, char = insert.split(".")
         new_insert:str = f"{int(line)+1}.{char}"
         text:str = self.text.get(f"{insert} linestart", f"{insert} lineend")
-        def do() -> None:
+        with self.plugin.virtual_event_wrapper():
             self.text.delete(f"{insert} linestart", f"{insert} +1l linestart")
             self.text.insert(f"{insert} lineend", "\n"+text, "program")
-        self.plugin.virual_event_wrapper(do)
-        self.text.event_generate("<<Move-Insert>>", data=(new_insert,))
+        self.plugin.move_insert(new_insert)
         return True

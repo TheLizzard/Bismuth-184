@@ -1,4 +1,5 @@
 from __future__ import annotations
+from contextlib import contextmanager
 import tkinter as tk
 
 try:
@@ -130,40 +131,19 @@ ALL_MODIFIERS = ("shift", "caps", "control",
                  "button1", "button2", "button3", "button4", "button5")
 
 
-class SeeEndContext:
-    __slots__ = "text", "see_end", "see_x_char"
-
-    def __init__(self, text:tk.Text) -> SeeEndContext:
-        self.see_x_char:str = text.index("insert").split(".")[1]
-        self.see_end:bool = (text.yview()[1] == 1)
-        self.text:tk.Text = text
-
-    def __enter__(self) -> SeeEndContext:
-        return self
-
-    def __exit__(self, exc_t:type, exc_val:BaseException, tb:Traceback) -> bool:
-        if self.see_end:
-            self.text.see(f"end -1l +{self.see_x_char}c")
-        return False
-
-
 class BasePlugin(ProtoPlugin):
     __slots__ = "text", "master", "virtual_events"
+    SEL_TAG:str = "selected"
     DEFAULT_CODE:str = ""
-    SEL_TAG:str = "selected" # used in SelectManager
 
-    def __init__(self, master:tk.Misc, text:tk.Text,
-                 rules:list[Rule]) -> BasePlugin:
+    def __init__(self, master:tk.Misc, text:tk.Text, rules:list[Rule]) -> None:
         self.virtual_events:VirtualEvents = VirtualEvents(text)
         self.master:tk.Misc = master
         self.text:tk.Text = text
         super().__init__(text)
         super().add_rules(rules)
 
-    @property
-    def see_end(self) -> SeeEndContext:
-        return SeeEndContext(self.text)
-
+    # Plugin boilerplate
     @classmethod
     def can_handle(Cls:type, filepath:str|None) -> bool:
         return False
@@ -180,26 +160,25 @@ class BasePlugin(ProtoPlugin):
         self.virtual_events.paused:bool = True
         super().detach()
 
+    # Convenience functions:
     def left_has_tag(self, tag:str, idx:str) -> bool:
+        """
+        Check if `tag` is present immediately on the left of `idx`
+        """
         return tag in self.text.tag_names(f"{idx} -1c")
 
     def right_has_tag(self, tag:str, idx:str) -> bool:
+        """
+        Check if `tag` is present immediately on the right of `idx`
+        """
         return tag in self.text.tag_names(idx)
 
-    def get_virline(self, end:str) -> str:
+    def has_modifier(self, raw_modifiers:int, modifier:str) -> bool:
         """
-        This function only removes the comment at the end
-           of the line and the trailing spaces
+        Don't use this if possible. It's a slow method. Use something like
+          `event.state&CTRL` instead.
         """
-        current:str = self.text.index(end)
-        linenumber:int = int(float(current))
-        while (linenumber == int(float(current))) and (current != "1.0"):
-            is_comment:bool = self.left_has_tag("comment", current)
-            is_space:bool = self.text.get(f"{current} -1c", current) in " \t"
-            if not (is_comment or is_space):
-                return self.text.get(f"{current} linestart", current)
-            current:str = self.text.index(f"{current} -1c")
-        return ""
+        return raw_modifiers & (1 << ALL_MODIFIERS.index(modifier))
 
     def order_idxs(self, idxa:str, idxb:str) -> tuple[str,str]:
         """
@@ -210,6 +189,14 @@ class BasePlugin(ProtoPlugin):
         else:
             return (idxb, idxa)
 
+    # Selection methods
+    def is_selection_fragmented(self) -> bool:
+        """
+        Check if the selection is fragmented. If it is, `get_selection` will
+          throw a RuntimeError
+        """
+        return len(self.text.tag_ranges(self.SEL_TAG)) > 2
+
     def get_selection(self) -> tuple[str,str]:
         """
         Get the selection idxs. Guaranteed to be pure and ordered.
@@ -219,10 +206,11 @@ class BasePlugin(ProtoPlugin):
         if len(tag_ranges) == 0:
             insert:str = self.text.index("insert")
             return insert, insert
+        elif len(tag_ranges) == 2:
+            start, end = tag_ranges
+            return str(tag_ranges[0]), str(tag_ranges[1])
         else:
-            start, end, *others = tag_ranges
-            assert len(others) == 0, "InternalError"
-            return str(start), str(end)
+            raise RuntimeError("Selection fragmented")
 
     def set_selection(self, start:str, end:str) -> None:
         """
@@ -250,32 +238,53 @@ class BasePlugin(ProtoPlugin):
             return True
         return False
 
-    def has_modifier(self, raw_modifiers:int, modifier:str) -> bool:
+    # Wrappers
+    @contextmanager
+    def undo_wrapper(self) -> None:
         """
-        Don't use this if possible. It's a very slow method.
+        Everything inside this wrapper is grouped and atomic in terms of the
+          undo/redo system.
         """
-        return raw_modifiers & (1 << ALL_MODIFIERS.index(modifier))
-
-    def undo_wrapper(self, func:Function, *args):
-        """
-        The argument `func` is called with the rest of the given arguments
-          and all of the changes made to `self.text` are grouped and atomic
-          in terms of undo/redo.
-        """
-        def inner():
-            try:
-                self.text.event_generate("<<Add-Separator>>", data=(True,))
-                self.text.event_generate("<<Pause-Separator>>")
-                return func(*args)
-            finally:
-                self.text.event_generate("<<Unpause-Separator>>")
-                self.text.event_generate("<<Add-Separator>>", data=(True,))
-                self.text.event_generate("<<Modified-Change>>")
-        return self.select_wrapper(inner)
-
-    def select_wrapper(self, func:Function, *args):
         try:
-            # Get the selection
+            self.text.event_generate("<<Add-Separator>>", data=(True,))
+            self.text.event_generate("<<Pause-Separator>>")
+            yield None
+        finally:
+            self.text.event_generate("<<Unpause-Separator>>")
+            self.text.event_generate("<<Add-Separator>>", data=(True,))
+            self.text.event_generate("<<Modified-Change>>")
+
+    @contextmanager
+    def virtual_event_wrapper(self, *, anti:bool=False) -> None:
+        """
+        Everything inside this wrapper that triggers virtual events
+          (not starting with "Raw-") are ignored
+        """
+        old_state:bool = self.virtual_events.paused
+        try:
+            self.virtual_events.paused:bool = not anti
+            yield None
+        finally:
+            self.virtual_events.paused:bool = old_state
+
+    @contextmanager
+    def double_wrapper(self) -> None:
+        """
+        Both undo_wrapper and virtual_event_wrapper at the same time.
+        TODO: Why is this even used? What virtual events are causing problems
+        """
+        with self.undo_wrapper():
+            with self.virtual_event_wrapper():
+                yield None
+
+    @contextmanager
+    def select_wrapper(self) -> None:
+        """
+        Everything inside this wrapper cannot break the selection into
+          multiple pieces
+        """
+        selected:bool = False
+        try:
             start, end = self.get_selection()
             selected:bool = (start != end)
             if selected:
@@ -288,32 +297,41 @@ class BasePlugin(ProtoPlugin):
                     sav3:str = "sav1"
                 else:
                     sav3:str = "sav2"
-            return func(*args)
+            yield None
         finally:
-            if selected:
-                try:
-                    start, end = self.get_selection()
-                except AssertionError:
-                    # Set the selection
-                    self.set_selection("sav1", "sav2")
-                    self.text.event_generate("<<Move-Insert>>", data=(sav3,))
+            if selected and self.is_selection_fragmented():
+                self.set_selection("sav1", "sav2")
+                self.move_insert(sav3)
 
-    def virual_event_wrapper(self, func:Function, *args):
-        if self.virtual_events.paused:
-            return func(*args)
+    @contextmanager
+    def see_end_wrapper(self) -> None:
+        see_end:bool = False
         try:
-            self.virtual_events.paused:bool = True
-            return func(*args)
+            see_x_char:str = self.text.index("insert").split(".")[1]
+            see_end:bool = (self.text.yview()[1] == 1)
+            yield None
         finally:
-            self.virtual_events.paused:bool = False
+            if see_end:
+                self.text.see(f"end -1l +{see_x_char}c")
 
-    def double_wrapper(self, func:Function, *args):
+    # Combiners (needed to make inter-manager data transfere easier)
+    def get_virline(self, end:str) -> str:
         """
-        Both `undo_wrapper` and `virual_event_wrapper`.
+        Get the line up to `end` excluding comments and trailing whitespaces
         """
-        def wrapper():
-            return self.virual_event_wrapper(func, *args)
-        return self.undo_wrapper(wrapper)
+        start:str = f"{end} linestart"
+        text:str = self.text.get(start, end)
+        text:str = self.text_replace_tag(text, start, end, "comment", " ")
+        return text.rstrip(" \t")
+
+    def move_insert(self, idx:str) -> None:
+        """
+        Moves the insert to `idx`. Use this instead of `Text.mark_set` because
+          this generates a `"<<Insert-Moved>>"` event
+        """
+        if idx != "insert":
+            self.text.mark_set("insert", idx)
+        self.text.event_generate("<<Insert-Moved>>")
 
     def text_replace_tag(self, text:str, start:str, end:str, tag:str,
                          replace:str) -> str:
@@ -373,22 +391,7 @@ class BasePlugin(ProtoPlugin):
                 return middle
         return output
 
-    ''' Depricated
-    def get_line_remove_comment_string(self, idx:str) -> str:
-        """
-        Returns the line up to the index passed, replacing comments
-          and strings with "\xff" characters
-        """
-        text:str = self.text.get(f"{idx} linestart", idx)
-        idx:str = self.text.index(f"{idx} linestart")
-        for i in range(len(text)):
-            comment:bool = self.right_has_tag("comment", f"{idx} +{i}c")
-            string:bool = self.right_has_tag("string", f"{idx} +{i}c")
-            if comment or string:
-                text:str = text[:i] + "\xff" + text[i+1:]
-        return text
-    '''
-
+    # TODO: Redo in terms of text_replace_tag which will also make it faster
     def find_bracket_match(self, open:str, close:str, end:str="insert") -> str:
         # If we are in a comment or a string, stay in the comment/string
         is_comment:bool = self.left_has_tag("comment", end)

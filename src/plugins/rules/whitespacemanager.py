@@ -42,7 +42,7 @@ class WhiteSpaceManager(Rule):
     def attach(self) -> None:
         super().attach()
         self.update_default_indentation()
-        self.text.event_generate("<<Move-Insert>>", data=("insert",))
+        self.plugin.move_insert("insert")
 
     def detach(self) -> None:
         super().detach()
@@ -57,14 +57,18 @@ class WhiteSpaceManager(Rule):
 
     def do(self, on:str, shift:bool) -> Break:
         if on in ("return", "kp_enter"):
-            with self.plugin.see_end:
-                return self.plugin.undo_wrapper(self.return_pressed, shift)[0]
+            with self.plugin.see_end_wrapper():
+                with self.plugin.undo_wrapper():
+                    return self.return_pressed(shift)[0]
         elif on == "backspace":
-            return self.plugin.undo_wrapper(self.backspace_pressed)
+            with self.plugin.undo_wrapper():
+                return self.backspace_pressed()
         elif on == "tab":
-            return self.plugin.undo_wrapper(self.tab_pressed)
+            with self.plugin.undo_wrapper():
+                return self.tab_pressed()
         elif on in ("control-bracketleft", "control-bracketright"):
-            return self.plugin.double_wrapper(self.indent_deintent_section, on)
+            with self.plugin.double_wrapper():
+                return self.indent_deintent_section(on)
         elif on == "<raw-after-insert>":
             self.update_default_indentation()
             return False
@@ -86,7 +90,8 @@ class WhiteSpaceManager(Rule):
                 break
         # If shift, insert \n and return
         if shift:
-            return False, ""
+            self.text.insert("insert", "\n", "program")
+            return True, ""
         # Delete whitespaces after the cursor but before EOL
         while True:
             if self.text.get("insert", "insert +1c") in self.INDENTATIONS:
@@ -127,7 +132,7 @@ class WhiteSpaceManager(Rule):
     # Indent/Deindent
     def indent_deintent_section(self, on:str) -> Break:
         on:str = on.removeprefix("control-")
-        def inner() -> bool:
+        with self.plugin.select_wrapper():
             start, end = self.plugin.get_selection()
             getline = lambda idx: int(idx.split(".")[0])
             # For each line in the selection
@@ -138,7 +143,6 @@ class WhiteSpaceManager(Rule):
                 for line in range(getline(start), getline(end)+1):
                     self.deindent_line(line)
             return True
-        return self.plugin.select_wrapper(inner)
 
     def indent_line(self, linenumber:int) -> None:
         line:str = self.text.get(f"{linenumber}.0", f"{linenumber}.0 lineend")

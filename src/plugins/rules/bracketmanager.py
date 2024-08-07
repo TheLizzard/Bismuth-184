@@ -63,16 +63,15 @@ class BracketManager(Rule):
         return True
 
     def do(self, on:str) -> Break:
-        if on.startswith("alt-"):
-            return self.plugin.undo_wrapper(self.alt_bracket, on)
-        if on in self.BRACKETS_DICT.keys():
-            return self.plugin.undo_wrapper(self.open_bracket, on,
-                                            self.BRACKETS_DICT[on])
-        if on in self.RBRACKETS_DICT.keys():
-            return self.plugin.undo_wrapper(self.close_bracket,
-                                            self.RBRACKETS_DICT[on], on)
-        if on == "backspace":
-            return self.plugin.undo_wrapper(self.backspace)
+        with self.plugin.undo_wrapper():
+            if on.startswith("alt-"):
+                return self.alt_bracket(on)
+            if on in self.BRACKETS_DICT.keys():
+                return self.open_bracket(on, self.BRACKETS_DICT[on])
+            if on in self.RBRACKETS_DICT.keys():
+                return self.close_bracket(self.RBRACKETS_DICT[on], on)
+            if on == "backspace":
+                return self.backspace()
         raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
 
     def alt_bracket(self, on:str) -> Break:
@@ -91,7 +90,7 @@ class BracketManager(Rule):
             return False
         if self.text.get("insert", "insert +1c") != close:
             return False
-        self.text.event_generate("<<Move-Insert>>", data=("insert +1c",))
+        self.plugin.move_insert("insert +1c")
         return True
 
     def open_bracket(self, open:str, close:str) -> Break:
@@ -114,7 +113,7 @@ class BracketManager(Rule):
         self.text.mark_set("bracket_end", end)
         self.text.insert(end, close, "program")
         self.text.insert(start, open, "program")
-        self.text.event_generate("<<Move-Insert>>", data=("bracket_end -1c",))
+        self.plugin.move_insert("bracket_end -1c")
         self.highlight(start, "bracket_end")
         return True
 

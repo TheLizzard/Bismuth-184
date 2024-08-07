@@ -143,14 +143,14 @@ class SaveLoadManager(Rule):
         self._internal_open()
         # self.text.see("end -1c linestart")
         self.text.event_generate("<<Opened-File>>")
-        self.text.event_generate("<<Move-Insert>>", data=("1.0",))
+        self.plugin.move_insert("1.0")
 
     # reload
     def _reload(self) -> None:
         insert:str = self.text.index("insert")
         self._internal_open()
         self.text.event_generate("<<Reloaded-File>>")
-        self.text.event_generate("<<Move-Insert>>", data=(insert,))
+        self.plugin.move_insert(insert)
 
     def _internal_open(self) -> None:
         if not self.can_read():

@@ -20,23 +20,19 @@ class CommentManager(Rule):
     def do(self, on:str) -> Break:
         if self.COMMENT_STR == "":
             return True
-        return self.plugin.double_wrapper(self._do, on)
-
-    def _do(self, on:str) -> Break:
-        # Get the selection
-        start, end = self.plugin.get_selection()
-        self.text.mark_set("sav1", start)
-        self.text.mark_set("sav2", end)
-        getline = lambda idx: int(idx.split(".")[0])
-        # For each line in the selection
-        spaces = min(map(self.get_whites, range(getline(start), getline(end)+1)))
-        for line in range(getline(start), getline(end)+1):
-            self.toggle_comment(line, spaces)
-        self.plugin.set_selection("sav1", "sav2")
-        return True
+        with self.plugin.select_wrapper():
+            with self.plugin.double_wrapper():
+                # Get the selection
+                start, end = self.plugin.get_selection()
+                getline = lambda idx: int(idx.split(".")[0])
+                # For each line in the selection
+                lines:list[int] = list(range(getline(start), getline(end)+1))
+                spaces = min(map(self.get_whites, lines))
+                for line in lines:
+                    self.toggle_comment(line, spaces)
+                return True
 
     def toggle_comment(self, linenumber:int, minwhites:int) -> None:
-        # virline:str = self.plugin.get_virline(f"{linenumber}.0 lineend")
         line:str = self.text.get(f"{linenumber}.0", f"{linenumber}.0 lineend")
         whites:int = self.count(line, " \t")
         if line == "":

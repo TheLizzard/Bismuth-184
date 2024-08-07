@@ -8,7 +8,7 @@ DEBUG_NOSEP:bool = False
 DEBUG_PAUSE:bool = False
 DEBUG_INSERT:bool = False
 DEBUG_UNDO_REDO:bool = False
-TIME_DELAY_UNDO_SEP:int = 600
+TIME_DELAY_UNDO_SEP:int = 300
 ORIG_LOC:tuple[str] = ("colorizer", "percolator", "redir", "orig")
 
 class UndoManager(Rule):
@@ -89,7 +89,8 @@ class UndoManager(Rule):
                     if DEBUG_UNDO_REDO: print("[DEBUG]: (canredo) no redo")
                     return True
                 self.add_sep(force=True)
-                self.plugin.double_wrapper(self.text.edit_redo)
+                with self.plugin.double_wrapper():
+                    self.text.edit_redo()
                 if DEBUG_UNDO_REDO: print("[DEBUG]: redone")
                 self.text.event_generate("<<Redo-Triggered>>")
             else:
@@ -97,12 +98,13 @@ class UndoManager(Rule):
                     if DEBUG_UNDO_REDO: print("[DEBUG]: (canundo) no undo")
                     return True
                 self.add_sep(force=True)
-                self.plugin.double_wrapper(self.text.edit_undo)
+                with self.plugin.double_wrapper():
+                    self.text.edit_undo()
                 if DEBUG_UNDO_REDO: print("[DEBUG]: undone")
                 self.text.event_generate("<<Undo-Triggered>>")
 
             _, end = self.plugin.get_selection()
-            self.text.event_generate("<<Move-Insert>>", data=(end,))
+            self.plugin.move_insert(end)
             self.text.event_generate("<<Modified-Change>>")
             # self.modified_since_last_sep:bool = True
             self.add_sep(force=True)

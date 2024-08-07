@@ -12,22 +12,17 @@ class SeeInsertManager(Rule):
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> SeeEnd:
         evs:tuple[str] = (
                            # Key press
-                           "<<Before-Insert>>", "<<Before-Delete>>",
-                           "<<After-Insert>>", "<<After-Delete>>",
-                           # Insert being moved
-                           "<<Move-Insert>>",
+                           "<<Raw-Before-Insert>>", "<<Raw-Before-Delete>>",
+                           "<<Raw-After-Insert>>", "<<Raw-After-Delete>>",
+                           # Insert moved
+                           "<<Insert-Moved>>",
                          )
         super().__init__(plugin, text, ons=evs)
         self.text:tk.Text = self.widget
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
-        idx:str = None
-        if on == "<move-insert>":
-            idx:str = event.data[0]
-        return idx, True
+        return True
 
-    def do(self, on:str, idx:str) -> Break:
-        if (on == "<move-insert>") and (idx != "insert"):
-            self.text.mark_set("insert", idx)
+    def do(self, on:str) -> Break:
         self.text.see("insert")
         return False

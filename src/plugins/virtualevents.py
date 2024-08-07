@@ -80,7 +80,7 @@ class _VirtualEvents:
                         handled:bool = True
                         if result == "break":
                             return "break"
-                return "handled"*handled
+                return "handled" if handled else ""
         # If [the event is not virtual or no event handlers are bound to that
         #   event] and drop is True, use the old `event_generate`
         if drop:

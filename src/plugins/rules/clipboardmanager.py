@@ -19,14 +19,15 @@ class ClipboardManager(Rule):
         return True
 
     def do(self, on:str) -> Break:
-        return self.plugin.undo_wrapper(self._do, on)
+        with self.plugin.undo_wrapper():
+            self._do(on)
 
     def _do(self, on:str) -> Break:
         op:str = on[-1]
         start, end = self.plugin.get_selection()
         if op == "a":
             self.plugin.set_selection("1.0", "end -1c")
-            self.text.event_generate("<<Move-Insert>>", data=("end -1c",))
+            self.plugin.move_insert("end -1c")
             return True
         if op in "cx":
             if start == end: # if no selection
@@ -49,10 +50,10 @@ class ClipboardManager(Rule):
             # If they are the same, just move the cursor
             if selected == copied:
                 self.plugin.remove_selection()
-                self.text.event_generate("<<Move-Insert>>", data=(end,))
+                self.plugin.move_insert(end)
             # else delete selected and insert the clipboard text
             else:
-                with self.plugin.see_end:
+                with self.plugin.see_end_wrapper():
                     self.text.delete(start, end)
                     self.text.insert("insert", copied)
             return True

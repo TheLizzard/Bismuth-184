@@ -272,7 +272,7 @@ class FindReplaceManager(Rule):
             self.find_cache:tuple[str,int] = (find, flags)
             a, b = self._find_all(find, flags, start)
         self.plugin.set_selection(a, b)
-        self.text.event_generate("<<Move-Insert>>", data=(b,))
+        self.plugin.move_insert(b)
 
     def _find_all(self, find:str, flags:int, start:str) -> tuple[str,str]:
         finds:int = 0

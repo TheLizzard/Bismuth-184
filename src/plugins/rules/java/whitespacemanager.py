@@ -5,6 +5,8 @@ from ..whitespacemanager import WhiteSpaceManager as BaseWhiteSpaceManager
 
 class WhiteSpaceManager(BaseWhiteSpaceManager):
     __slots__ = ()
+    REQUESTED_LIBRARIES:tuple[str] = "insertdel_events", "select_manager"
+    REQUESTED_LIBRARIES_STRICT:bool = True
     INDENTATION_DELTAS:dict[str,int] = {"{":+1}
     INDENTATION_CP:set[str] = {"(", "["}
 
@@ -14,5 +16,6 @@ class WhiteSpaceManager(BaseWhiteSpaceManager):
         if brackets and (not shift):
             insert:str = self.text.index("insert")
             self.text.insert("insert", "\n"+ind_before)
-            self.text.mark_set("insert", insert)
+            with self.plugin.virtual_event_wrapper(anti=True):
+                self.plugin.move_insert(insert)
         return ret, ind_before

@@ -144,7 +144,7 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
     try:
         with open("state.txt", "r") as file:
             insert_mark:str = file.read()
-            text.event_generate("<<Move-Insert>>", data=(insert_mark,))
+            plugin.move_insert(insert_mark)
             text.see("insert -10l")
     except:
         pass

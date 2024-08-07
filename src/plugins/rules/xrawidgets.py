@@ -8,31 +8,35 @@ from bettertk.betterscrollbar import BetterScrollBarVertical, \
                                      BetterScrollBarHorizontal
 
 
-class BarManager(Rule):
-    __slots__ = "label"
+class SingletonMeta(type):
+    def __call__(Class:type, plugin:BasePlugin, text:tk.Text) -> Class:
+        name:str = "_singleton_" + Class.__name__.lower()
+        self:Cls = getattr(text, name, None)
+        if self is None:
+            self:Cls = super().__call__(plugin, text)
+            setattr(text, name, self)
+        return self
+
+
+class BarManager(Rule, metaclass=SingletonMeta):
+    __slots__ = "label", "text"
     REQUESTED_LIBRARIES:tuple[str] = "add_widget"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     FORMAT:str = "Ln: {line} Col: {column}"
 
-    def __init__(self, plugin:BasePlugin, widget:tk.Misc) -> BarManager:
-        super().__init__(plugin, widget, ons=("<<Move-Insert>>",))
+    def __init__(self, plugin:BasePlugin, text:tk.Text) -> BarManager:
+        super().__init__(plugin, text, ons=("<<Insert-Moved>>",))
         self.label:tk.Label = tk.Label(plugin.master, text="", bg="black",
                                        fg="white", anchor="e")
-
-    def __new__(Cls, plugin:BasePlugin, widget:tk.Misc, *args, **kwargs):
-        self:BarManager = getattr(widget, "barmanager", None)
-        if self is None:
-            self:BarManager = super().__new__(Cls, *args, **kwargs)
-            widget.barmanager:BarManager = self
-        return self
+        self.text:tk.Text = text
 
     def attach(self) -> None:
         super().attach()
-        self.widget.add_widget(self.label, row=4, padx=10)
+        self.text.add_widget(self.label, row=4, padx=10)
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
-        idx:str = self.widget.index(event.data[0])
+        idx:str = self.text.index("insert")
         if idx == "": # No idea why this happens
             return False
         return idx, True
@@ -42,20 +46,19 @@ class BarManager(Rule):
         self.label.config(text=self.FORMAT.format(line=line, column=column))
 
 
-class LineManager(Rule, LineNumbers):
+class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
     __slots__ = "text", "parent", "prev_end", "sidebar_text"
     REQUESTED_LIBRARIES:tuple[str] = "add_widget", "scroll_bar"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> BarManager:
         evs:tuple[str] = (
-                           # After any change update the linenumbers
-                           "<<After-Insert>>", "<<After-Delete>>",
+                           # Update the linenumbers
+                           "<<Raw-After-Insert>>", "<<Raw-After-Delete>>",
+                           "<<Undo-Triggered>>", "<<Redo-Triggered>>",
+                           "<<Reloaded-File>>",
                            # If the text widget scrolls, scroll the linenumbers
                            "<<Y-Scroll>>",
-                           # If the user presses undo/redo
-                           # "<Control-Z>", "<Control-z>",
-                           "<<Undo-Triggered>>", "<<Redo-Triggered>>",
                          )
         Rule.__init__(self, plugin, text, ons=evs)
         self.text:tk.Text = text
@@ -76,13 +79,6 @@ class LineManager(Rule, LineNumbers):
         for on in ("<Enter>", "<Leave>"):
             self.sidebar_text.bind(on, lambda e: "break")
 
-    def __new__(Cls, plugin:BasePlugin, widget:tk.Misc, *args, **kwargs):
-        self:LineManager = getattr(widget, "linemanager", None)
-        if self is None:
-            self:LineManager = super().__new__(Cls, *args, **kwargs)
-            widget.linemanager:LineManager = self
-        return self
-
     def attach(self) -> None:
         super().attach()
         self.text.add_widget(self.sidebar_text, column=-2)
@@ -91,19 +87,16 @@ class LineManager(Rule, LineNumbers):
         #self.sidebar_text.tag_config("sel", foreground="", background="")
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
-        data:tuple[str,str] = None
-        if on == "<after-insert>":
+        if on == "<raw-after-insert>":
             if "\n" not in event.data["raw"][1]:
                 return False
-        if on == "<y-scroll>":
-            data:str = event.data[0]
-        return data, True
+        return True
 
-    def do(self, on:str, data:str) -> Break:
-        if on == "<y-scroll>":
-            self.sidebar_text.yview("moveto", data)
+    def do(self, on:str) -> Break:
+        if on in ("<y-scroll>", "<reloaded-file>"):
+            self.sidebar_text.yview("moveto", self.text.yview()[0])
             return False
-        if on in ("<after-insert>", "<after-delete>",
+        if on in ("<raw-after-insert>", "<raw-after-delete>",
                   "<undo-triggered>", "<redo-triggered>"):
             end:int = int(float(self.text.index("end -1c")))
             LineNumbers.update_sidebar_text(self, end)
@@ -127,7 +120,7 @@ class LineManager(Rule, LineNumbers):
         raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
 
 
-class ScrollbarManager(Rule):
+class ScrollbarManager(Rule, metaclass=SingletonMeta):
     __slots__ = "old_yscrollcommand", "old_xscrollcommand", "yscrollbar", \
                 "xscrollbar"
     REQUESTED_LIBRARIES:tuple[str] = "add_widget"
@@ -144,13 +137,6 @@ class ScrollbarManager(Rule):
             self.xscrollbar = BetterScrollBarHorizontal(plugin.master,
                                                         command=text.xview)
             self.xscrollbar.hide:bool = True
-
-    def __new__(Cls, plugin:BasePlugin, widget:tk.Misc, *args, **kwargs):
-        self:ScrollbarManager = getattr(widget, "scrollbarmanager", None)
-        if self is None:
-            self:ScrollbarManager = super().__new__(Cls, *args, **kwargs)
-            widget.scrollbarmanager:ScrollbarManager = self
-        return self
 
     def attach(self) -> None:
         super().attach()
@@ -171,7 +157,7 @@ class ScrollbarManager(Rule):
         self.widget.config(yscrollcommand=self.old_yscrollcommand)
 
     def yset(self, low:str, high:str) -> None:
-        self.widget.event_generate("<<Y-Scroll>>", data=(low, high))
+        self.widget.event_generate("<<Y-Scroll>>")
         self.yscrollbar.set(low, high)
 
     def xset(self, low:str, high:str) -> None:
@@ -179,7 +165,7 @@ class ScrollbarManager(Rule):
         self.xscrollbar.set(low, high)
 
 
-class MenuManager(Rule):
+class MenuManager(Rule, metaclass=SingletonMeta):
     __slots__ = "menu"
     REQUESTED_LIBRARIES:tuple[str] = "add_widget"
     REQUESTED_LIBRARIES_STRICT:bool = True
@@ -188,13 +174,6 @@ class MenuManager(Rule):
         super().__init__(plugin, text, ons=())
         self.menu:BetterMenu = BetterMenu(plugin.master, direction="horizontal")
         self._create_menu()
-
-    def __new__(Cls, plugin:BasePlugin, widget:tk.Misc, *args, **kwargs):
-        self:MenuManager = getattr(widget, "menumanager", None)
-        if self is None:
-            self:MenuManager = super().__new__(Cls, *args, **kwargs)
-            widget.menumanager:MenuManager = self
-        return self
 
     def _create_menu(self) -> None:
         filemenu = self.menu.add_submenu("File", "vertical")

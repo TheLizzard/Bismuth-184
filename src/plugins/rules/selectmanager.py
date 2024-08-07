@@ -9,12 +9,12 @@ DEBUG:bool = False
 MOUSE_DRAG_PIXELS:int = 10
 SCROLL_SPEED:int = 1
 
-SEL_TAG:str = "selected" # Copied from PythonPlugin
+MOUSE_START_MARK:str = "mouse_start"
 
 
 class SelectManager(Rule):
     __slots__ = "text", "old_sel_fg", "old_sel_bg", "old_inactivebg", \
-                "selecting"
+                "selecting", "set_linsert"
     REQUESTED_LIBRARIES:tuple[str] = "insertdel_events"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
@@ -33,10 +33,11 @@ class SelectManager(Rule):
                 "<BackSpace>", "<Delete>",
                 # Moving the insert mark should also move the linsert mark
                 #   most of the time
-                "<<Move-Insert>>",
+                "<<Insert-Moved>>",
               )
         super().__init__(plugin, text, evs)
         self.text:tk.Text = self.widget
+        self.set_linsert:bool = True
         self.selecting:bool = False
 
     def attach(self) -> None:
@@ -46,10 +47,10 @@ class SelectManager(Rule):
         self.text.tag_config("sel", background="cyan", foreground="")
         self.old_inactivebg:str = self.text.cget("inactiveselectbackground")
         self.text.config(inactiveselectbackground=self.text.cget("bg"))
-        self.text.tag_config(SEL_TAG, foreground="white",
+        self.text.tag_config(self.plugin.SEL_TAG, foreground="white",
                              background=settings.editor.selectmanager.bg)
-        self.text.tag_raise(SEL_TAG)
-        self.text.mark_set("mouse-start", "insert")
+        self.text.mark_set(MOUSE_START_MARK, "insert")
+        self.text.tag_raise(self.plugin.SEL_TAG)
 
     def detach(self) -> None:
         super().detach()
@@ -93,7 +94,6 @@ class SelectManager(Rule):
                 return False
         idx:str = None
         drag:tuple = None
-        data:tuple = None
 
         # Double/Triple click
         if on.endswith("button-1"):
@@ -127,9 +127,11 @@ class SelectManager(Rule):
             if len(event.data["raw"][2]):
                 return False
 
-        # ???
-        elif on == "<move-insert>":
-            data:tuple = event.data
+        # Set linsert only if `self.set_linsert` is `True`
+        elif on == "<insert-moved>":
+            if not self.set_linsert:
+                return False
+            on:str = "<set-linsert>"
 
         # Keypad home/end
         elif on.startswith("kp_"):
@@ -142,30 +144,25 @@ class SelectManager(Rule):
                 on:str = {"1":"end", "7":"home"}.get(on, on)
                 ctrl:bool = alt
 
-        return on, ctrl, shift, idx, drag, data, True
+        return on, ctrl, shift, idx, drag, True
 
-    def do(self, _, on, ctrl, shift, idx:str, drag:tuple, data:tuple) -> Break:
+    def do(self, _, on, ctrl:bool, shift:bool, idx:str, drag:tuple) -> Break:
         if on in ("backspace", "delete"):
             self.plugin.delete_selection()
             return True
 
-        if on == "<move-insert>":
-            idx:str = data[0]
-            if DEBUG: print(f"[DEBUG]: insert set {idx}")
-            # Set linsert unless specifically told not to:
-            if (len(data) == 1) or (not data[1]):
-                if DEBUG: print(f"[DEBUG]: linsert set {idx}")
-                self.text.mark_set("linsert", idx)
+        if on == "<set-linsert>":
+            self.text.mark_set("linsert", "insert")
             return False
 
         if on == "mouse-press":
             self.text.focus_set()
             self.selecting:bool = True
             self.plugin.remove_selection()
-            self.text.mark_set("mouse-start", idx)
+            self.text.mark_set(MOUSE_START_MARK, idx)
             self.text.event_generate("<<Add-Separator>>")
-            self.text.event_generate("<<Move-Insert>>", data=(idx,))
             self.text.event_generate("<<CancelAll>>")
+            self.plugin.move_insert(idx)
             self.text.focus_set()
             return True
 
@@ -180,7 +177,7 @@ class SelectManager(Rule):
             start:str = self.get_movement("left", True, "insert", text=True)
             end:str = self.get_movement("right", True, "insert", text=True)
             self.plugin.set_selection(start, end)
-            self.text.event_generate("<<Move-Insert>>", data=(end,))
+            self.plugin.move_insert(end)
             return True
 
         if on == "triple-mouse":
@@ -203,9 +200,9 @@ class SelectManager(Rule):
                 delta:str = f"{SCROLL_SPEED*drag[1]}l"
             if delta is not None:
                 self.text.see(f"{idx} +{delta}")
-            start, end = self.plugin.order_idxs("mouse-start", idx)
+            start, end = self.plugin.order_idxs(MOUSE_START_MARK, idx)
             self.plugin.set_selection(start, end)
-            self.text.event_generate("<<Move-Insert>>", data=(idx,))
+            self.plugin.move_insert(idx)
             return True
 
         if on == "<before-insert>":
@@ -213,7 +210,7 @@ class SelectManager(Rule):
             return False
 
         if on in ("<after-insert>", "<after-delete>"):
-            self.text.event_generate("<<Move-Insert>>", data=("insert",))
+            self.plugin.move_insert("insert")
             if on == "<after-delete>":
                 self.plugin.delete_selection()
             return False
@@ -245,14 +242,15 @@ class SelectManager(Rule):
             newstart, newend = self.sel_calc(start, end, cur, new)
             if self.text.compare(newend, "==", "end"):
                 newend:str = self.text.index("end -1c")
-                self.text.event_generate("<<Move-Insert>>", data=(newend,))
+                self.plugin.move_insert(newend)
             self.plugin.set_selection(newstart, newend)
         else:
             self.plugin.remove_selection()
 
-        self.text.see(new)
-        nolinsert:bool = on in ("up", "down")
-        self.text.event_generate("<<Move-Insert>>", data=(new, nolinsert))
+        # DON'T move around these lines of code
+        self.set_linsert:bool = on not in ("up", "down")
+        self.plugin.move_insert(new)
+        self.set_linsert:bool = True
         self.text.event_generate("<<Add-Separator>>")
         return True
 
