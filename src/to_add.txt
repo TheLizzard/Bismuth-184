@@ -8,6 +8,9 @@ Editor:
 * Rework `BasePlugin.find_bracket_match` to use `BasePlugin.text_replace_tag`
 * On Control-j and Control-l, undo moves insert to the end of the line
 
+Runner:
+* Remove psutil dependency for checking if process exists
+
 Terminal:
 * Add confirm close prompt when closing a running proc
 * Windows support (pty_terminal)

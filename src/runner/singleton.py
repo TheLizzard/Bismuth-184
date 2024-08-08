@@ -1,8 +1,8 @@
 from __future__ import annotations
 from threading import Thread, Lock, Event
-import pickle
+import tempfile
 import signal
-import fcntl
+import json
 import os
 
 try:
@@ -10,108 +10,112 @@ try:
 except ImportError:
     from runner import RunManager
 
+# Import: lock_file, unlock_file, signal_register, signal_send, signal_cleanup,
+#         pid_exists, SIGUSR1, SIGUSR2
+#   from appropriate file
+if os.name == "posix":
+    try:
+        from .signal_unix import *
+    except ImportError:
+        from signal_unix import *
+elif os.name == "nt":
+    try:
+        from .signal_win import *
+    except ImportError:
+        from signal_win import *
+else:
+    raise RuntimeError(f"Unsupported OS: {os.name!r}")
+
 
 MsgQueue:type = "Reference[list[object]]"
 Writer:type = "Callable[str,bool]"
 OnClose:type = "Callable[None]"
 
-MASTER_FILE:str = "/tmp/bismuth-184.master.lock"
-SLAVE_FILE:str = "/tmp/bismuth-184.slave.lock"
+TMP_FOLDER:str = tempfile.gettempdir()
+MASTER_PIPE:str = os.path.join(TMP_FOLDER, "bismuth-184.master.pipe")
+SLAVE_PIPE:str = os.path.join(TMP_FOLDER, "bismuth-184.slave.pipe")
+SLAVE_LOCK:str = os.path.join(TMP_FOLDER, "bismuth-184.slave.lock")
 
-
-lock_file = lambda file: fcntl.flock(file, fcntl.LOCK_EX)
-unlock_file = lambda file: fcntl.flock(file, fcntl.LOCK_UN)
-
-_master_file:File = None
-_slave_file:File = None
+_slave_lock:File = None
 _master_pid:int = 0
 _self_pid:int = os.getpid()
 _event:Event = Event()
 
 
-def singleton() -> tuple[bool,Writer|MsgQueue]:
-    global _master_file, _slave_file, _master_pid
+def singleton() -> tuple[bool,Writer|MsgQueue,OnClose]:
+    global _master_pipe, _slave_pipe, _slave_lock, _master_pid
     buffer:MsgQueue = []
 
     def _write_to_buffer(signum, frame) -> None:
         try:
-            with open(SLAVE_FILE, "br") as file:
-                child_pid, data = pickle.loads(file.read())
+            with open(SLAVE_PIPE, "br") as file:
+                child_pid, data = json.loads(file.read().decode("utf-8"))
             buffer.append(data)
-            os.kill(child_pid, signal.SIGUSR1)
+            signal_send(child_pid, SIGUSR1)
         except:
             RunManager().report_exc(critical=True)
 
-    def _data_read(signum, frame) -> None:
-        unlock_file(_slave_file)
+    def _data_read(signum:int, frame:Frame) -> None:
         _event.set()
 
     def check_is_main() -> bool:
-        global _master_file, _slave_file, _master_pid
-        if os.path.exists(MASTER_FILE):
-            with open(MASTER_FILE, "r") as _master_file:
-                try:
-                    _master_pid = int(_master_file.read())
-                    os.kill(_master_pid, 0)
-                except (ValueError, OSError):
-                    os.remove(MASTER_FILE)
-                    return check_is_main()
-            signal.signal(signal.SIGUSR1, _data_read)
-            _slave_file = open(SLAVE_FILE, "bw")
+        global _slave_lock, _master_pipe, _slave_pipe, _master_pid
+        if os.path.exists(MASTER_PIPE):
+            # Check if master pid exists
+            master_exists:bool = False
+            try:
+                with open(MASTER_PIPE, "r") as _master_pipe:
+                    _master_pid = int(_master_pipe.read())
+                    master_exists:bool = pid_exists(_master_pid)
+            except ValueError:
+                pass
+            if not master_exists:
+                os.remove(MASTER_PIPE)
+                return check_is_main()
+            # If master pid is alive, open slave stuff and return False
+            signal_register(SIGUSR1, _data_read)
+            _slave_lock = open(SLAVE_LOCK, "bw")
+            lock_file(_slave_lock)
+            _slave_pipe = open(SLAVE_PIPE, "bw")
             return False
         else:
-            _master_file = open(MASTER_FILE, "w")
-            lock_file(_master_file)
-            _master_file.write(str(_self_pid))
-            _master_file.flush()
-            signal.signal(signal.SIGUSR1, _write_to_buffer)
-            with open(SLAVE_FILE, "w") as _slave_file:
-                pass
+            # If we are the master, set up and return True
+            _master_pipe = open(MASTER_PIPE, "w")
+            _master_pipe.write(str(_self_pid))
+            _master_pipe.flush()
+            signal_register(SIGUSR1, _write_to_buffer)
             return True
 
     is_main:bool = check_is_main()
 
     def on_close() -> None:
+        signal_cleanup()
         if is_main:
-            _master_file.close()
-            os.remove(MASTER_FILE)
+            _master_pipe.close()
+            os.remove(MASTER_PIPE)
         else:
-            _slave_file.close()
+            unlock_file(_slave_lock)
+            _slave_lock.close()
+            _slave_pipe.close()
 
     def write_message(message:object) -> bool:
-        lock_file(_slave_file)
-        _slave_file.seek(0)
-        _slave_file.truncate(0)
-        _slave_file.write(pickle.dumps((_self_pid, message)))
-        _slave_file.flush()
+        if not pid_exists(_master_pid):
+            raise ProcessLookupError("Master died") from None
+        _slave_pipe.seek(0)
+        _slave_pipe.truncate(0)
+        _slave_pipe.write(json.dumps((_self_pid, message)).encode("utf-8"))
+        _slave_pipe.flush()
         try:
-            os.kill(_master_pid, signal.SIGUSR1)
+            signal_send(_master_pid, SIGUSR1)
             _event.wait()
             _event.clear()
             return True
         except OSError:
-            RunManager().report_exc(True, "Master died")
-            return False
+            raise ProcessLookupError("Master died") from None
 
     return is_main, (buffer if is_main else write_message), on_close
 
 
-"""
-def wrap_reader_into_queue(reader:Callable[object]) -> Reference[list[object]]:
-    queue:Reference[list[str]] = []
-    def read_append_loop() -> None:
-        while True:
-            try:
-                queue.append(reader())
-            except BaseException as error:
-                if not isinstance(error, EOFError|SystemExit):
-                    RunManager().report_exc(critical=False)
-                break
-    Thread(target=read_append_loop, daemon=True).start()
-    return queue
-"""
-
-
 if __name__ == "__main__":
-    is_main, func, onclose = singleton()
-    # onclose()
+    is_main, buffer_or_writer, on_close = singleton()
+    print(is_main)

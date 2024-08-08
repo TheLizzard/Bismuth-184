@@ -70,7 +70,7 @@ class XVISUALINFO(ctypes.Structure):
 XVISUALINFO_PTR = ctypes.POINTER(XVISUALINFO)
 
 def errcheck_not_zero(value, func, args):
-    if value == 0:
+    if value in (0, None):
         args_str = ", ".join(map(str, args))
         raise OSError(f"{func.__name__}({args_str}) => {value}")
     return args

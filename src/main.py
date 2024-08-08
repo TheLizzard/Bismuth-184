@@ -216,9 +216,9 @@ class App:
         elif os.path.isdir(path):
             self.explorer.add(path, expand=True)
         else:
-            raise RuntimeError("Unknown type for {path!r}")
+            raise RuntimeError(f"Unknown type for {path!r}")
 
-    # Save close
+    # Save/Close
     def request_save(self, event:tk.Event) -> None:
         # Read existing if possible
         if event.widget.filepath is None:
@@ -392,7 +392,7 @@ class App:
                     assert len(args) == 1, "There should only be 1 arg"
                     self.open(args[0])
                 else:
-                    raise RuntimeError("Unknown {command=!r}")
+                    raise RuntimeError(f"Unknown {command=!r}")
         finally:
             self.root.after(200, self._check_msg_queue, message_queue)
 

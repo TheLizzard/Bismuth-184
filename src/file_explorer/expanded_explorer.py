@@ -320,6 +320,7 @@ class ExpandedExplorer(Explorer):
     def _newitem(self, newitem:Item, parent:tk.Frame) -> None:
         super()._expand(parent)
         newframe:tk.Frame = super().create_frame(newitem)
+        newframe.focused_widget:tk.Misc = self.changing.focus_get()
         super().update(soft=True)
         self.selected = self.changing = newframe
         self.creating:bool = True

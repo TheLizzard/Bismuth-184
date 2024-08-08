@@ -11,7 +11,7 @@ LONG_PTR = ctypes.c_long
 RECT_PTR = ctypes.POINTER(RECT)
 
 def _errcheck_not_zero(value, func, args):
-    if value == 0:
+    if value in (0, None):
         raise ctypes.WinError()
     return args
 

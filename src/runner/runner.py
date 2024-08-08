@@ -5,20 +5,23 @@ import traceback
 import os
 
 PATH:str = os.path.abspath(os.path.dirname(__file__))
-ERR_PATH_FOLDER:str = os.path.join(PATH, "error_logs")
-ERR_PATH_FORMAT:str = os.path.join(ERR_PATH_FOLDER, "error.%i.txt")
+ERR_PATH_FORMAT:str = os.path.join(PATH, "error_logs", "error.{n}.txt")
 
-i:int = 0
-while True:
-    err_path:str = ERR_PATH_FORMAT%i
-    if not os.path.exists(err_path):
-        break
-    try:
-        with open(err_path, "rb") as file:
-            if file.read(1) == b"":
-                break
-    except: ...
-    i += 1
+def get_err_path() -> str:
+    i:int = 0
+    while True:
+        err_path:str = ERR_PATH_FORMAT.format(n=str(i).zfill(4))
+        if not os.path.exists(err_path):
+            return err_path
+        try:
+            with open(err_path, "rb") as file:
+                if file.read(1) == b"":
+                    return err_path
+        except:
+            pass
+        if i == 9999:
+            raise RuntimeError("No file could be accessed to save error")
+        i += 1
 
 
 HasErrorer:type = bool
@@ -106,15 +109,28 @@ def _display0(string:str) -> None:
                   lines_numbers=True)
     root.mainloop()
 
+
 def _display1(string:str) -> None:
     root:tk.Tk = tk.Tk(className="Error")
     frame, text = _setup_window(root, string)
     text.pack(fill="both", expand=True)
     root.mainloop()
 
+
+def _display2(string:str) -> None:
+    filepath:str = get_err_path()
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    with open(filepath, "w") as file:
+        file.write(string)
+
+
+# Helpers:
 def _setup_window(root, string:str) -> tuple[tk.Frame,tk.Text]:
     def close() -> None:
         root.destroy()
+    def write_to_file() -> None:
+        _display2(string)
+        button.destroy()
 
     root.title("Error")
     root.protocol("WM_DELETE_WINDOW", close)
@@ -124,20 +140,14 @@ def _setup_window(root, string:str) -> tuple[tk.Frame,tk.Text]:
     frame:tk.Frame = tk.Frame(root, bg="black")
     frame.pack(fill="both", expand=True)
     button:tk.Button = tk.Button(root, text="Write error to file",
-                                 command=lambda: _display2(string),
-                                 **BUTTON_KWARGS)
-    button.pack(fill="x", expand=True)
+                                 command=write_to_file, **BUTTON_KWARGS)
+    button.pack(fill="x")
 
     text:tk.Text = tk.Text(frame, bg="black", fg="white", width=80,
                            height=20, bd=0, highlightthickness=0,
                            insertbackground="white", wrap="none")
     text.insert("end", string)
     return frame, text
-
-def _display2(string:str) -> None:
-    with open(err_path, "w") as file:
-        file.write(string)
-
 
 def _try_set_iconphoto(root:tk.Tk|BetterTk) -> HasErrorer:
     try:
