@@ -95,6 +95,10 @@ class TmpFilesystem:
     def exists(self, path:str) -> bool:
         return os.path.exists(self.normalise(path))
 
+    def onclose(self) -> None:
+        # TODO: Implement cleanup?
+        pass
+
     def get_free_file(self, folder:str, format:str, mode:str) -> File:
         assert "w" in mode, "mode must be write"
         with self.lock_wrapper("fs_write.lock"):
@@ -301,7 +305,8 @@ class IPC:
             yield folder
 
     def onclose(self) -> None:
-        pass
+        # TODO: Implement cleanup?
+        self._fs.onclose()
 
     def _check_got_data(self) -> None:
         # For each file in our folder:

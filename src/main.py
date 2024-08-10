@@ -432,17 +432,21 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             return None
         finally:
-            ipc.onclose()
+            if ipc:
+                ipc.onclose()
 
     def force_singleton() -> MsgQueue:
         # return None # For debugging
         ipc:IPC = IPC("bismuth-184")
+        # If this process is the first one:
         if len(ipc.find_where("others")) == 0:
             return ipc
-        ipc.event_generate("focus", where="others")
-        for arg in sys.argv[1:]:
-            ipc.event_generate("open", where="others", data=arg)
-        raise SystemExit()
+        # Otherwise send events to first process (hope it isn't misbehaving)
+        else:
+            ipc.event_generate("focus", where="others")
+            for arg in sys.argv[1:]:
+                ipc.event_generate("open", where="others", data=arg)
+            raise SystemExit()
 
     manager:RunManager = RunManager()
     manager.register(force_singleton)

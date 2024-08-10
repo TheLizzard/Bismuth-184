@@ -8,6 +8,7 @@ PATH:str = os.path.abspath(os.path.dirname(__file__))
 ERR_PATH_FORMAT:str = os.path.join(PATH, "error_logs", "error.{n}.txt")
 
 def get_err_path() -> str:
+    os.makedirs(os.path.dirname(ERR_PATH_FORMAT), exist_ok=True)
     i:int = 0
     while True:
         err_path:str = ERR_PATH_FORMAT.format(n=str(i).zfill(4))
@@ -118,7 +119,6 @@ def _display1(string:str) -> None:
 
 def _display2(string:str) -> None:
     filepath:str = get_err_path()
-    os.makedirs(os.path.dirname(filepath), exist_ok=True)
     with open(filepath, "w") as file:
         file.write(string)
 
