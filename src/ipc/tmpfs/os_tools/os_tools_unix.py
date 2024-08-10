@@ -10,6 +10,7 @@ signal_register = _signal.signal
 signal_cleanup = lambda: None
 SIGUSR1 = _signal.SIGUSR1
 SIGUSR2 = _signal.SIGUSR2
+SELF_PID:int = os.getpid()
 
 def pid_exists(pid:int) -> bool:
     try:

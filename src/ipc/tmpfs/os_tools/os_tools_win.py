@@ -98,7 +98,7 @@ def unlock_file(file:File) -> None:
 
 _signal_handlers:dict[int:Callable] = {}
 _events:list[HANDLE] = []
-_PID:int = os.getpid()
+SELF_PID:int = os.getpid()
 
 SIGUSR1 = 1
 SIGUSR2 = 2
@@ -120,7 +120,7 @@ def signal_register(signal:int, handler:Callable) -> None:
     signal:int = int(signal) # signal must be an int
     # Create event and start loop
     if signal not in _signal_handlers:
-        event_name:str = f"_signal_{_PID}_{signal}"
+        event_name:str = f"_signal_{SELF_PID}_{signal}"
         event:HANDLE = CreateEventA(None, True, False, string_to_c(event_name))
         _events.append(event)
         Thread(target=call_loop, daemon=True).start()

@@ -1,6 +1,6 @@
 from __future__ import annotations
 from tkinter.filedialog import askdirectory
-from time import perf_counter
+from time import sleep, perf_counter
 import tkinter as tk
 import sys
 import os
@@ -23,6 +23,7 @@ from plugins import VirtualEvents
 from settings.settings import curr as settings
 
 from plugins import plugins
+from ipc import IPC, Event
 
 
 notebook.CONTROL_T:bool = True
@@ -40,7 +41,7 @@ class App:
     __slots__ = "root", "explorer", "notebook", "text_to_page", \
                 "explorer_frame"
 
-    def __init__(self, message_queue:MsgQueue) -> App:
+    def __init__(self, ipc:IPC) -> App:
         self.text_to_page:dict[BetterText:notebook.NotebookPage] = {}
         window_settings:BetterTkSettings = BetterTkSettings()
         window_settings.config(use_border=False)
@@ -50,7 +51,10 @@ class App:
         self.root.iconphoto(False, "sprites/Bismuth_184.ico")
         self.root.protocol("WM_DELETE_WINDOW", self.root_close)
         self.root.geometry(f"+{settings.window.x}+{settings.window.y}")
-        self.root.after(100, self._check_msg_queue, message_queue)
+        if ipc:
+            ipc.bind("focus", lambda e: self.focus_force(), threaded=False)
+            ipc.bind("open", lambda e: self.open(e.data), threaded=False)
+            self.root.after(100, self._check_ipc_queue, ipc)
         pannedwindow = tk.PanedWindow(self.root, orient="horizontal", bd=0,
                                       height=settings.window.height,
                                       sashwidth=4, bg="grey")
@@ -381,20 +385,11 @@ class App:
         self.root.mainloop()
 
     # IPC Messages
-    def _check_msg_queue(self, message_queue:MsgQueue) -> None:
+    def _check_ipc_queue(self, ipc:IPC) -> None:
         try:
-            while message_queue:
-                command, *args = message_queue.pop(0)
-                if command == "focus":
-                    assert len(args) == 0, "There should be no args"
-                    self.focus_force()
-                elif command == "open":
-                    assert len(args) == 1, "There should only be 1 arg"
-                    self.open(args[0])
-                else:
-                    raise RuntimeError(f"Unknown {command=!r}")
+            ipc.call_queued_events()
         finally:
-            self.root.after(200, self._check_msg_queue, message_queue)
+            self.root.after(200, self._check_ipc_queue, ipc)
 
     def focus_force(self) -> None:
         # Bring to top
@@ -410,26 +405,22 @@ class App:
 
 
 if __name__ == "__main__":
-    from runner.runner import RunManager
+    from err_handler import RunManager
 
-    def start(message_queue=None, onclose=None) -> tuple[App,OnClose]:
+    def start(ipc:IPC=None) -> tuple[App,IPC]:
         if DEBUG_TIME: debug(f"Imports: {perf_counter()-timer[0]:.2f}")
         if DEBUG_TIME: timer[0] = perf_counter()
-        if message_queue is None:
-            message_queue:MsgQueue = []
-        if onclose is None:
-            onclose:OnClose = lambda: None
-        return App(message_queue), onclose
+        return App(ipc), ipc
 
-    def init(app:App, onclose:OnClose) -> tuple[App,OnClose]:
+    def init(app:App, ipc:IPC|None) -> tuple[App,IPC]:
         if DEBUG_TIME: debug(f"App create: {perf_counter()-timer[0]:.2f}")
         if DEBUG_TIME: timer[0] = perf_counter()
         app.init()
         for path in sys.argv[1:]:
             app.open(path)
-        return app, onclose
+        return app, ipc
 
-    def run(app:App, onclose:Onclose) -> None:
+    def run(app:App, ipc:IPC|None) -> None:
         if DEBUG_TIME: debug(f"App init: {perf_counter()-timer[0]:.2f}")
         if DEBUG_TIME: timer[0] = perf_counter()
         for i in range(100):
@@ -441,25 +432,17 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             return None
         finally:
-            onclose()
+            ipc.onclose()
 
     def force_singleton() -> MsgQueue:
         # return None # For debugging
-        from runner.singleton import singleton
-
-        is_main, writer_or_buffer, onclose = singleton()
-        if is_main:
-            # Return a queue of the messages
-            return writer_or_buffer, onclose
-        else:
-            # Send args to main, tell it to focus, and kill self
-            try:
-                writer_or_buffer(("focus",))
-                for arg in sys.argv[1:]:
-                    writer_or_buffer(("open", arg))
-            finally:
-                onclose()
-            raise SystemExit()
+        ipc:IPC = IPC("bismuth-184")
+        if len(ipc.find_where("others")) == 0:
+            return ipc
+        ipc.event_generate("focus", where="others")
+        for arg in sys.argv[1:]:
+            ipc.event_generate("open", where="others", data=arg)
+        raise SystemExit()
 
     manager:RunManager = RunManager()
     manager.register(force_singleton)

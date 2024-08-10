@@ -7,6 +7,9 @@ Editor:
 * Control(-Shift)?-z doesn't scroll if there is text selected
 * Rework `BasePlugin.find_bracket_match` to use `BasePlugin.text_replace_tag`
 * On Control-j and Control-l, undo moves insert to the end of the line
+* Replacing "[" with "]" colours in the "]"
+* Unclosed bracket in `FindReplaceManager` with "whole word" fails
+* In the text "abc()", selecting eveything up to including "(" and pressing backspace deletes everything
 
 Runner:
 * Remove psutil dependency for checking if process exists
