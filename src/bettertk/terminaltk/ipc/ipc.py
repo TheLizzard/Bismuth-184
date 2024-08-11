@@ -54,12 +54,9 @@ import os
 class TmpFilesystem:
     __slots__ = "normalise"
 
-    def __init__(self, name:str, *folders:tuple[str]) -> Filesystem:
+    def __init__(self, name:str) -> Filesystem:
         assert_type(name, str, "name")
-        root:str = _TMP_FOLDER
-        for folder in folders+(name,):
-            assert_type(folder, str, "folder")
-            root:str = os.path.join(root, folder)
+        root:str = os.path.join(_TMP_FOLDER, name)
         self.normalise = lambda path: os.path.join(root, path)
         self.makedir(".", lock=False)
 
@@ -175,20 +172,26 @@ class Event:
 
 serialiser.register(Event, "ipc.Event", Event.serialise, Event.deserialise)
 
+
 _sig_to_ipc:dict = {}
+def close_all_ipcs() -> None:
+    for ipc in _sig_to_ipc.values():
+        if not ipc.dead:
+            ipc.close()
+
 
 class IPC:
     __slots__ = "name", "_bindings", "_bindings_lock", "_call_queue", "_fs", \
                 "_root", "_bound", "_old_signal", "dead", "sig"
 
-    def __init__(self, name:str, *folders:tuple[str], sig) -> IPC:
+    def __init__(self, name:str, sig) -> IPC:
         if sig in _sig_to_ipc:
             raise ValueError("signal already in use")
         _sig_to_ipc[sig] = self
         self.sig = sig
         self._call_queue:list[tuple[list[Handler],Event]] = []
         self._bindings:dict[EventType:EventBindings] = {}
-        self._fs:TmpFilesystem = TmpFilesystem(name, *folders)
+        self._fs:TmpFilesystem = TmpFilesystem(name)
         self._bindings_lock:Lock = Lock()
         self._root:str = str(SELF_PID)
         self._bound:bool = False
@@ -206,20 +209,6 @@ class IPC:
         def inner(event:Event) -> Break|None:
             return func()
         return inner
-
-    @staticmethod
-    def get_empty_name(format:str, name:str, *folders:tuple[str],
-                       is_abandoned:Callable[str,bool]=lambda*s:0) -> str|None:
-        """
-        Get a valid name that can be passed in to the contructor of IPC
-        that is currently free.
-        The is_abandoned argument must be a function that takes a path
-        and returns True if the path can be considered free because its
-        owner/s abandoned it without deleting it
-        """
-        fs:TmpFilesystem = TmpFilesystem(name, *folders)
-        name:str = fs.get_free_folder(format, is_abandoned=is_abandoned)
-        return fs.normalise(name)
 
     def event_generate(self, event:EventType, *, data:object=None,
                        where:Location="all", timeout:int=1000,
@@ -471,6 +460,6 @@ def assert_type(obj:T|object, T:type, what:str=None) -> None:
 
 
 if __name__ == "__main__":
-    ipc:BaseIPC = IPC("program_name")
+    ipc:BaseIPC = IPC("program_name", sig=SIGUSR1)
     ipc.bind("focus", lambda e: print("@", e), threaded=True)
     ipc.event_generate("focus", where="others")

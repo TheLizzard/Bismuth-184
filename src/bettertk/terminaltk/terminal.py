@@ -1,7 +1,8 @@
 from __future__ import annotations
 from threading import Thread, Event as _Event
+from time import sleep, perf_counter
+from signal import SIGTERM, SIGKILL
 from subprocess import Popen, PIPE
-from time import sleep
 import sys
 import os
 
@@ -61,13 +62,13 @@ else:
 
 
 def kill_proc(send_signal:Callable[int,None], is_alive:Callable[bool]) -> None:
-    send_signal(signal.SIGTERM)
+    send_signal(SIGTERM)
     start:float = perf_counter()
     while perf_counter()-start < 3: # 3 sec for cleanup before SIGKILL
         if not is_alive():
             return None
         sleep(0.05)
-    send_signal(signal.SIGKILL)
+    send_signal(SIGKILL)
 
 
 TERMINAL_IPC:IPC = IPC("terminaltk", sig=SIGUSR2)
@@ -131,7 +132,8 @@ class BaseTerminal:
         _dead_event:_Event = _Event()
         self.bind("exit", self.ipc.rm_event(_dead_event.set))
         self.send_event("exit")
-        _dead_event.wait()
+        while (not _dead_event.wait(0.1)) and pid_exists(self.slave_pid):
+            pass
         if self.proc.poll is None:
             kill_proc(self.proc.send_signal, lambda: not self.proc.poll())
 

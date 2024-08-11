@@ -146,4 +146,6 @@ def signal_send(pid:int, signal:int) -> None:
     CloseHandle(event)
 
 
-pid_exists = psutil.pid_exists
+def pid_exists(pid:int) -> bool:
+    pid:int = int(pid) # pid must be an int
+    psutil.pid_exists(pid)

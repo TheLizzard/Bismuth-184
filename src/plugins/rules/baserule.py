@@ -61,8 +61,6 @@ class Rule:
         self.ids.clear()
 
     def destroy(self) -> None:
-        if self.attached:
-            self.detach()
         self.widget = None
         self.plugin = None
 

@@ -22,7 +22,7 @@ from bettertk import notebook
 from plugins import VirtualEvents
 from settings.settings import curr as settings
 
-from bettertk.terminaltk.ipc import IPC, Event, SIGUSR1
+from bettertk.terminaltk.ipc import IPC, Event, SIGUSR1, close_all_ipcs
 from plugins import plugins
 
 
@@ -285,6 +285,12 @@ class App:
         settings.explorer.update(added=added, expanded=expanded)
         settings.window.update(focused_text=curr_text_path)
         settings.save()
+
+        for text in self.text_to_page:
+            plugin:Plugin = getattr(text, "plugin", None)
+            if plugin:
+                plugin.destroy()
+
         self.root.destroy()
         return "break"
 
@@ -416,17 +422,17 @@ if __name__ == "__main__":
     def start(ipc:IPC=None) -> tuple[App,IPC]:
         if DEBUG_TIME: debug(f"Imports: {perf_counter()-timer[0]:.2f}")
         if DEBUG_TIME: timer[0] = perf_counter()
-        return App(ipc), ipc
+        return App(ipc)
 
-    def init(app:App, ipc:IPC|None) -> tuple[App,IPC]:
+    def init(app:App) -> tuple[App,IPC]:
         if DEBUG_TIME: debug(f"App create: {perf_counter()-timer[0]:.2f}")
         if DEBUG_TIME: timer[0] = perf_counter()
         app.init()
         for path in sys.argv[1:]:
             app.open(path)
-        return app, ipc
+        return app
 
-    def run(app:App, ipc:IPC|None) -> None:
+    def run(app:App) -> None:
         if DEBUG_TIME: debug(f"App init: {perf_counter()-timer[0]:.2f}")
         if DEBUG_TIME: timer[0] = perf_counter()
         for i in range(100):
@@ -438,8 +444,7 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             return None
         finally:
-            if ipc:
-                ipc.close()
+            close_all_ipcs()
 
     def force_singleton() -> MsgQueue:
         # return None # For debugging

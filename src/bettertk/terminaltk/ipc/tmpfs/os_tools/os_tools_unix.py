@@ -13,6 +13,7 @@ SIGUSR2 = _signal.SIGUSR2
 SELF_PID:int = os.getpid()
 
 def pid_exists(pid:int) -> bool:
+    pid:int = int(pid) # pid must be an int
     try:
         os.kill(pid, 0)
         return True

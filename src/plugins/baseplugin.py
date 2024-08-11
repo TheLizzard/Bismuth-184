@@ -93,8 +93,8 @@ class ProtoPlugin:
             rule.detach()
 
     def destroy(self) -> None:
-        if self.widget.plugin == self:
-            self.widget.plugin:ProtoPlugin = None
+        assert self.widget.plugin == self, "ValueErrpr"
+        self.widget.plugin:ProtoPlugin = None
         for rule in self.rules:
             rule.destroy()
         self.rules.clear()

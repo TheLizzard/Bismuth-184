@@ -48,6 +48,14 @@ class RunManager(Rule):
             data:str = event.data[0]
         return event.state&SHIFT, data, True
 
+    def destroy(self) -> None:
+        if (self.term is not None) and (self.term.running()):
+            self.term.queue_clear(stop_cur_proc=True)
+            self.term.close()
+        if self.tmp is not None:
+            self.tmp.cleanup()
+        super().destroy()
+
     def do(self, on:str, shift:bool, data:str) -> Break:
         if on == "f5":
             if shift:
@@ -84,7 +92,7 @@ class RunManager(Rule):
             self.term = TerminalTk(self.widget, settings=window_settings)
             print_str:str = " Starting ".center(80, "=") + "\n"
         else:
-            self.term.queue_clear()
+            self.term.queue_clear(stop_cur_proc=True)
             # self.term.check_alive()
             self.term.clear()
             print_str:str = " Restarting ".center(80, "=") + "\n"
