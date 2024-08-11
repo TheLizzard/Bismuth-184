@@ -24,11 +24,9 @@ class InsertDeleteManager(Rule, Delegator):
         if not hasattr(self.text, "percolator"):
             self.text.percolator:Percolator = Percolator(self.text)
         self.text.percolator.insertfilter(self)
-        self.text.insertdel_events:bool = True
 
     def detach(self) -> None:
         super().detach()
-        self.text.insertdel_events:bool = False
         self.text.percolator.removefilter(self)
 
     def insert(self, index:str, chars:str, tags:tuple[str]|str=None) -> None:

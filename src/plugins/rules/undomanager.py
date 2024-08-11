@@ -15,7 +15,7 @@ class UndoManager(Rule):
     __slots__ = "text", "old_undo", "old_separators", "old_maxundo", \
                 "paused", "after_id", "modified_since_last_sep", \
                 "last_char_type", "undo", "redo"
-    REQUESTED_LIBRARIES:tuple[str] = "insertdel_events"
+    REQUESTED_LIBRARIES:tuple[str] = "insertdeletemanager"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> UndoManager:
@@ -137,7 +137,8 @@ class UndoManager(Rule):
             if DEBUG_INSERT:
                 if len(data) < 10: print(f"[DEBUG]: after new {data!r}")
                 else: print(f"[DEBUG]: after new {len(data)=}")
-            self.text.event_generate("<<Modified-Change>>")
+            with self.plugin.virtual_event_wrapper(anti=True):
+                self.text.event_generate("<<Modified-Change>>")
             return False
         if on == "<raw-before-delete>":
             if self.paused:
@@ -149,7 +150,8 @@ class UndoManager(Rule):
             self.last_char_type:str = None
             if self.paused:
                 return False
-            self.text.event_generate("<<Modified-Change>>")
+            with self.plugin.virtual_event_wrapper(anti=True):
+                self.text.event_generate("<<Modified-Change>>")
             self.add_sep(force=True)
             return False
 

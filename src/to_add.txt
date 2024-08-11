@@ -1,15 +1,12 @@
 Editor:
 * Implement the replace part of `FindReplaceManager`
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
-* Java's `RunManager` should also handle testing.
 * `FindReplaceManager` removes hit tag when the user adds/removes text near the hit
 * Commenting a block with a comment inside it, uncomments the comment
 * Control(-Shift)?-z doesn't scroll if there is text selected
 * Rework `BasePlugin.find_bracket_match` to use `BasePlugin.text_replace_tag`
 * On Control-j and Control-l, undo moves insert to the end of the line
-* Replacing "[" with "]" colours in the "]"
-* Unclosed bracket in `FindReplaceManager` with "whole word" fails
-* In the text "abc()", selecting eveything up to including "(" and pressing backspace deletes everything
+* Unclosed bracket in `FindReplaceManager` with "whole word" fails text="a()\na(x)", search="a("
 
 Runner:
 * Remove psutil dependency for checking if process exists
@@ -31,11 +28,10 @@ File Explorer:
 * Make the frame inside the `dummy_canvas` expand to fill the canvas' width/height in `BetterFrame`. This problem also appears in `Notebook`
 * Save exec path on close?
 * Add a tooltip to all children of Root that show their full path
-* Padding on the right of each item
 * Deleting a top level folder causes problems
-* An expanded folder isn't loaded correctly if it's parent is collapsed on start-up
 
 Minor things/Low priority:
+* Java's `RunManager` should also handle testing.
 * Finish Konsole implementation (x11, windows)?
 * plugins.baseplugin.py@AllPlugin.find_bracket_match is a bit slow
 * Profile the program

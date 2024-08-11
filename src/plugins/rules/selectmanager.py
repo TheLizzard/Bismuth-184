@@ -15,7 +15,7 @@ MOUSE_START_MARK:str = "mouse_start"
 class SelectManager(Rule):
     __slots__ = "text", "old_sel_fg", "old_sel_bg", "old_inactivebg", \
                 "selecting", "set_linsert"
-    REQUESTED_LIBRARIES:tuple[str] = "insertdel_events"
+    REQUESTED_LIBRARIES:tuple[str] = "insertdeletemanager"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
@@ -88,7 +88,7 @@ class SelectManager(Rule):
         shift:bool = event.state & SHIFT
         alt:bool = event.state & ALT
 
-        if on in ("backspace", "delete"):
+        if on in ("backspace", "delete", "<before-delete>"):
             start, end = self.plugin.get_selection()
             if start == end:
                 return False
@@ -148,7 +148,8 @@ class SelectManager(Rule):
 
     def do(self, _, on, ctrl:bool, shift:bool, idx:str, drag:tuple) -> Break:
         if on in ("backspace", "delete"):
-            self.plugin.delete_selection()
+            with self.plugin.virtual_event_wrapper():
+                self.plugin.delete_selection()
             return True
 
         if on == "<set-linsert>":
@@ -211,8 +212,6 @@ class SelectManager(Rule):
 
         if on in ("<after-insert>", "<after-delete>"):
             self.plugin.move_insert("insert")
-            if on == "<after-delete>":
-                self.plugin.delete_selection()
             return False
 
         # Selection stuff

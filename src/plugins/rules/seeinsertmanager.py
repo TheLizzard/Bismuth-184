@@ -6,7 +6,7 @@ from .baserule import Rule
 
 class SeeInsertManager(Rule):
     __slots__ = "text"
-    REQUESTED_LIBRARIES:tuple[str] = "insertdel_events"
+    REQUESTED_LIBRARIES:tuple[str] = "insertdeletemanager"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> SeeEnd:

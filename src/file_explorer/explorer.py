@@ -51,7 +51,7 @@ class Explorer:
     def __init__(self, master:tk.Misc) -> Explorer:
         self.changing:tk.Frame = None
         self.master:tk.Misc = master
-        master.grid_columnconfigure(1, weight=1)
+        self.master.grid_columnconfigure(1, weight=1)
         self.root:Root = Root(FileSystem(), autoexpand=False)
         self.item_to_frame:dict[Item:tk.Frame] = dict()
         self.ggiver:GridGiver = GridGiver(self.master)
@@ -288,6 +288,7 @@ class Explorer:
         frame.expandeder.config(text="-")
         frame.item.expanded:bool = True
         self.update(soft=True)
+        self.master.event_generate("<<Explorer-Expanded>>")
 
     def _collapse(self, frame:tk.Frame) -> None:
         if not frame.item.expanded:

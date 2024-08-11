@@ -5,8 +5,6 @@ from ..whitespacemanager import WhiteSpaceManager as BaseWhiteSpaceManager
 
 class WhiteSpaceManager(BaseWhiteSpaceManager):
     __slots__ = ()
-    REQUESTED_LIBRARIES:tuple[str] = "insertdel_events", "select_manager"
-    REQUESTED_LIBRARIES_STRICT:bool = True
     INDENTATION_DELTAS:dict[str,int] = {"{":+1}
     INDENTATION_CP:set[str] = {"(", "["}
 

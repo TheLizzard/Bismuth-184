@@ -23,7 +23,9 @@ from plugins import VirtualEvents
 from settings.settings import curr as settings
 
 from plugins import plugins
-from ipc import IPC, Event
+
+# Not sure how Windows/Linux/git handle symlinks (remove if version > 3.0.1)
+from bettertk.terminaltk.ipc import IPC, Event
 
 
 notebook.CONTROL_T:bool = True
@@ -39,9 +41,10 @@ TextClass = BetterText
 
 class App:
     __slots__ = "root", "explorer", "notebook", "text_to_page", \
-                "explorer_frame"
+                "explorer_frame", "expand_later"
 
     def __init__(self, ipc:IPC) -> App:
+        self.expand_later:set[str] = set()
         self.text_to_page:dict[BetterText:notebook.NotebookPage] = {}
         window_settings:BetterTkSettings = BetterTkSettings()
         window_settings.config(use_border=False)
@@ -101,6 +104,8 @@ class App:
         make_bind_frame(self.explorer_frame)
         self.explorer:ExpandedExplorer = ExpandedExplorer(self.explorer_frame)
         self.explorer_frame.bind("<<Explorer-Open>>", self.open_tab_explorer)
+        self.explorer_frame.bind("<<Explorer-Expanded>>",
+                                 lambda e: self._explorer_expand())
 
         pannedwindow.add(left_frame, sticky="news",
                          width=settings.explorer.width)
@@ -369,16 +374,19 @@ class App:
     def _set_explorer_state(self, added:list[str], expanded:list[str]) -> None:
         for path in added:
             self.explorer.add(path)
-        expanded:set[str] = set(expanded)
-        while expanded:
+        self._explorer_expand(expanded)
+
+    def _explorer_expand(self, expanded:list[str]=None) -> None:
+        if expanded is not None:
+            self.expand_later.update(set(expanded))
+        changed:bool = True
+        while self.expand_later and changed:
             changed:bool = False
             for item, _ in self.explorer.root.recurse_children(withself=False):
-                if isfolder(item) and (item.fullpath in expanded):
-                    expanded.remove(item.fullpath)
+                if isfolder(item) and (item.fullpath in self.expand_later):
+                    self.expand_later.remove(item.fullpath)
                     self.explorer.expand(item)
                     changed:bool = True
-            if not changed:
-                break
 
     # The mainloop function
     def mainloop(self) -> None:
@@ -436,7 +444,7 @@ if __name__ == "__main__":
                 ipc.onclose()
 
     def force_singleton() -> MsgQueue:
-        # return None # For debugging
+        return None # For debugging
         ipc:IPC = IPC("bismuth-184")
         # If this process is the first one:
         if len(ipc.find_where("others")) == 0:

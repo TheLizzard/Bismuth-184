@@ -15,7 +15,7 @@ try:
     from rules.commentmanager import CommentManager
     from rules.undomanager import UndoManager
     from rules.findreplacemanager import FindReplaceManager
-    from rules.reparentmanager import WidgetReparenterManager
+    from rules.reparentmanager import ReparentManager
     from rules.xrawidgets import BarManager, LineManager, ScrollbarManager
     # from rules.xrawidgets import MenuManager
     from rules.c.commentmanager import CommentManager
@@ -36,7 +36,7 @@ except ImportError:
     from .rules.commentmanager import CommentManager
     from .rules.undomanager import UndoManager
     from .rules.findreplacemanager import FindReplaceManager
-    from .rules.reparentmanager import WidgetReparenterManager
+    from .rules.reparentmanager import ReparentManager
     from .rules.xrawidgets import BarManager, LineManager, ScrollbarManager
     # from .rules.xrawidgets import MenuManager
     from .rules.c.commentmanager import CommentManager
@@ -68,7 +68,7 @@ class CPlugin(BasePlugin):
                              RunManager,
                              RemoveShortcuts,
                              # Other widgets:
-                             WidgetReparenterManager,
+                             ReparentManager,
                              BarManager,
                              ScrollbarManager,
                              LineManager,

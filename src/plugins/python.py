@@ -14,7 +14,7 @@ try:
     from rules.commentmanager import CommentManager
     from rules.undomanager import UndoManager
     from rules.findreplacemanager import FindReplaceManager
-    from rules.reparentmanager import WidgetReparenterManager
+    from rules.reparentmanager import ReparentManager
     from rules.xrawidgets import BarManager, LineManager, ScrollbarManager
     # from rules.xrawidgets import MenuManager
     from rules.python.commentmanager import CommentManager
@@ -34,7 +34,7 @@ except ImportError:
     from .rules.bracketmanager import BracketManager
     from .rules.undomanager import UndoManager
     from .rules.findreplacemanager import FindReplaceManager
-    from .rules.reparentmanager import WidgetReparenterManager
+    from .rules.reparentmanager import ReparentManager
     from .rules.xrawidgets import BarManager, LineManager, ScrollbarManager
     # from .rules.xrawidgets import MenuManager
     from .rules.python.commentmanager import CommentManager
@@ -69,7 +69,7 @@ class PythonPlugin(BasePlugin):
                              BarManager,
                              LineManager,
                              ScrollbarManager,
-                             WidgetReparenterManager,
+                             ReparentManager,
                              # MenuManager,
                            ]
         super().__init__(*args, rules)

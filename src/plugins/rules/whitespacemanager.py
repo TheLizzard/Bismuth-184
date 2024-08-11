@@ -14,7 +14,7 @@ RBRACKETS:dict[str:str] = {v:k for k,v in BRACKETS.items()}
 
 class WhiteSpaceManager(Rule):
     __slots__ = "text", "indentation", "after_id"
-    REQUESTED_LIBRARIES:tuple[str] = "insertdel_events"
+    REQUESTED_LIBRARIES:tuple[str] = "insertdeletemanager"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     INDENTATIONS:dict[str,int] = {" ":4, "\t":1}
@@ -214,22 +214,19 @@ class WhiteSpaceManager(Rule):
         idx_linestart:str = self.text.index(f"{idx} linestart")
         inds:str = "".join(self.INDENTATIONS)
         stack:list[str] = []
+        skipped:bool = False
         while True:
             # Get the line up to idx
-            # Remove comments, iff the comments don't span the whole line
-            # Remove strings, iff the comments don't span the whole line
+            # Repalce strings, with "\xfe"
             line:str = self.text.get(idx_linestart, idx)
-            in_string_or_comment:bool = False
-            for tag in ("comment", "string"):
-                line2:str = self.plugin.text_replace_tag(line, idx_linestart,
-                                                         idx, tag, "\xff")
-                if line2.strip("\xff"+inds):
-                    line:str = line2
-                else:
-                    in_string_or_comment:bool = True
-            # line:str = self.plugin.get_line_remove_comment_string(idx)
+            line:str = self.plugin.text_replace_tag(line, idx_linestart, idx,
+                                                    "comment", "\xff")
+            line:str = line.rstrip(inds+"\xff")
             target:str = line[:len(line)-len(line.lstrip(inds))]
-            if in_string_or_comment: # Follow ()s only if not in string/comment
+            line:str = self.plugin.text_replace_tag(line, idx_linestart, idx,
+                                                    "string", "\xfe")
+            if not line.rstrip("\xfe"+inds):
+                # Follow ()s iff not in string/comment
                 return target
             for j, char in enumerate(reversed(line)):
                 if char in self.INDENTATION_CP:
@@ -251,9 +248,13 @@ class WhiteSpaceManager(Rule):
             idx_linestart:str = self.text.index(f"{idx_linestart} -1l")
             idx:str = self.text.index(f"{idx_linestart} lineend")
             if not stack:
+                if line[-1:] in self.INDENTATION_NEWLINE_IGN:
+                    if not skipped:
+                        return target
                 char:str = self.text.get(f"{idx} -1c", idx)
                 if char not in self.INDENTATION_NEWLINE_IGN:
                     return target
             if self.text.compare(idx_linestart, "==", "1.0"):
                 break
+            skipped:bool = True
         return ""

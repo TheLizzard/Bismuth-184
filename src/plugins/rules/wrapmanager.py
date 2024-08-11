@@ -15,9 +15,7 @@ class WrapManager(Rule):
         super().attach()
         self.old_wrap:str = self.text.cget("wrap")
         self.text.config(wrap="none")
-        self.text.wrapped:bool = True
 
     def detach(self) -> None:
         super().detach()
-        self.text.wrapped:bool = False
         self.text.config(wrap=self.old_wrap)

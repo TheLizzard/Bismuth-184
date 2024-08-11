@@ -69,7 +69,8 @@ proc dline_all {w} {
 class XViewFixManager(Rule):
     __slots__ = "text", "old_xset", "dirty", "dlineinfo", "width", "height", \
                 "line_lengths"
-    REQUESTED_LIBRARIES:tuple[str] = "insertdel_events", "scroll_bar", "wrapped"
+    REQUESTED_LIBRARIES:tuple[str] = "insertdeletemanager", "wrapmanger", \
+                                     "scrollbarmanager"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> SeeEnd:

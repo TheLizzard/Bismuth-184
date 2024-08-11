@@ -13,9 +13,10 @@ DEBUG:bool = False
 
 
 class ProtoPlugin:
-    __slots__ = "rules", "widget"
+    __slots__ = "rules", "widget", "loaded_rules"
 
     def __init__(self, widget:tk.Misc) -> ProtoPlugin:
+        self.loaded_rules:set[str] = set()
         self.widget:tk.Misc = widget
         self.rules:list[Rule] = []
 
@@ -34,6 +35,7 @@ class ProtoPlugin:
                 unmet:tuple[str] = self._try_load_rule(Rule)
                 if not unmet:
                     if DEBUG: print(f"[DEBUG]: attaching {Rule.__name__}")
+                    self.loaded_rules.add(Rule.__name__.lower())
                     rule.attach()
                     rules.pop(i)
                     break
@@ -45,6 +47,7 @@ class ProtoPlugin:
                     print(f"[WARNING] {msg} {Rule.__name__} might "
                           f"malfunction.")
                     if DEBUG: print(f"[DEBUG]: attaching {Rule.__name__}")
+                    self.loaded_rules.add(Rule.__name__.lower())
                     rule.attach()
                     rules.pop(i)
                     break
@@ -108,16 +111,18 @@ class ProtoPlugin:
         for Rule in rules:
             self.add(Rule)
 
-    def is_library_loaded(self, method_name:str) -> bool:
+    def is_library_loaded(self, lib:str) -> bool:
         """
         Returns a boolean that describes if a `tk.<widget>` attribute has been
           changed by something. If instead the attribute is a boolean instead
           of a Function, the boolean will be returned instead.
         """
-        method = getattr(self.widget, method_name, None)
+        if lib in self.loaded_rules:
+            return True
+        method = getattr(self.widget, lib, None)
         if isinstance(method, bool):
             return method
-        function = getattr(self.widget.__class__, method_name, None)
+        function = getattr(self.widget.__class__, lib, None)
         # If something goes wrong with the library system, change
         #   `getattr(method, "__func__", method) is not function` back to
         #   `getattr(method, "__func__", function) is not function`

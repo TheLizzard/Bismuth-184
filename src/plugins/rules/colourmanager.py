@@ -20,8 +20,9 @@ class ColourConfig(dict):
 
 
 class ColourManager(Rule, ColorDelegator):
-    __slots__ = "old_bg", "old_fg", "old_insertbg", "colorizer", "text"
-    REQUESTED_LIBRARIES:tuple[str] = "insertdel_events"
+    __slots__ = "old_bg", "old_fg", "old_insertbg", "colorizer", "text", \
+                "coloriser"
+    REQUESTED_LIBRARIES:tuple[str] = "insertdeletemanager"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> ColourManager:
@@ -30,8 +31,8 @@ class ColourManager(Rule, ColorDelegator):
                          )
         super().__init__(plugin, text, ons=evs)
         self.delegate:tk.Text = text
+        self.coloriser:bool = False
         self.text:tk.Text = text
-        self.text.coloriser:bool = False
         ColorDelegator.init_state(self)
         ColorDelegator.close(self)
         self.init()
@@ -56,8 +57,8 @@ class ColourManager(Rule, ColorDelegator):
                          takefocus=True)
         # Start recolorising
         self.config_colors()
-        if not self.text.coloriser:
-            self.text.coloriser:bool = True
+        if not self.coloriser:
+            self.coloriser:bool = True
             self.toggle_colorize_event(self)
         self.notify_range("1.0", "end")
         # Bring forward hit tag
@@ -68,7 +69,7 @@ class ColourManager(Rule, ColorDelegator):
 
     def detach(self) -> None:
         super().detach()
-        self.text.coloriser:bool = False
+        self.coloriser:bool = False
         ColorDelegator.close(self)
         self.removecolors()
         self.text.config(bg=self.old_bg, fg=self.old_fg,

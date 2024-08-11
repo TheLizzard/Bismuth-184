@@ -6,7 +6,7 @@ from .baserule import Rule
 DEBUG:bool = False
 
 
-class WidgetReparenterManager(Rule):
+class ReparentManager(Rule):
     __slots__ = "target", "manager_type", "manager_state", "frame"
     SPACE_SIZE:int = 5
 

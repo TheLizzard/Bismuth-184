@@ -71,7 +71,7 @@ class FindReplaceManager(Rule):
     __slots__ = "text", "window", "find", "replace", "regex", "matchcase", \
                 "wholeword", "button", "shown", "geom", "replace_label", \
                 "replace_str", "find_cache", "swap"
-    REQUESTED_LIBRARIES:tuple[str] = "coloriser"
+    REQUESTED_LIBRARIES:tuple[str] = "colourmanager"
     REQUESTED_LIBRARIES_STRICT:bool = True
     MAX_FINDS:int = 100
     HIT_TAG:str = "hit"

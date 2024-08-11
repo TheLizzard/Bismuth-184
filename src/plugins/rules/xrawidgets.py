@@ -20,7 +20,7 @@ class SingletonMeta(type):
 
 class BarManager(Rule, metaclass=SingletonMeta):
     __slots__ = "label", "text"
-    REQUESTED_LIBRARIES:tuple[str] = "add_widget"
+    REQUESTED_LIBRARIES:tuple[str] = "reparentmanager"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     FORMAT:str = "Ln: {line} Col: {column}"
@@ -48,7 +48,7 @@ class BarManager(Rule, metaclass=SingletonMeta):
 
 class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
     __slots__ = "text", "parent", "prev_end", "sidebar_text"
-    REQUESTED_LIBRARIES:tuple[str] = "add_widget", "scroll_bar"
+    REQUESTED_LIBRARIES:tuple[str] = "reparentmanager", "scrollbarmanager"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> BarManager:
@@ -123,7 +123,7 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
 class ScrollbarManager(Rule, metaclass=SingletonMeta):
     __slots__ = "old_yscrollcommand", "old_xscrollcommand", "yscrollbar", \
                 "xscrollbar"
-    REQUESTED_LIBRARIES:tuple[str] = "add_widget"
+    REQUESTED_LIBRARIES:tuple[str] = "reparentmanager"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     # https://stackoverflow.com/q/35412972/11106801
@@ -140,7 +140,6 @@ class ScrollbarManager(Rule, metaclass=SingletonMeta):
 
     def attach(self) -> None:
         super().attach()
-        self.widget.scroll_bar:bool = True
         self.old_yscrollcommand = self.widget.cget("yscrollcommand")
         self.widget.config(yscrollcommand=self.yset)
         self.widget.add_widget(self.yscrollbar, column=2)
@@ -151,7 +150,6 @@ class ScrollbarManager(Rule, metaclass=SingletonMeta):
 
     def detach(self) -> None:
         super().detach()
-        self.widget.scroll_bar:bool = False
         if self.HORIZONTAL_BAR:
             self.widget.config(xscrollcommand=self.old_xscrollcommand)
         self.widget.config(yscrollcommand=self.old_yscrollcommand)
@@ -167,7 +165,7 @@ class ScrollbarManager(Rule, metaclass=SingletonMeta):
 
 class MenuManager(Rule, metaclass=SingletonMeta):
     __slots__ = "menu"
-    REQUESTED_LIBRARIES:tuple[str] = "add_widget"
+    REQUESTED_LIBRARIES:tuple[str] = "reparentmanager"
     REQUESTED_LIBRARIES_STRICT:bool = True
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> ScrollBarManager:

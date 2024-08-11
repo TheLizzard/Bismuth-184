@@ -28,7 +28,8 @@ TIME_HIGHLIGHT_BRACKETS:int = 1000
 
 class BracketManager(Rule):
     __slots__ = "text"
-    REQUESTED_LIBRARIES:tuple[str] = "event_generate"
+    # Make sure we bind to "backspace" after SelectManager
+    REQUESTED_LIBRARIES:tuple[str] = "selectmanager"
     REQUESTED_LIBRARIES_STRICT:bool = False
 
     BACKET_HIGHLIGHT_TAG:str = "bracket_highlight"
