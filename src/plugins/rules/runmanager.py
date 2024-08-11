@@ -1,5 +1,6 @@
 from __future__ import annotations
 from tkinter.filedialog import askopenfilename, asksaveasfilename
+from tempfile import TemporaryDirectory
 import tkinter as tk
 import os
 
@@ -10,7 +11,7 @@ from .baserule import Rule, SHIFT, ALT, CTRL
 
 
 class RunManager(Rule):
-    __slots__ = "text", "args", "term", "cwd"
+    __slots__ = "text", "args", "term", "cwd", "tmp"
     REQUESTED_LIBRARIES:tuple[str] = "bind_all"
     REQUESTED_LIBRARIES_STRICT:bool = False
 
@@ -28,6 +29,7 @@ class RunManager(Rule):
                            "a<<Explorer-Set-CWD>>", "a<<Explorer-Unset-CWD>>",
                          )
         super().__init__(plugin, text, ons=evs)
+        self.tmp:TemporaryDirectory = None
         self.text:tk.Text = self.widget
         self.term:TerminalTk = None
         self.args:list[str] = []
@@ -76,18 +78,20 @@ class RunManager(Rule):
                      icon="error", center_widget=self.text)
             return None
 
-        if (self.term is None) or (not self.term.running):
+        if (self.term is None) or (not self.term.running()):
             window_settings:BetterTkSettings = BetterTkSettings()
             window_settings.config(use_border=False)
             self.term = TerminalTk(self.widget, settings=window_settings)
             print_str:str = " Starting ".center(80, "=") + "\n"
         else:
-            self.term.cancel_all()
-            self.term.send_signal(b"KILL")
-            self.term.send_ping(wait=True)
+            self.term.queue_clear()
+            # self.term.check_alive()
             self.term.clear()
             print_str:str = " Restarting ".center(80, "=") + "\n"
 
+        if self.tmp is not None:
+            self.tmp.cleanup()
+        self.tmp:TemporaryDirectory = TemporaryDirectory()
         self.term.topmost(True)
         self.term.topmost(False)
         self.term.focus_set()
@@ -101,42 +105,43 @@ class RunManager(Rule):
             return None
         cwd:str = self.cwd or req_cwd or os.path.expanduser("~")
         command:tuple[str] = self.format(self.CD, {"folder":cwd})
-        self.term.iqueue(1, command, print_str)
+        self.term.queue(["printf", print_str])
+        self.term.queue(command)
 
     def compile(self, *, print_str:str="", command:list[str]=None) -> bool:
         if (self.COMPILE is None) and (command is None):
             return False
         if self.COMPILE == []:
             return True
-        tmp:str = self.term.terminal.terminal.pipe.tmp.name
         command:list[str] = command or self.COMPILE
         command:list[str] = self.format(command, {"file":self.text.filepath,
-                                                  "tmp":tmp})
-        self.term.iqueue(2, command, print_str, condition=(0).__eq__)
+                                                  "tmp":self.tmp.name})
+        self.term.queue(["printf", print_str], condition=(0).__eq__)
+        self.term.queue(command)
         return True
 
     def execute(self, args:Iterable[str], *, print_str:str="") -> None:
         if self.RUN is None:
             return None
-        tmp:str = self.term.terminal.terminal.pipe.tmp.name
         command = self.format(self.RUN, {"file":self.text.filepath,
-                                         "tmp":tmp}) + list(args)
-        self.term.iqueue(3, command, print_str, condition=(0).__eq__)
+                                         "tmp":self.tmp.name}) + list(args)
+        self.term.queue(["printf", print_str], condition=(0).__eq__)
+        self.term.queue(command)
 
     def after(self, *, print_str:str="", command:list[str]=None) -> None:
         if (self.AFTER is None) and (command is None):
             return None
         command:list[str] = command or self.AFTER
         command:list[str] = self.format(command, {"file":self.text.filepath})
-        self.term.iqueue(4, command, print_str, condition=(0).__eq__)
+        self.term.queue(["printf", print_str], condition=(0).__eq__)
+        self.term.queue(command)
 
     def test(self, args:Iterable[str], *, print_str:str="") -> None:
         if self.RUN is None:
             return None
-        tmp:str = self.term.terminal.terminal.pipe.tmp.name
         command = self.format(self.TEST, {"file":self.text.filepath,
-                                          "tmp":tmp}) + list(args)
-        self.term.iqueue(3, command, None, condition=(0).__eq__)
+                                          "tmp":self.tmp.name}) + list(args)
+        self.term.queue(command, condition=(0).__eq__)
 
     @staticmethod
     def format(text:list[str], kwargs:dict[str,str]) -> list[str]:

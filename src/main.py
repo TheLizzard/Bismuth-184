@@ -22,10 +22,8 @@ from bettertk import notebook
 from plugins import VirtualEvents
 from settings.settings import curr as settings
 
+from bettertk.terminaltk.ipc import IPC, Event, SIGUSR1
 from plugins import plugins
-
-# Not sure how Windows/Linux/git handle symlinks (remove if version > 3.0.1)
-from bettertk.terminaltk.ipc import IPC, Event
 
 
 notebook.CONTROL_T:bool = True
@@ -441,11 +439,11 @@ if __name__ == "__main__":
             return None
         finally:
             if ipc:
-                ipc.onclose()
+                ipc.close()
 
     def force_singleton() -> MsgQueue:
         # return None # For debugging
-        ipc:IPC = IPC("bismuth-184")
+        ipc:IPC = IPC("bismuth-184", sig=SIGUSR1)
         # If this process is the first one:
         if len(ipc.find_where("others")) == 0:
             return ipc

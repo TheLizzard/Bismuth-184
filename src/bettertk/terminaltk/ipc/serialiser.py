@@ -93,7 +93,7 @@ class DoubleDict:
 
 
 def _dumps(obj:object, **kwargs:dict) -> str:
-    if isinstance(obj, str|int|float|bool|type(None)|list):
+    if type(obj) in (str, bool, type(None), int, float, list, dict):
         return _dumps_builtin_types(obj, **kwargs)
     serialiser:Serialiser = _serialisers.get(type(obj), None)
     typename:str = _typenames.get(type(obj), None)
@@ -108,18 +108,14 @@ def _dumps(obj:object, **kwargs:dict) -> str:
     return _dumps_builtin_types(new | {"class":typename})
 
 def _dumps_builtin_types(obj:object, **kwargs:dict) -> str:
-    if isinstance(obj, str):
+    if type(obj) in (str, bool, type(None), int, float):
         return json.dumps(obj)
-    if isinstance(obj, bool|type(None)):
-        return {True:"true", False:"false", None:"null"}[obj]
-    if isinstance(obj, int|float) and (not isinstance(obj, bool)):
-        return str(obj)
-    if isinstance(obj, list):
+    if type(obj) == list:
         output:str = "["
         for value in obj:
             output += _dumps(value, **kwargs) + ", "
         return output.removesuffix(", ")+"]"
-    if isinstance(obj, dict):
+    if type(obj) == dict:
         output:str = "{"
         for key, value in obj.items():
             if key != "class":
@@ -205,9 +201,11 @@ def _register_builtins() -> None:
     def ident(x:object, **kwargs:dict) -> object:
         return x
 
-    def container_to_json(container:T, **kwargs:dict) -> dict:
-        return {"v": list(container)}
-    def json_to_container(T:type) -> Deserialiser:
+    def val_type_to_json(T:type) -> Serialiser:
+        def inner(value:object, **kwargs:dict) -> dict:
+            return {"v": T(value)}
+        return inner
+    def json_to_val_type(T:type) -> Deserialiser:
         def inner(data:dict, **kwargs:dict) -> T:
             return T(data["v"])
         return inner
@@ -230,16 +228,20 @@ def _register_builtins() -> None:
         return inner
 
     register(dict, "dict", ident, ident)
-    register(set, "set", container_to_json, json_to_container(set))
-    register(tuple, "tuple", container_to_json, json_to_container(tuple))
-    register(bytearray, "bytearray", container_to_json,
-             json_to_container(bytearray))
-    register(frozenset, "frozenset", container_to_json,
-             json_to_container(frozenset))
+    register(set, "set", val_type_to_json(list), json_to_val_type(set))
+    register(tuple, "tuple", val_type_to_json(list), json_to_val_type(tuple))
+    register(bytearray, "bytearray", val_type_to_json(list),
+             json_to_val_type(bytearray))
+    register(frozenset, "frozenset", val_type_to_json(list),
+             json_to_val_type(frozenset))
     register(bytes, "bytes", bytes_to_json, json_to_bytes)
     register(complex, "complex", complex_to_json, json_to_complex)
     register(range, "range", triplet_to_json, json_to_triplet(range))
     register(slice, "slice", triplet_to_json, json_to_triplet(slice))
+
+    import signal
+    register(signal.Signals, "signal.Signals", val_type_to_json(int),
+             json_to_val_type(signal.Signals))
 
 
 if __name__ == "__main__":
@@ -262,7 +264,7 @@ if __name__ == "__main__":
     # data:object = [b"\x00", MyClass(5.6)]
     data:object = {"class":MyClass(b"abc")}
     # data:object = {1:1, "class":0}
-    data:object = [i for i in range(1000)]
+    data:object = [i for i in range(10)]
     serialised:str = dumps(data)
     data:object = loads(serialised)
     print(repr(data))

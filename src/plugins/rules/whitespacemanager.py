@@ -221,11 +221,11 @@ class WhiteSpaceManager(Rule):
             line:str = self.text.get(idx_linestart, idx)
             line:str = self.plugin.text_replace_tag(line, idx_linestart, idx,
                                                     "comment", "\xff")
-            line:str = line.rstrip(inds+"\xff")
             target:str = line[:len(line)-len(line.lstrip(inds))]
+            line:str = line.rstrip(inds+"\xff")
             line:str = self.plugin.text_replace_tag(line, idx_linestart, idx,
                                                     "string", "\xfe")
-            if not line.rstrip("\xfe"+inds):
+            if not line.rstrip("\xfe"):
                 # Follow ()s iff not in string/comment
                 return target
             for j, char in enumerate(reversed(line)):

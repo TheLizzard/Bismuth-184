@@ -1,20 +1,18 @@
 from __future__ import annotations
+from threading import Thread, Event as _Event
 from subprocess import Popen, PIPE
-from threading import Thread
 from time import sleep
 import sys
 import os
 
 try:
-    from ..bettertk.get_os import IS_WINDOWS, IS_UNIX
+    from .ipc import IPC, Event, pid_exists, SELF_PID, SIGUSR1, SIGUSR2
 except ImportError:
-    from bettertk.get_os import IS_WINDOWS, IS_UNIX
-from .piper import TmpPipePair
+    from ipc import IPC, Event, pid_exists, SELF_PID, SIGUSR1, SIGUSR2
+from bettertk import IS_WINDOWS, IS_UNIX
 
 
 SLAVE_PATH:str = os.path.join(os.path.dirname(__file__), "slave.py")
-PING_SIGNAL:bytes = b"="
-PONG_SIGNAL:bytes = b"#"
 
 
 if IS_WINDOWS:
@@ -62,55 +60,91 @@ else:
     ...
 
 
-class BaseTerminal:
-    """
-    Inherit from this base class overriding the `start` method and
-      implementing the optional `resize` method.
-    The implementation of the `start` method should call `self.run`.
-    If the `resize` method is implemented, it should tell the slave
-      terminal to resize itself to fit the width/height passed in.
-    If the `resize` method isn't implemented, the terminal will assume that
-      it can't be resized.
-    """
+def kill_proc(send_signal:Callable[int,None], is_alive:Callable[bool]) -> None:
+    send_signal(signal.SIGTERM)
+    start:float = perf_counter()
+    while perf_counter()-start < 3: # 3 sec for cleanup before SIGKILL
+        if not is_alive():
+            return None
+        sleep(0.05)
+    send_signal(signal.SIGKILL)
 
-    __slots__ = "proc", "pipe", "running", "resizable"
+
+TERMINAL_IPC:IPC = IPC("terminaltk", sig=SIGUSR2)
+
+
+class BaseTerminal:
+    __slots__ = "proc", "_running", "resizable", "ipc", "slave_pid"
 
     def __init__(self, *, into:int=None) -> None:
-        self.running:bool = False
+        self.ipc:IPC = TERMINAL_IPC
+        self.ipc.find_where("others")
+        self.slave_pid:str = None
+        # Create IPC
+        # name:str = IPC.get_empty_name("instance-%d%d%d", "terminaltk",
+        #                               is_abandoned=self._is_abandoned)
+        # if name is None:
+        #     raise FileExistsError("too many terminals exist already")
+        # self.ipc:IPC = IPC(name)
+        # with self.ipc._fs.open("owner_pid", "w") as file:
+        #     file.write(str(SELF_PID))
+        # Set up vars
         self.resizable:bool = hasattr(self, "resize")
-        self.pipe:TmpPipePair = TmpPipePair.from_tmp()
-        self.start(*self.pipe.reverse(), into=into)
-        assert self.running, "You must call \"self.run(command, env=env)\" " \
+        self._running:bool = False
+        # Start and wait until ready
+        _ready_event:_Event = _Event()
+        def inner(event:Event) -> None:
+            self.slave_pid:str = event._from
+            _ready_event.set()
+        self.bind("ready", inner)
+        self.start(self.ipc.name, into=into)
+        assert self._running, "You must call \"self.run(command, env=env)\" " \
                              'inside "self.start"'
+        _ready_event.wait()
 
-    def cancel_all(self) -> None:
-        self.send_signal(b"CANCEL_ALL")
+    def send_event(self, event:str, *, data:object=None) -> None:
+        self.ipc.event_generate(event, where=self.slave_pid, data=data)
+
+    def bind(self, event:str, handler:Callable[Event,None], **kwargs) -> None:
+        self.ipc.bind(event, handler, **{"threaded":True, **kwargs})
+
+    @staticmethod
+    def _is_abandoned(fs:Filesystem, name:str) -> bool:
+        filename:str = fs.join(name, "owner_pid")
+        if not fs.exists(filename):
+            return False
+        with fs.open(filename, "rb") as file:
+            try:
+                pid:int = int(file.read().decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                return False
+        return not pid_exists(pid)
 
     def run(self, command:str, *, env:dict[str,str]=os.environ) -> None:
         self.proc:Popen = Popen(command, env=env, shell=True, stdout=PIPE,
                                 stderr=PIPE)
-        self.pipe.start()
-        self.running:bool = True
+        self._running:bool = True
+        while self.slave_pid is None:
+            sleep(0.1)
 
-    def wait_ended(self) -> None:
-        while self.proc.poll() is None:
-            sleep(0.2)
+    def close(self) -> None:
+        _dead_event:_Event = _Event()
+        self.bind("exit", self.ipc.rm_event(_dead_event.set))
+        self.send_event("exit")
+        _dead_event.wait()
+        if self.proc.poll is None:
+            kill_proc(self.proc.send_signal, lambda: not self.proc.poll())
 
-    def close(self, signal:bytes=b"KILL") -> None:
-        assert self.running, "Not running"
-        if signal is not None:
-            self.send_signal(signal)
-        self.running:bool = False
-        self.pipe.close()
-        self.wait_ended()
+    def running(self) -> bool:
+        return self.proc.poll() is None
 
-    def send_signal(self, signal:bytes) -> None:
-        self.pipe.write(signal)
+    def clear(self) -> None:
+        self.send_event("print", data="\r\x1b[2J\x1b[3J\x1b[H\x1bc")
 
-    def ended(self) -> bool:
-        return self.proc.poll() is not None
+    def send_signal(self, signal:int) -> None:
+        self.send_event("signal", data=signal)
 
-    def start(self, slave2master:str, master2slave:str, *, into:int=None):
+    def start(self, ipc_name:str, *, into:int=None):
         raise NotImplementedError("Override this method, making sure you " \
                                   "call `self.run(command, env=env)` at " \
                                   "the end")
@@ -119,13 +153,11 @@ class BaseTerminal:
 class XTermTerminal(BaseTerminal):
     __slots__ = ()
 
-    def start(self, slave2master:str, master2slave:str, *, into:tk.Misc=None):
-        args:str = XTERM_ARGS.format(slave2master, master2slave)
+    def start(self, ipc_name:str, *, into:tk.Misc=None):
+        args:str = XTERM_ARGS.format(ipc_name, SELF_PID)
         if into is None:
             command:str = f"xterm {args}"
         else:
-            # into.config(takefocus=True)
-            # into.focus_set()
             command:str = f"xterm -into {into.winfo_id()} {args}"
         self.run(command, env=os.environ|dict(force_color_prompt="yes"))
         if XTERM_DEBUG: Thread(target=self.debug_proc_end, daemon=True).start()
@@ -133,26 +165,27 @@ class XTermTerminal(BaseTerminal):
     def resize(self, *, width:int, height:int) -> None:
         assert isinstance(width, int), "TypeError"
         assert isinstance(height, int), "TypeError"
-        self.pipe.write(encode_print(f"\x1b[4;{height};{width}t"))
+        self.send_event("print", data=f"\x1b[4;{height};{width}t")
 
     def debug_proc_end(self) -> None:
-        self.wait_ended()
-        stdout:bytes = self.proc.stdout.read()
-        stderr:bytes = self.proc.stderr.read()
-        if len(stdout+stderr) > 0:
+        def inner(_:Event=None) -> None:
+            stdout:bytes = self.proc.stdout.read()
+            stderr:bytes = self.proc.stderr.read()
             print(" stdout ".center(80, "#"))
-            print(stdout)
-            print(" stderr ".center(80, "#"))
-            print(stderr)
+            if len(stdout+stderr) > 0:
+                print(stdout)
+                print(" stderr ".center(80, "#"))
+                print(stderr)
+        self.bind("exit", inner)
 
 
 class KonsoleTerminal(BaseTerminal):
     __slots__ = ()
 
-    def start(self, slave2master:str, master2slave:str, *, into:tk.Misc=None):
+    def start(self, ipc_name:str, *, into:tk.Misc=None):
         raise NotImplementedError("Not fully implemented. " \
                                   "Read the comment bellow")
-        args:str = KONSOLE_ARGS.format(slave2master, master2slave)
+        args:str = KONSOLE_ARGS.format(ipc_name, SELF_PID)
         self.run(f"konsole {args}")
         # Now we have to use `NoTitlebarTk._get_parent` on into
         #   maybe even on into's tk.Tk and then use
@@ -172,42 +205,9 @@ else:
 assert issubclass(Terminal, BaseTerminal|None), "You must subclass BaseTerminal."
 
 
-def allisinstance(iterable:Iterable, T:type) -> bool:
-    return all(map(lambda elem: isinstance(elem, T), iterable))
-
-def _assert_no_null(string:str) -> None:
-    assert isinstance(string, str), "TypeError"
-    assert "\x00" not in string, "Invalid char in string"
-
-def _encode_args(args:tuple[str]|list[str]) -> bytes:
-    assert isinstance(args, tuple|list), "TypeError"
-    assert allisinstance(args, str), "TypeError"
-    for arg in args: _assert_no_null(arg)
-    return "\x00".join(args).encode("utf-8")+b"\x00"
-
-def encode_run(cmd_id:int, args:tuple[str], string_to_print:str|None) -> bytes:
-    if string_to_print is None:
-        string_to_print:bytes = b""
-    else:
-        string_to_print:bytes = string_to_print.encode("utf-8")
-    return b"RUN" + cmd_id.to_bytes(2,"big") + len(args).to_bytes(2,"big") + \
-           _encode_args(args) + string_to_print + b"\x00"
-
-def encode_check_stdout(cmd_id:int, args:tuple[str]) -> bytes:
-    return b"CHECK_STDOUT" + cmd_id.to_bytes(2,"big") + \
-           len(args).to_bytes(2,"big") + _encode_args(args)
-
-def encode_print(text:str) -> bytes:
-    _assert_no_null(text)
-    return b"PRINTSTR"+text.encode("utf-8")+b"\x00"
-
 
 if __name__ == "__main__":
     XTERM_DEBUG:bool = True
     term:Terminal = Terminal()
-    term.pipe.write(encode_run(0, ["bash"], " Bash Started ".center(80, "=")+"\n"))
-    term.pipe.write(encode_run(1, ["python3", "/home/thelizzard/.updater.py"], " Updater Started ".center(80, "=")+"\n"))
-    while not term.ended():
-        data:bytes = term.pipe.read(100)
-        print(data)
-    term.pipe.close()
+    term.send_event("run", data=("python3",))
+    term.bind("", lambda e: print(e))

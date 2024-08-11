@@ -1,7 +1,9 @@
 from __future__ import annotations
 from threading import Thread, Lock, Event as _Event
+from contextlib import contextmanager
 from typing import Callable
 from time import sleep
+import tempfile
 
 try:
     from .tmpfs.os_tools import *
@@ -20,19 +22,44 @@ Pid:type = int
 Handler:type = Callable["Event",Break|None]
 EventBindings:type = list[tuple[Threaded,Handler]]
 
+_TMP_FOLDER:str = tempfile.gettempdir()
+
+
+def format_to_permutation(format:str) -> Iterable[str]:
+    if "%d" not in format:
+        yield format
+    else:
+        for i in range(9):
+            subformat:str = str_rreplace(format, "%d", str(i))
+            yield from format_to_permutation(subformat)
+
+def str_rreplace(string:str, search:str, replace:str) -> str:
+    # https://stackoverflow.com/a/9943875/11106801
+    return replace.join(string.rsplit(search, 1))
+
+@contextmanager
+def lock_wrapper(file:File) -> None:
+    try:
+        lock_file(file)
+        yield None
+    finally:
+        unlock_file(file)
+
 
 # Only until I implement something like tmpfs in python
 #   which might take a long time :/
-from contextlib import contextmanager
-import tempfile
 import shutil
 import os
 
 class TmpFilesystem:
     __slots__ = "normalise"
 
-    def __init__(self, name:str) -> Filesystem:
-        root:str = os.path.join(tempfile.gettempdir(), name)
+    def __init__(self, name:str, *folders:tuple[str]) -> Filesystem:
+        assert_type(name, str, "name")
+        root:str = _TMP_FOLDER
+        for folder in folders+(name,):
+            assert_type(folder, str, "folder")
+            root:str = os.path.join(root, folder)
         self.normalise = lambda path: os.path.join(root, path)
         self.makedir(".", lock=False)
 
@@ -52,23 +79,27 @@ class TmpFilesystem:
         else:
             file:File = path_or_file
         try:
-            lock_file(file)
-            yield None
+            with lock_wrapper(file):
+                yield None
         finally:
-            unlock_file(file)
             if isinstance(path_or_file, str):
                 file.close()
 
     def listfiles(self, path:str) -> Iterable[str]:
-        _, folders, files = next(os.walk(self.normalise(path)))
+        _, folders, files = self._walk(path)
         return files
 
+    def _walk(self, path:str) -> tuple[str,tuple[str],tuple[str]]:
+        for output in os.walk(self.normalise(path)):
+            return output
+        return path, [], []
+
     def listdirs(self, path:str) -> Iterable[str]:
-        _, folders, files = next(os.walk(self.normalise(path)))
+        _, folders, files = self._walk(path)
         return folders
 
     def listall(self, path:str) -> Iterable[tuple[str,str]]:
-        _, folders, files = next(os.walk(self.normalise(path)))
+        _, folders, files = self._walk(path)
         for folder in folders:
             yield "folder", folder
         for file in files:
@@ -95,31 +126,27 @@ class TmpFilesystem:
     def exists(self, path:str) -> bool:
         return os.path.exists(self.normalise(path))
 
-    def onclose(self) -> None:
+    def close(self) -> None:
         # TODO: Implement cleanup?
         pass
 
-    def get_free_file(self, folder:str, format:str, mode:str) -> File:
+    def get_free_file(self, folder:str, format:str, mode:str) -> File|None:
         assert "w" in mode, "mode must be write"
         with self.lock_wrapper("fs_write.lock"):
-            for perm in self.format_to_permutation(format):
+            for perm in format_to_permutation(format):
                 path:str = self.join(folder, perm)
                 if not self.exists(path):
                     return self.open(path, mode, lock=False)
         return None
 
-    def format_to_permutation(self, format:str) -> Iterable[str]:
-        if "%d" not in format:
-            yield format
-        else:
-            for i in range(9):
-                subformat:str = self.str_rreplace(format, "%d", str(i))
-                yield from self.format_to_permutation(subformat)
-
-    @staticmethod
-    def str_rreplace(string:str, search:str, replace:str) -> str:
-        # https://stackoverflow.com/a/9943875/11106801
-        return replace.join(string.rsplit(search, 1))
+    def get_free_folder(self, format:str, *,
+                        is_abandoned=lambda*s:0) -> str|None:
+        # TODO: race condition between return and folder capture
+        with self.lock_wrapper("_empty_name.lock"):
+            for perm in format_to_permutation(format):
+                if not self.exists(perm) or is_abandoned(self, perm):
+                    return perm
+            return None
 
 
 class Event:
@@ -148,19 +175,51 @@ class Event:
 
 serialiser.register(Event, "ipc.Event", Event.serialise, Event.deserialise)
 
+_sig_to_ipc:dict = {}
 
 class IPC:
     __slots__ = "name", "_bindings", "_bindings_lock", "_call_queue", "_fs", \
-                "_root", "_bound"
+                "_root", "_bound", "_old_signal", "dead", "sig"
 
-    def __init__(self, name:str) -> IPC:
+    def __init__(self, name:str, *folders:tuple[str], sig) -> IPC:
+        if sig in _sig_to_ipc:
+            raise ValueError("signal already in use")
+        _sig_to_ipc[sig] = self
+        self.sig = sig
         self._call_queue:list[tuple[list[Handler],Event]] = []
         self._bindings:dict[EventType:EventBindings] = {}
-        self._fs:TmpFilesystem = TmpFilesystem(name)
+        self._fs:TmpFilesystem = TmpFilesystem(name, *folders)
         self._bindings_lock:Lock = Lock()
         self._root:str = str(SELF_PID)
         self._bound:bool = False
+        self._old_signal = None
+        self.dead:bool = False
+        self.name:str = name
         self._on_init()
+
+    @staticmethod
+    def rm_event(func:Callable[Break|None]) -> Callable[Event,Break|None]:
+        """
+        A higher order function that takes a function that takes no args
+        and returns a function that takes 1 arg that is ignored
+        """
+        def inner(event:Event) -> Break|None:
+            return func()
+        return inner
+
+    @staticmethod
+    def get_empty_name(format:str, name:str, *folders:tuple[str],
+                       is_abandoned:Callable[str,bool]=lambda*s:0) -> str|None:
+        """
+        Get a valid name that can be passed in to the contructor of IPC
+        that is currently free.
+        The is_abandoned argument must be a function that takes a path
+        and returns True if the path can be considered free because its
+        owner/s abandoned it without deleting it
+        """
+        fs:TmpFilesystem = TmpFilesystem(name, *folders)
+        name:str = fs.get_free_folder(format, is_abandoned=is_abandoned)
+        return fs.normalise(name)
 
     def event_generate(self, event:EventType, *, data:object=None,
                        where:Location="all", timeout:int=1000,
@@ -174,6 +233,8 @@ class IPC:
         `FileExistsError` is raised in another thread for speed reasons
         If `ignore_bad_pids` is true, it ignores and skips timeout errors.
         """
+        assert not self.dead, "IPC already closed"
+
         def inner(pid:int) -> None:
             if pid == SELF_PID:
                 self._got_event(event)
@@ -207,6 +268,7 @@ class IPC:
         If a handler returns a truthy, then the handlers registered before it
         will not be called
         """
+        assert not self.dead, "IPC already closed"
         assert_type(event, EventType, "event")
         assert_type(handler, Callable, "handler")
         assert_type(threaded, Threaded, "threaded")
@@ -222,6 +284,7 @@ class IPC:
         and optionally a handler. If no handler is specified, then all
         handlers for the event are unbound.
         """
+        assert not self.dead, "IPC already closed"
         if event not in self._bindings:
             raise ValueError("Nothing bound to {event=!r}")
         with self._bindings_lock:
@@ -246,6 +309,7 @@ class IPC:
             * "123" (only the proc with pid=123)
             * "123+456" (only the procs with pids 123 and 456)
         """
+        assert not self.dead, "IPC already closed"
         assert_type(where, Location, "where")
         locs:set[Pid] = set()
         for where in where.split("+"):
@@ -266,10 +330,13 @@ class IPC:
         If we got an event, execute the handler (if threaded) or put it in a
         queue for `call_queued_events` (if not threaded)
         """
+        assert not self.dead, "IPC already closed"
         assert_type(event, Event, "event")
         non_threaded_handlers:list[Handler] = []
         # In threaded handlers, ignore the return value
-        for (threaded,handler) in self._bindings.get(event.type, []).copy():
+        bindings:list = self._bindings.get(event.type, []) + \
+                        self._bindings.get("", [])
+        for (threaded,handler) in bindings:
             if handler is not None:
                 if threaded:
                     Thread(target=handler, args=(event,), daemon=True).start()
@@ -283,6 +350,7 @@ class IPC:
         Call this method regularly if you called `.bind(threaded=False)`.
         It handles all of the handlers from the current thread.
         """
+        assert not self.dead, "IPC already closed"
         while self._call_queue:
             handlers, event = self._call_queue.pop(0)
             for handler in handlers:
@@ -295,6 +363,7 @@ class IPC:
         Read all of the folders at the top of fs and assume any numbered
         folders are pids. If the pid doesn't exist, delete the folder.
         """
+        assert not self.dead, "IPC already closed"
         for folder in self._fs.listdirs("."):
             if not folder.isdigit():
                 continue
@@ -304,11 +373,16 @@ class IPC:
                     continue
             yield folder
 
-    def onclose(self) -> None:
-        # TODO: Implement cleanup?
-        self._fs.onclose()
+    def close(self) -> None:
+        assert not self.dead, "IPC already closed"
+        self.dead:bool = True
+        # signal only works in main thread of the main interpreter
+        # signal_register(self.sig, self._old_signal)
+        self._fs.removedir(self._root)
+        self._fs.close()
 
     def _check_got_data(self) -> None:
+        assert not self.dead, "IPC already closed"
         # For each file in our folder:
         for filename in self._fs.listfiles(self._root):
             # Get the path and read it (we don't need to lock the fs for that)
@@ -327,11 +401,15 @@ class IPC:
             self._got_event(event)
 
     def _on_init(self) -> None:
+        assert not self.dead, "IPC already closed"
         self._fs.makedir(self._root)
 
     def _add_listener(self, event:EventType) -> None:
+        assert not self.dead, "IPC already closed"
         if self._bound: return None
         self._bound:bool = True
+        # Get old signal so we can reset it at cleanup
+        self._old_signal = signal_get(self.sig)
         # Signals shouldn't really do anything complicated or time consuming
         # as another signal can come in at any time causing a RecursionError
         event:_Event = _Event()
@@ -340,14 +418,16 @@ class IPC:
             # causes a RecursionError in event.wait. Absolutely no clue why
             Thread(target=event.set, daemon=True).start()
         def threaded() -> None:
-            while True:
+            while not self.dead:
                 event.wait()
                 event.clear()
-                self._check_got_data()
-        signal_register(SIGUSR1, inner)
+                if not self.dead:
+                    self._check_got_data()
+        signal_register(self.sig, inner)
         Thread(target=threaded, daemon=True).start()
 
     def _send_data(self, pid:Pid, data:bytes, *, timeout:int=1000) -> None:
+        assert not self.dead, "IPC already closed"
         # Timeout is in milliseconds
         attempts:int = 100
         for i in range(attempts):
@@ -363,7 +443,7 @@ class IPC:
                                   "of them are read")
         with file:
             file.write(data)
-        signal_send(pid, SIGUSR1)
+        signal_send(pid, self.sig)
 
 
 def assert_type(obj:T|object, T:type, what:str=None) -> None:

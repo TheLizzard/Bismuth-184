@@ -102,57 +102,48 @@ SELF_PID:int = os.getpid()
 
 SIGUSR1 = 1
 SIGUSR2 = 2
+SIG_DFL = object()
+
 
 def signal_register(signal:int, handler:Callable) -> None:
+    assert isinstance(signal, int), "TypeError"
+    assert callable(handler) or (handler is SIG_DFL), "TypeError"
+
     # Loop to check if the signal has been activated
     def call_loop() -> None:
         while event in _events:
-            # Wait for the event
             res:DWORD = WaitForSingleObject(event, INFINITE)
-            # Reset event
             ResetEvent(event)
-            # Call handler
             handler:Callable = _signal_handlers[signal]
-            if handler is not None:
+            if handler is not SIG_DFL:
                 handler(signal, None)
 
-    # Check the type of signal (theoretically it can be anything)
-    signal:int = int(signal) # signal must be an int
+    _is_new_signal:bool = (_signal_handlers.get(signal, None) is None)
+    _signal_handlers[signal] = handler
     # Create event and start loop
-    if signal not in _signal_handlers:
-        event_name:str = f"_signal_{SELF_PID}_{signal}"
-        event:HANDLE = CreateEventA(None, True, False, string_to_c(event_name))
+    if _is_new_signal:
+        event:HANDLE = CreateEventA(None, True, False,
+                                    string_to_c(f"_signal_{SELF_PID}_{signal}"))
         _events.append(event)
         Thread(target=call_loop, daemon=True).start()
-    # Set event handler
-    _signal_handlers[signal] = handler
 
-def signal_delete(signal:int) -> None:
-    _signal_handlers[signal] = None
+
+def signal_get(signal:int) -> Callable:
+    if signal not in _signal_handlers:
+        return SIG_DFL
+    return _signal_handlers[signal]
+
 
 def signal_send(pid:int, signal:int) -> None:
     assert signal != 0, "Use `pid_exists` function instead"
-    event_name:str = f"_signal_{pid}_{signal}"
-    event:HANDLE = OpenEventA(EVENT_ALL_ACCESS, False, string_to_c(event_name))
+    try:
+        event:HANDLE = OpenEventA(EVENT_ALL_ACCESS, False,
+                                  string_to_c(f"_signal_{pid}_{signal}"))
+    except OSError:
+        # Signal not accepted by pid
+        return None
     SetEvent(event)
     CloseHandle(event)
 
-def signal_cleanup() -> None:
-    events:list[HANDLE] = _events.copy()
-    _events.clear()
-    for event in events:
-        CloseHandle(event)
 
 pid_exists = psutil.pid_exists
-
-
-"""
-# Child process:
-event_name = string_to_c("MyEvent")
-event_handle = CreateEventA(None, True, False, event_name)
-SetEvent(event_handle)
-
-# Master process:
-event_handle = OpenEventA(EVENT_ALL_ACCESS, False, event_name)
-WaitForSingleObject(event_handle, INFINITE)
-# """
