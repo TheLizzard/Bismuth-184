@@ -159,7 +159,7 @@ def _try_set_iconphoto(root:tk.Tk|BetterTk) -> HasErrorer:
     try:
         from PIL import Image, ImageTk
         from io import BytesIO
-        img:Image.Image = Image.open("sprites/error.png")
+        img:Image.Image = Image.open("sprites/error_icon.png")
         try:
             root.iconphoto(False, img)
         except:

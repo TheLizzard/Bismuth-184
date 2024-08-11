@@ -444,7 +444,7 @@ if __name__ == "__main__":
                 ipc.onclose()
 
     def force_singleton() -> MsgQueue:
-        return None # For debugging
+        # return None # For debugging
         ipc:IPC = IPC("bismuth-184")
         # If this process is the first one:
         if len(ipc.find_where("others")) == 0:
