@@ -77,7 +77,7 @@ class WhiteSpaceManager(Rule):
     # Return
     def return_pressed(self, shift:bool) -> tuple[Break,str]:
         inds:str = "".join(self.INDENTATIONS)
-        # """
+        self.plugin.delete_selection()
         # If before insert, only spaces, copy them and break
         if not self.text.get("insert linestart", "insert").strip(inds):
             self.text.insert("insert linestart", "\n", "program")

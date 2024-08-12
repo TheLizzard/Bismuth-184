@@ -28,9 +28,6 @@ TIME_HIGHLIGHT_BRACKETS:int = 1000
 
 class BracketManager(Rule):
     __slots__ = "text"
-    # Make sure we bind to "backspace" after SelectManager
-    REQUESTED_LIBRARIES:tuple[str] = "selectmanager"
-    REQUESTED_LIBRARIES_STRICT:bool = False
 
     BACKET_HIGHLIGHT_TAG:str = "bracket_highlight"
     BRACKETS:tuple[tuple[str,str,str]] = BRACKETS
@@ -53,6 +50,9 @@ class BracketManager(Rule):
         # if (event.state&ALT) and (not on.startswith("alt-")):
         #     return False
         if on == "backspace":
+            start, end = self.plugin.get_selection()
+            if start != end:
+                return False
             around:str = self.text.get("insert -1c", "insert +1c")
             if len(around) < 2:
                 return False

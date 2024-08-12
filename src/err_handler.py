@@ -31,11 +31,31 @@ BUTTON_KWARGS:dict = dict(activeforeground="white", activebackground="grey",
                           takefocus=False)
 
 
+class ErrorCatcher:
+    __slots__ = "inside", "handler", "ign_err"
+
+    def __init__(self, handler:Callable[None], ign_err:bool) -> ErrorCatcher:
+        self.handler:Callable[None] = handler
+        self.ign_err:bool = ign_err
+        self.inside:bool = False
+
+    def __enter__(self) -> ErrorCatcher:
+        assert not self.inside, "Already inside this ErrorCatcher"
+        self.inside:bool = True
+        return self
+
+    def __exit__(self, exc_type:type, exc_val:Exception, exc_tb:object) -> bool:
+        if exc_type is None:
+            return False
+        self.handler()
+        return self.ign_err
+
+
 class RunManager:
     __slots__ = "funcs", "started_exec"
 
     def __init__(self) -> None:
-        tk.Tk.report_callback_exception = lambda *a: self.report_exc(False)
+        tk.Tk.report_callback_exception = lambda*a:self.report_exc(False)
         self.funcs:list[tuple[Callable,bool]] = []
         self.started_exec:bool = False
 
@@ -48,6 +68,12 @@ class RunManager:
                 _init(Class.singleton, *args, **kwargs)
         return Class.singleton
     _init, __init__ = __init__, lambda self: None
+
+    def error_chatcher(self, critical:bool=True, *,
+                       ign_err:bool=True) -> ErrorCatcher:
+        def inner() -> None:
+            self.report_exc(critical, msg="Exception caught by ErrorCatcher")
+        return ErrorCatcher(inner, ign_err=ign_err)
 
     def register(self, func:Callable, *, exit_on_error:bool=False) -> None:
         assert not self.started_exec, "Can't register any functions after " \

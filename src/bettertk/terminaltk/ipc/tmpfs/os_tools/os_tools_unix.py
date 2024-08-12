@@ -19,3 +19,9 @@ def pid_exists(pid:int) -> bool:
         return True
     except ProcessLookupError:
         return False
+
+
+# Make sure we don't get any signals (that will close us) while we are
+#   initialising. Remove after implementing signal emulation on posix
+for SIG in (SIGUSR1, SIGUSR2):
+    signal_register(SIG, _signal.SIG_IGN)

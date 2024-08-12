@@ -7,7 +7,7 @@ Editor:
 * Rework `BasePlugin.find_bracket_match` to use `BasePlugin.text_replace_tag`
 * On Control-j and Control-l, undo moves insert to the end of the line
 * Unclosed bracket in `FindReplaceManager` with "whole word" fails text="a()\na(x)", search="a("
-* Shift-Return when selected text doesn't delete text
+* Control-Shift-i, Control-Shift-k
 
 IPC:
 * Implement SIGUSR3+ using named semaphore https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/semaphore.h.html
@@ -34,7 +34,7 @@ File Explorer:
 
 Minor things/Low priority:
 * Java's `RunManager` should also handle testing.
-* Finish Konsole implementation (x11, windows)?
+* Finish Konsole implementation (x11, windows) (https://bugs.kde.org/show_bug.cgi?id=238073)
 * plugins.baseplugin.py@AllPlugin.find_bracket_match is a bit slow
 * Profile the program
 * Implement `MenuManager`?

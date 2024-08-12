@@ -60,6 +60,13 @@ class TmpFilesystem:
         self.normalise = lambda path: os.path.join(root, path)
         self.makedir(".", lock=False)
 
+    def __enter__(self) -> TmpFilesystem:
+        return self
+
+    def __exit__(self, *args:tuple) -> bool:
+        self.close()
+        return False
+
     def open(self, path:str, mode:str, *, lock:bool=True) -> File:
         if lock:
             with self.lock_wrapper("fs_write.lock"):
@@ -200,6 +207,13 @@ class IPC:
         self.name:str = name
         self._on_init()
 
+    @contextmanager
+    @staticmethod
+    def master_lock_file(name:str, file:str) -> None:
+        with TmpFilesystem(name) as fs:
+            with fs.lock_wrapper(file):
+                yield None
+
     @staticmethod
     def rm_event(func:Callable[Break|None]) -> Callable[Event,Break|None]:
         """
@@ -223,6 +237,9 @@ class IPC:
         If `ignore_bad_pids` is true, it ignores and skips timeout errors.
         """
         assert not self.dead, "IPC already closed"
+        if event == "":
+            raise ValueError("event can't be an empty string. Look at " \
+                             "the help(IPC.bind) for more info")
 
         def inner(pid:int) -> None:
             if pid == SELF_PID:
@@ -256,6 +273,15 @@ class IPC:
         called next time `call_queued_events` is called.
         If a handler returns a truthy, then the handlers registered before it
         will not be called
+
+        Note if the event is "", it will match all events. Prob going to rename
+        that to "*" or "all-events" not sure yet. Either way don't use "*" or
+        "all-events" as their meaning might change.
+
+        Later on, I will prob introduce events by parts where an event
+        "e1-e2" will match both bindings to "e1" and "e2" (with the exception
+        of "all-events") so don't name your events numbers (as I might make
+        all `event_generate`s add "-<pid>" to the end of event).
         """
         assert not self.dead, "IPC already closed"
         assert_type(event, EventType, "event")
@@ -280,9 +306,9 @@ class IPC:
             if handler is None:
                 self._bindings[event].clear()
             else:
-                for i, (_,h) in enumerate(self._bindings):
+                for i, (_,h) in enumerate(self._bindings.get(event, []).copy()):
                     if h == handler:
-                        self._bindings.pop(i)
+                        self._bindings[event].pop(i)
                         return None
 
     def find_where(self, where:Location) -> set[Pid]:

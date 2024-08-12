@@ -208,7 +208,8 @@ class TerminalTk(BetterTk):
 
     def _handle_msg_loop(self) -> None:
         self.ipc.call_queued_events()
-        self.after(100, self._handle_msg_loop)
+        if self.running():
+            self.after(100, self._handle_msg_loop)
 
 
 if __name__ == "__main__":

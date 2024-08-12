@@ -373,6 +373,7 @@ class App:
         for item, _ in self.explorer.root.recurse_children(withself=False):
             if isfolder(item) and item.expanded:
                 expanded.append(item.fullpath)
+        expanded.extend(p for p in self.expand_later if os.path.isdir(p))
         return added, expanded
 
     def _set_explorer_state(self, added:list[str], expanded:list[str]) -> None:
@@ -443,28 +444,26 @@ if __name__ == "__main__":
             app.mainloop()
         except KeyboardInterrupt:
             return None
-        finally:
-            close_all_ipcs()
 
     def force_singleton() -> MsgQueue:
         # return None # For debugging
-        ipc:IPC = IPC("bismuth-184", sig=SIGUSR1)
-        # If this process is the first one:
-        if len(ipc.find_where("others")) == 0:
-            return ipc
-        # Otherwise send events to first process (hope it isn't misbehaving)
-        else:
-            ipc.event_generate("focus", where="others")
-            for arg in sys.argv[1:]:
-                ipc.event_generate("open", where="others", data=arg)
-            raise SystemExit()
+        with IPC.master_lock_file("bismuth-184", "startup.lock"):
+            ipc:IPC = IPC("bismuth-184", sig=SIGUSR1)
+            # If this process is the first one:
+            if len(ipc.find_where("others")) == 0:
+                return ipc
+            # Otherwise send events to first process (hope it isn't misbehaving)
+            else:
+                ipc.event_generate("focus", where="others")
+                for arg in sys.argv[1:]:
+                    ipc.event_generate("open", where="others", data=arg)
+                raise SystemExit()
 
     manager:RunManager = RunManager()
     manager.register(force_singleton)
     manager.register(start, exit_on_error=True)
     manager.register(init)
     manager.register(run)
-    try:
-        manager.exec()
-    except SystemExit:
-        pass
+    manager.exec()
+    with manager.error_chatcher():
+        close_all_ipcs()

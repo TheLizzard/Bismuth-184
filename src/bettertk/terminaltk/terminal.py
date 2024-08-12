@@ -75,9 +75,11 @@ TERMINAL_IPC:IPC = IPC("terminaltk", sig=SIGUSR2)
 
 
 class BaseTerminal:
-    __slots__ = "proc", "_running", "resizable", "ipc", "slave_pid"
+    __slots__ = "proc", "_running", "resizable", "ipc", "slave_pid", \
+                "_ready_event", "_bindings"
 
     def __init__(self, *, into:int=None) -> None:
+        self._bindings:dict = {}
         self.ipc:IPC = TERMINAL_IPC
         self.ipc.find_where("others")
         self.slave_pid:str = None
@@ -93,21 +95,37 @@ class BaseTerminal:
         self.resizable:bool = hasattr(self, "resize")
         self._running:bool = False
         # Start and wait until ready
-        _ready_event:_Event = _Event()
-        def inner(event:Event) -> None:
-            self.slave_pid:str = event._from
-            _ready_event.set()
-        self.bind("ready", inner)
+        self._ready_event:_Event = _Event()
+        self.bind("ready", self._ready)
         self.start(self.ipc.name, into=into)
         assert self._running, "You must call \"self.run(command, env=env)\" " \
                              'inside "self.start"'
-        _ready_event.wait()
+        self._ready_event.wait()
+
+    def _ready(self, event:Event) -> None:
+        self.slave_pid:str = event._from
+        self._ready_event.set()
+        self.unbind("ready", self._ready)
 
     def send_event(self, event:str, *, data:object=None) -> None:
         self.ipc.event_generate(event, where=self.slave_pid, data=data)
 
     def bind(self, event:str, handler:Callable[Event,None], **kwargs) -> None:
-        self.ipc.bind(event, handler, **{"threaded":True, **kwargs})
+        # Call handler iff it's from the correct pid or event is ready
+        def new_handler(event:Event) -> None:
+            if (event._from == self.slave_pid) or (event.type == "ready"):
+                handler(event)
+        # Add new_handler to binding mapping
+        if (event,handler) in self._bindings:
+            raise RuntimeError("Can't bind the same function twice to " \
+                               "same event. Also it's useless??")
+        self._bindings[(event,handler)] = new_handler
+        # Actual binding
+        self.ipc.bind(event, new_handler, **kwargs)
+
+    def unbind(self, event:str, handler:Callable) -> None:
+        self.ipc.unbind(event, self._bindings[(event,handler)])
+        self._bindings.pop((event,handler))
 
     @staticmethod
     def _is_abandoned(fs:Filesystem, name:str) -> bool:
@@ -136,6 +154,9 @@ class BaseTerminal:
             pass
         if self.proc.poll is None:
             kill_proc(self.proc.send_signal, lambda: not self.proc.poll())
+        while self._bindings:
+            event, handler = next(iter(self._bindings.keys()))
+            self.unbind(event, handler)
 
     def running(self) -> bool:
         return self.proc.poll() is None
