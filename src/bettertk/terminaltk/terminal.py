@@ -156,11 +156,15 @@ class BaseTerminal:
         self.proc:Popen = Popen(command, env=env, shell=True, stdout=PIPE,
                                 stderr=PIPE)
         self._running:bool = True
-        if timeout(2, 0.05, lambda: self.slave_pid is not None):
+        def is_ready() -> bool:
+            return (self.slave_pid is not None) or \
+                   (self.proc.poll() is not None)
+        if timeout(2, 0.05, is_ready):
             raise RuntimeError("Slave didn't report its pid")
-        def reaper() -> None:
-            self.proc.wait()
-        Thread(target=reaper, daemon=True).start()
+        if self.proc.poll() is not None:
+            raise RuntimeError("Xterm closed too quickly. Do you have it " \
+                               "installed? If you do, you might have a " \
+                               "problem with its installation.")
 
     def close(self) -> None:
         if self.running():
@@ -279,5 +283,5 @@ assert issubclass(Terminal, BaseTerminal|None), "You must subclass BaseTerminal.
 if __name__ == "__main__":
     XTERM_DEBUG:bool = True
     term:Terminal = Terminal()
-    term.send("run", data=("python",))
+    term.send("run", data=(sys.executable,))
     term.bind("", lambda e: print(e))

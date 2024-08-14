@@ -56,7 +56,7 @@ class Menu:
         self.master:tk.Misc = master
         self.root:tk.Toplevel = tk.Toplevel(self.master)
         self.root.config(bg="grey")
-        self.root.withdraw()
+        # self.root.withdraw() # DONT uncomment (x11 on mutter sizing issue)
         self.shown:bool = False
         self.frame:tk.Frame = tk.Frame(self.root, bg="black", bd=0,
                                        highlightthickness=0)
@@ -120,7 +120,7 @@ class Menu:
         if self.shown:
             return None
         self.shown:bool = True
-        self.root.iconify()
+        self.root.deiconify()
         self.remove_titlebar()
         self.root.attributes("-topmost", True)
 
@@ -180,6 +180,11 @@ class ExpandedExplorer(Explorer):
         self.menu.add("Copy full path", self.copy_path)
         self.set_cwd_id:int = self.menu.add("Set as working dir", self.set_cwd)
         self.menu.on_cancel:Function[None] = self.menu_cancel
+        # These 2 magical lines, fix a sizing issue with x11 on mutter. The
+        #   issue is that the window doesn't want to get resized down to the
+        #   correct height
+        self.menu.root.update_idletasks()
+        self.menu.root.after_idle(self.menu.root.withdraw)
 
     def right_click(self, frame:tk.Frame) -> str:
         if (self.changing is not None) and (not self.menu.shown):
