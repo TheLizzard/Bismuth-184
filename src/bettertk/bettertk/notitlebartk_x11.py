@@ -2,6 +2,7 @@
 # Inspired by: https://github.com/EDCD/EDMarketConnector/blob/main/theme.py
 # TODO?: Implement _NET_WM_STATE_SKIP_TASKBAR
 from __future__ import annotations
+from ctypes.util import find_library
 from time import sleep
 import tkinter as tk
 import ctypes
@@ -84,11 +85,21 @@ def errcheck_zero(value, func, args):
 def string_to_c(data:str) -> CHAR_PTR:
     return ctypes.create_string_buffer(data.encode())
 
-libx11 = ctypes.cdll.LoadLibrary("libX11.so.6")
-try:
-    libx11fixes = ctypes.cdll.LoadLibrary("libXfixes.so.3")
-except OSError:
+
+# Load X11 [and Xfixes optionally]
+libx11_name:str = find_library("x11") or find_library("libx11") or \
+                  find_library("X11") or find_library("libX11")
+libx11fixes_name:str = find_library("xfixes") or find_library("libxfixes") or \
+                       find_library("Xfixes") or find_library("libXfixes")
+if libx11_name is None:
+    raise RuntimeError("Can't find libX11")
+
+libx11 = ctypes.cdll.LoadLibrary(libx11_name)
+if libx11fixes_name is None:
     libx11fixes = None
+else:
+    libx11fixes = ctypes.cdll.LoadLibrary(libx11fixes_name)
+
 
 # Constants
 PropModeReplace = 0

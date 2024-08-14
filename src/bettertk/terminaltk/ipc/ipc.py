@@ -181,10 +181,13 @@ serialiser.register(Event, "ipc.Event", Event.serialise, Event.deserialise)
 
 
 _sig_to_ipc:dict = {}
-def close_all_ipcs() -> None:
-    for ipc in _sig_to_ipc.values():
+def close_all_ipcs(close_signals:bool=True) -> None:
+    while _sig_to_ipc:
+        ipc:IPC = next(iter(_sig_to_ipc.values()))
         if not ipc.dead:
-            ipc.close()
+            ipc.close(close_signals=False)
+    if close_signals:
+        signal_cleanup()
 
 
 class IPC:
@@ -334,7 +337,8 @@ class IPC:
             elif where == "this":
                 locs.add(SELF_PID)
             elif where.isdigit():
-                locs.add(Pid(where))
+                if pid_exists(int(where)):
+                    locs.add(Pid(where))
             else:
                 raise NotImplementedError(f"Invalid location={where!r} - " \
                                           f"read documentation")
@@ -365,7 +369,6 @@ class IPC:
         Call this method regularly if you called `.bind(threaded=False)`.
         It handles all of the handlers from the current thread.
         """
-        assert not self.dead, "IPC already closed"
         while self._call_queue:
             handlers, event = self._call_queue.pop(0)
             for handler in handlers:
@@ -388,13 +391,16 @@ class IPC:
                     continue
             yield folder
 
-    def close(self) -> None:
+    def close(self, close_signals:bool=False) -> None:
         assert not self.dead, "IPC already closed"
+        _sig_to_ipc.pop(self.sig)
         self.dead:bool = True
         # signal only works in main thread of the main interpreter
         # signal_register(self.sig, self._old_signal)
         self._fs.removedir(self._root)
         self._fs.close()
+        if close_signals:
+            signal_cleanup()
 
     def _check_got_data(self) -> None:
         assert not self.dead, "IPC already closed"

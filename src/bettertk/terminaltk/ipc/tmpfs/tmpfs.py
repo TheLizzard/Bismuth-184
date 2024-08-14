@@ -34,5 +34,8 @@ class SharedMemory(_SharedMemory):
             super().unlink()
 
 
-class TmpFs:
-    __slots__ = "mem", "header", ""
+class _TmpFsBase:
+    __slots__ = "mem", "block_locks"
+
+    def __init__(self, name:str) -> _TmpFsBase:
+        pass

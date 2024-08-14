@@ -8,10 +8,11 @@ Editor:
 * On Control-j and Control-l, undo moves insert to the end of the line
 * Unclosed bracket in `FindReplaceManager` with "whole word" fails text="a()\na(x)", search="a("
 * Control-Shift-i, Control-Shift-k
+* If file is deleted but latest change is save, on open, it's blank
 
 IPC:
-* Implement SIGUSR3+ using named semaphore https://pubs.opengroup.org/onlinepubs/9699919799/basedefs/semaphore.h.html
 * Remove psutil dependency for checking if process exists
+* Use semaphores instead of events (CreateSemaphoreA/WaitForSingleObject/ReleaseSemaphore)
 
 Terminal:
 * Add confirm close prompt when closing a running proc
@@ -19,8 +20,7 @@ Terminal:
 * Add settings window
 * Add a clear terminal button? (can't think of an icon for that)
 * Printing ANSI characters to resize the terminal doesn't work
-* XTerm:
-	- Ctrl-Shift-\ closes xterm without closing the `TerminalFrame`
+* A different `_handle_msg_loop` is started for each terminal.
 
 Notebook:
 * Clicking on the "+" should scroll to the end

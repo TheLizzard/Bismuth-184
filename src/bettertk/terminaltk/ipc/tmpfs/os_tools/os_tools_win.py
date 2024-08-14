@@ -2,7 +2,6 @@
 # https://stackoverflow.com/a/70817890/11106801
 from __future__ import annotations
 from ctypes.wintypes import HANDLE, DWORD, LPVOID, BOOL
-from threading import Thread
 import ctypes
 import msvcrt
 import psutil
@@ -88,64 +87,41 @@ def lock_file(file:File) -> None:
     handle:DWORD = msvcrt.get_osfhandle(file.fileno())
     overlapped:OVERLAPPED = OVERLAPPED(0, 0, 0, 0, 0, 0)
     LockFileEx(handle, LOCKFILE_EXCLUSIVE_LOCK, 0, ~0, ~0,
-               ctypes.pointer(overlapped))
+               ctypes.byref(overlapped))
 
 def unlock_file(file:File) -> None:
     handle:DWORD = msvcrt.get_osfhandle(file.fileno())
     overlapped:OVERLAPPED = OVERLAPPED(0, 0, 0, 0, 0, 0)
-    UnlockFileEx(handle, 0, ~0, ~0, ctypes.pointer(overlapped))
+    UnlockFileEx(handle, 0, ~0, ~0, ctypes.byref(overlapped))
 
 
-_signal_handlers:dict[int:Callable] = {}
-_events:list[HANDLE] = []
-SELF_PID:int = os.getpid()
+class NamedEvent:
+    __Slots__ = "cevent", "closed"
 
-SIGUSR1 = 1
-SIGUSR2 = 2
-SIG_DFL = object()
+    def __init__(self, name:str, *, create:bool=False) -> Semaphore:
+        cname:LPCSTR = string_to_c(name)
+        self.closed:bool = False
+        if create:
+            self.cevent:HANDLE = CreateEventA(None, True, False, cname)
+        else:
+            self.cevent:HANDLE = OpenEventA(EVENT_ALL_ACCESS, False, cname)
 
+    def set(self) -> None:
+        SetEvent(self.cevent)
 
-def signal_register(signal:int, handler:Callable) -> None:
-    assert isinstance(signal, int), "TypeError"
-    assert callable(handler) or (handler is SIG_DFL), "TypeError"
+    def wait_clear(self) -> None:
+        res:DWORD = WaitForSingleObject(self.cevent, INFINITE)
+        ResetEvent(self.cevent)
 
-    # Loop to check if the signal has been activated
-    def call_loop() -> None:
-        while event in _events:
-            res:DWORD = WaitForSingleObject(event, INFINITE)
-            ResetEvent(event)
-            handler:Callable = _signal_handlers[signal]
-            if handler is not SIG_DFL:
-                handler(signal, None)
+    def close(self) -> None:
+        CloseHandle(self.cevent)
+        self.closed:bool = True
 
-    _is_new_signal:bool = (_signal_handlers.get(signal, None) is None)
-    _signal_handlers[signal] = handler
-    # Create event and start loop
-    if _is_new_signal:
-        event:HANDLE = CreateEventA(None, True, False,
-                                    string_to_c(f"_signal_{SELF_PID}_{signal}"))
-        _events.append(event)
-        Thread(target=call_loop, daemon=True).start()
-
-
-def signal_get(signal:int) -> Callable:
-    if signal not in _signal_handlers:
-        return SIG_DFL
-    return _signal_handlers[signal]
-
-
-def signal_send(pid:int, signal:int) -> None:
-    assert signal != 0, "Use `pid_exists` function instead"
-    try:
-        event:HANDLE = OpenEventA(EVENT_ALL_ACCESS, False,
-                                  string_to_c(f"_signal_{pid}_{signal}"))
-    except OSError:
-        # Signal not accepted by pid
-        return None
-    SetEvent(event)
-    CloseHandle(event)
+    def unlink(self) -> None:
+        if not self.closed:
+            self.close()
 
 
 def pid_exists(pid:int) -> bool:
     pid:int = int(pid) # pid must be an int
-    psutil.pid_exists(pid)
+    return psutil.pid_exists(pid)

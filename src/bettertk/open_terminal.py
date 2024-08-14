@@ -17,4 +17,6 @@ else:
     fname:str = os.path.split(file)[-1]
     term.queue(["echo", f' Starting "{fname}" '.center(80,"=")])
     term.queue([file])
+term.queue(term.quit)
 term.mainloop()
+term.close()

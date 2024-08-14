@@ -1,5 +1,6 @@
 from __future__ import annotations
 from subprocess import Popen, PIPE
+from threading import Thread
 from sys import stderr
 import tkinter as tk
 import os
@@ -330,19 +331,22 @@ class ExpandedExplorer(Explorer):
     def open_in_explorer(self) -> None:
         if OPEN_IN_EXPLORER is not None:
             cmd:str = OPEN_IN_EXPLORER.format(path=self.selected.item.fullpath)
-            Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+            proc:Popen = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+            self._no_zombie(proc)
         self.changing:tk.Frame = None
 
     def open_in_terminal(self) -> None:
         if OPEN_IN_TERMINAL is not None:
             cmd:str = OPEN_IN_TERMINAL.format(path=self.selected.item.fullpath)
-            Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+            proc:Popen = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+            self._no_zombie(proc)
         self.changing:tk.Frame = None
 
     def open_item(self) -> None:
         if OPEN_DEFAULT is not None:
             cmd:str = OPEN_DEFAULT.format(path=self.selected.item.fullpath)
-            Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+            proc:Popen = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+            self._no_zombie(proc)
         self.changing:tk.Frame = None
 
     # Copy path
@@ -350,6 +354,14 @@ class ExpandedExplorer(Explorer):
         self.master.clipboard_clear()
         self.master.clipboard_append(self.selected.item.fullpath)
         self.changing:tk.Frame = None
+
+    def _no_zombie(self, proc:Popen) -> None:
+        """
+        Not calling proc.wait() creates zombies so this reaps them.
+        """
+        def inner() -> None:
+            proc.wait()
+        Thread(target=inner, daemon=True).start()
 
 
 if __name__ == "__main__":

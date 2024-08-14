@@ -8,6 +8,7 @@
       | signal   | int|Signal | Sends signal to process (needs process) |
       | print    | str        | Prints a string                         |
       | exit     |            | Drops everything and exits              |
+      | ping     |            | Got a ping, respond with pong           |
       +-----------------------------------------------------------------+
       +-----------------------------------------------------------------+
       | Generated events:                                               |
@@ -17,6 +18,8 @@
       | running  |            | Responce to "run"                       |
       | exit     |            | Responce to "exit" at exit              |
       | error    | str        | An error occured, error msg in data     |
+      | ping     |            | Send a ping, master should pong         |
+      | pong     |            | Respond to master's ping with pong      |
       +-----------------------------------------------------------------+
 
 Notes for windows:
@@ -26,10 +29,11 @@ Notes for windows:
     for unpause use DebugActiveProcessStop
 """
 from __future__ import annotations
+from threading import Thread, Lock, Event as _Event
 from sys import stdin, stdout, stderr, argv
 from subprocess import Popen, check_output
-from threading import Thread, Lock, Event as _Event
 import signal as _signal
+from time import sleep
 import traceback
 import os
 
@@ -44,13 +48,21 @@ class Slave:
         # Set up bindings:
         bind = lambda event, handler: ipc.bind(event, handler, threaded=True)
         bind("run", self.run)
-        bind("pause", ipc.rm_event(self.pause))
-        bind("unpause", ipc.rm_event(self.unpause))
+        bind("pause", self.ipc.rm_event(self.pause))
+        bind("unpause", self.ipc.rm_event(self.unpause))
         bind("signal", lambda event: self._send_signal(event.data))
         bind("print", lambda event: print(event.data, end="", flush=True))
-        bind("exit", ipc.rm_event(self._dead_event.set))
+        bind("exit", self.ipc.rm_event(self._dead_event.set))
+        bind("ping", lambda event: self.send("pong", event.data))
         # Tell master we are ready
-        self.ipc.event_generate("ready", where=MASTER_PID)
+        self.send("ready")
+        # Die if master is dead
+        Thread(target=self._die_with_master, daemon=True).start()
+
+    def _die_with_master(self) -> None:
+        while self.ipc.find_where(MASTER_PID):
+            sleep(2)
+        self._dead_event.set()
 
     def mainloop(self) -> None:
         while not self._dead_event.is_set():
@@ -59,12 +71,12 @@ class Slave:
             except KeyboardInterrupt:
                 pass
 
-    def _error(self, error:str) -> None:
-        self.ipc.event_generate("error", where=MASTER_PID, data=error)
+    def send(self, event:str, data:object=None) -> None:
+        self.ipc.event_generate(event, where=MASTER_PID, data=data)
 
     def run(self, event:Event) -> None:
         if self.proc is not None:
-            self._error("ProcAlreadyRunning")
+            self.send("error", "ProcAlreadyRunning")
         else:
             self._run(event.data)
 
@@ -72,34 +84,37 @@ class Slave:
         if os.name == "posix":
             self._send_signal(_signal.SIGSTOP)
         else:
-            self._error("NotImplementedError")
+            self.send("error", "NotImplementedError")
 
     def unpause(self) -> None:
         if os.name == "posix":
             self._send_signal(_signal.SIGCONT)
         else:
-            self._error("NotImplementedError")
+            self.send("error", "NotImplementedError")
 
     def _run(self, command:tuple[str]) -> None:
         if len(command) == 0:
-            return self._error("EmptyCommand")
+            return self.send("error", "EmptyCommand")
         if command[0] == "cd":
             return self.cd(command)
-        self.proc:Popen = Popen(command, stdin=stdin, stdout=stdout,
-                                stderr=stderr, shell=False)
-        self.ipc.event_generate("running", where=MASTER_PID)
+        try:
+            self.proc:Popen = Popen(command, stdin=stdin, stdout=stdout,
+                                    stderr=stderr, shell=False)
+        except FileNotFoundError:
+            self.send("error", f"Invalid executable: {command[0]!r}")
+            return None
+        self.send("running")
         def wait() -> None:
             self.proc.wait()
             exit_code:int = self.proc.poll()
             self.proc:Popen = None
             reset_stdin()
-            self.ipc.event_generate("finished", where=MASTER_PID,
-                                    data=exit_code)
+            self.send("finished", data=exit_code)
         Thread(target=wait, daemon=True).start()
 
     def _send_signal(self, signal:_signal.Signals|int) -> None:
         if not isinstance(signal, _signal.Signals|int):
-            return self._error("InvalidSignal")
+            return self.send("error", "InvalidSignal")
         if self.proc is None:
             return None
         self.proc.send_signal(signal)
@@ -117,11 +132,11 @@ class Slave:
                 print(error)
         else:
             print("slave: cd: too many arguments")
-        self.ipc.event_generate("finished", where=MASTER_PID, data=exit_code)
+        self.send("finished", data=exit_code)
 
 
 try:
-    from ipc import IPC, Event, SIGUSR1, SIGUSR2, Location
+    from ipc import IPC, Event, SIGUSR2, Location, close_all_ipcs
 
     if os.name == "posix":
         # https://docs.python.org/3/library/termios.html#example
@@ -139,9 +154,9 @@ try:
     try:
         slave:Slave = Slave(ipc)
         slave.mainloop()
+        slave.send("exit")
     finally:
-        ipc.event_generate("exit", where=MASTER_PID)
-        ipc.close()
+        close_all_ipcs()
 except SystemExit:
     pass
 except BaseException:

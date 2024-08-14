@@ -2,12 +2,22 @@ from __future__ import annotations
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from tempfile import TemporaryDirectory
 import tkinter as tk
+import sys
 import os
 
 from bettertk.terminaltk.terminaltk import TerminalTk
 from bettertk.messagebox import tell as telluser
 from bettertk import BetterTkSettings
 from .baserule import Rule, SHIFT, ALT, CTRL
+
+if os.name == "posix":
+    PRINTF:tuple[str] = ("printf",)
+elif os.name == "nt":
+    BASE_PATH:str = os.path.dirname(__file__)
+    PRINTF:tuple[str] = (sys.executable, os.path.join(BASE_PATH, "helpers",
+                                                      "printf.py"))
+else:
+    raise NotImplementedError(f"Unsupported {os.name=!r}")
 
 
 class RunManager(Rule):
@@ -113,7 +123,7 @@ class RunManager(Rule):
             return None
         cwd:str = self.cwd or req_cwd or os.path.expanduser("~")
         command:tuple[str] = self.format(self.CD, {"folder":cwd})
-        self.term.queue(["printf", print_str])
+        self.term.queue([*PRINTF, print_str])
         self.term.queue(command)
 
     def compile(self, *, print_str:str="", command:list[str]=None) -> bool:
@@ -124,7 +134,7 @@ class RunManager(Rule):
         command:list[str] = command or self.COMPILE
         command:list[str] = self.format(command, {"file":self.text.filepath,
                                                   "tmp":self.tmp.name})
-        self.term.queue(["printf", print_str], condition=(0).__eq__)
+        self.term.queue([*PRINTF, print_str], condition=(0).__eq__)
         self.term.queue(command)
         return True
 
@@ -133,7 +143,7 @@ class RunManager(Rule):
             return None
         command = self.format(self.RUN, {"file":self.text.filepath,
                                          "tmp":self.tmp.name}) + list(args)
-        self.term.queue(["printf", print_str], condition=(0).__eq__)
+        self.term.queue([*PRINTF, print_str], condition=(0).__eq__)
         self.term.queue(command)
 
     def after(self, *, print_str:str="", command:list[str]=None) -> None:
@@ -141,7 +151,7 @@ class RunManager(Rule):
             return None
         command:list[str] = command or self.AFTER
         command:list[str] = self.format(command, {"file":self.text.filepath})
-        self.term.queue(["printf", print_str], condition=(0).__eq__)
+        self.term.queue([*PRINTF, print_str], condition=(0).__eq__)
         self.term.queue(command)
 
     def test(self, args:Iterable[str], *, print_str:str="") -> None:

@@ -10,10 +10,10 @@ import os
 
 try:
     from .sprites.creator import init as create_sprites
-    from .terminal import Terminal, Event, kill_proc
+    from .terminal import Terminal, Event, kill_proc, close_all_ipcs
 except ImportError:
     from sprites.creator import init as create_sprites
-    from terminal import Terminal, Event, kill_proc
+    from terminal import Terminal, Event, kill_proc, close_all_ipcs
 from bettertk import BetterTk
 
 
@@ -40,7 +40,8 @@ def tk_wait_for_map(widget:tk.Misc) -> None:
 Cmd:type = tuple[str]
 CmdPredicate:type = Callable[int,bool]
 METHODS_TO_COPY_TERMINAL:tuple[str] = "close", "bind", "running", "clear", \
-                                      "send_signal", "ipc", "send_event"
+                                      "send_signal", "ipc", "send_event", \
+                                      "sep_window"
 METHODS_TO_COPY_TERMINAL_FRAME:tuple[str] = "queue", "queue_clear", "restart", \
                                             "_term_bind"
 
@@ -48,13 +49,14 @@ METHODS_TO_COPY_TERMINAL_FRAME:tuple[str] = "queue", "queue_clear", "restart", \
 class TerminalFrame(tk.Frame):
     def __init__(self, master:tk.Misc, **kwargs) -> TerminalFrame:
         self.curr_cmd = self._last_cmd = None
+        self._to_call:list[Callable] = []
         self.started:bool = False
         self._cmd_queue:list[tuple[Cmd,CmdPredicate]] = []
         super().__init__(master, bg="black", bd=0, highlightthickness=0,
                          **kwargs)
         super().focus_set()
 
-    def start(self, *, use_signal_catcher:bool=True) -> None:
+    def start(self) -> None:
         tk_wait_for_map(self)
         self.term:Terminal = Terminal(into=self)
         if self.term.resizable:
@@ -64,17 +66,16 @@ class TerminalFrame(tk.Frame):
             setattr(self, attr_name, getattr(self.term, attr_name))
 
         self._term_bind("finished", self._queue, threaded=True)
-        self._term_bind("error", self._raise_error, threaded=True)
+        self._term_bind("error", self._raise_error, threaded=False)
         self.started:bool = True
+        self._handle_msg_loop()
 
-        # As python signals can only happen between bytecodes, we need
-        # to constantly run some python code.
-        # This assumes that tkinter is in the main thread or the main thread
-        # if taking up CPU resources.
-        def signal_catcher() -> None:
-            self.after(100, signal_catcher)
-        if use_signal_catcher:
-            self.after(100, signal_catcher)
+    def _handle_msg_loop(self) -> None:
+        self.ipc.call_queued_events()
+        while self._to_call:
+            self._to_call.pop(0)()
+        if self.running():
+            super().after(100, self._handle_msg_loop)
 
     def _term_bind(self, event:str, handler:Callable, *, threaded:bool) -> None:
         self.term.bind(event, handler, threaded=threaded)
@@ -86,7 +87,7 @@ class TerminalFrame(tk.Frame):
     def queue(self, cmd:Cmd, condition:CmdPredicate=lambda*x:1) -> None:
         if not self.started:
             raise RuntimeError("First call .start() after grid managering us")
-        assert isinstance(cmd, tuple|list), "TypeError"
+        assert callable(cmd) or isinstance(cmd, tuple|list), "TypeError"
         self._cmd_queue.append((cmd, condition))
         if self.curr_cmd is None:
             self._queue()
@@ -101,7 +102,11 @@ class TerminalFrame(tk.Frame):
                 return None
         self._cmd_queue.pop(0)
         self.curr_cmd = self._last_cmd = cmd
-        self.send_event("run", data=cmd)
+        if callable(cmd):
+            self._to_call.append(cmd)
+            self._queue()
+        else:
+            self.send_event("run", data=cmd)
 
     def restart(self) -> None:
         if self.curr_cmd is not None:
@@ -112,7 +117,7 @@ class TerminalFrame(tk.Frame):
         self._queue()
 
     def _raise_error(self, event:Event) -> None:
-        raise RuntimeError(repr(event.data))
+        raise RuntimeError(f"Slave reported error: {event.data!r}")
 
     def queue_clear(self, stop_cur_proc:bool) -> None:
         self._cmd_queue.clear()
@@ -129,7 +134,11 @@ class TerminalTk(BetterTk):
         self.setup_buttons()
         self.term:TerminalFrame = TerminalFrame(self, width=815, height=460)
         self.term.pack(side="bottom", fill="both", expand=True)
-        self.term.start(use_signal_catcher=False)
+        self.term.start()
+        if self.term.sep_window:
+            self.term.config(width=1, height=1)
+            self.sep.destroy()
+            super().resizable(False, False)
 
         attr_names:str = METHODS_TO_COPY_TERMINAL + \
                          METHODS_TO_COPY_TERMINAL_FRAME
@@ -139,10 +148,16 @@ class TerminalTk(BetterTk):
 
         self._term_bind("finished", self._finished_proc, threaded=False)
         self._term_bind("running", self._running_proc, threaded=False)
-        self._handle_msg_loop()
+        self._die_with_slave()
+
+    def _die_with_slave(self) -> None:
+        if self.running():
+            super().after(1, self.term._to_call.append, self._die_with_slave)
+        else:
+            self.destroy()
 
     def destroy(self) -> None:
-        self.close()
+        getattr(self, "close", lambda:None)()
         super().destroy()
 
     def setup_buttons(self) -> None:
@@ -153,9 +168,9 @@ class TerminalTk(BetterTk):
 
         frame = tk.Frame(self, bg="black", bd=0, highlightthickness=0)
         frame.pack(side="top", fill="x")
-        sep = tk.Frame(self, bg="grey", bd=0, highlightthickness=0, width=1,
-                       height=3)
-        sep.pack(side="top", fill="x")
+        self.sep = tk.Frame(self, bg="grey", bd=0, highlightthickness=0,
+                            width=1, height=3)
+        self.sep.pack(side="top", fill="x")
 
         self.pause_button = tk.Button(frame, image=self.sprites["pause"],
                                       command=self._toggle_pause, **BKWARGS,
@@ -176,6 +191,7 @@ class TerminalTk(BetterTk):
         frame.grid_columnconfigure(4, weight=1)
 
     def _toggle_pause(self) -> None:
+        if not self.running(): return None
         if self.pause_button.cget("text") == "Pause":
             self.pause_button.config(text="Play", image=self.sprites["play"])
             self.send_event("pause")
@@ -184,6 +200,7 @@ class TerminalTk(BetterTk):
             self.send_event("unpause")
 
     def _toggle_close(self) -> None:
+        if not self.running(): return None
         if self.close_button.cget("text") == "Close":
             self.send_signal(signal.SIGTERM)
         else:
@@ -193,23 +210,21 @@ class TerminalTk(BetterTk):
         pass
 
     def _kill(self) -> None:
-        self.send_signal(signal.SIGABRT)
+        if not self.running(): return None
+        self.send_signal(signal.SIGTERM)
 
     def _running_proc(self, event:Event) -> None:
+        if not self.running(): return None
         self.kill_button.config(state="normal")
         self.pause_button.config(state="normal")
         self.close_button.config(text="Close", image=self.sprites["close"])
 
     def _finished_proc(self, event:Event) -> None:
+        if not self.running(): return None
         self.pause_button.config(text="Pause", image=self.sprites["pause"])
         self.kill_button.config(state="disabled")
         self.pause_button.config(state="disabled")
         self.close_button.config(image=self.sprites["restart"], text="Restart")
-
-    def _handle_msg_loop(self) -> None:
-        self.ipc.call_queued_events()
-        if self.running():
-            self.after(100, self._handle_msg_loop)
 
 
 if __name__ == "__main__":
