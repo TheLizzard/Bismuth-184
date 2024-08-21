@@ -35,11 +35,12 @@ class TabNotch(tk.Canvas):
     __slots__ = "text_id", "text", "page", "rrect_id", "width", "min_size"
     PADX:int = 7
 
-    def __init__(self, master:TabNotches, min_size:int=0) -> TabNotch:
+    def __init__(self, master:TabNotches, min_size:int=0,
+                 font:str="TkTextFont") -> TabNotch:
         super().__init__(master, **WIDGET_KWARGS, height=1, width=1,
                          bg=NOTCH_BG)
         self.text_id:int = super().create_text((0,0), text="", anchor="nw",
-                                               fill="white")
+                                               fill="white", font=font)
         self.min_size:int = min_size
         self.rrect_id:int = None
         self.width:int = 0
@@ -82,15 +83,17 @@ class TabNotch(tk.Canvas):
 
 class TabNotches(BetterFrame):
     __slots__ = "add_notch", "min_size", "notebook", "notches", "tmp_notch", \
-                "notch_dragging", "dragging", "dragx", "on_reshuffle"
+                "notch_dragging", "dragging", "dragx", "on_reshuffle", "font"
 
-    def __init__(self, notebook:Notebook, min_size:int=0) -> TabNotches:
+    def __init__(self, notebook:Notebook, min_size:int=0,
+                 font:str="TkTextFont") -> TabNotches:
+        self.font:str|Font = font
         self.on_reshuffle:Function[None] = lambda: None
         self.notebook:Notebook = notebook
         super().__init__(notebook, bg=NOTCH_BG, hscroll=True, vscroll=False,
                          HScrollBarClass=BetterScrollBarHorizontal,
                          hscrolltop=True, scrollbar_kwargs={"thickness":4})
-        self.add_notch:TabNotch = TabNotch(self)
+        self.add_notch:TabNotch = TabNotch(self, font=self.font)
         self.add_notch.grid(row=1, column=1)
         self.add_notch.rename("+")
         self.h_scrollbar.hide:bool = HIDE_SCROLLBAR
@@ -110,7 +113,7 @@ class TabNotches(BetterFrame):
         self.bind_all("<ButtonRelease-1>", self.end_dragging, add=True)
 
     def add(self) -> TabNotch:
-        notch:TabNotch = TabNotch(self, min_size=self.min_size)
+        notch:TabNotch = TabNotch(self, min_size=self.min_size, font=self.font)
         notch.grid(row=1, column=len(self.notches))
         self.add_notch.grid(row=1, column=len(self.notches)+1)
         self.notches.append(notch)
@@ -297,13 +300,15 @@ class Notebook(tk.Frame):
     __slots__ = "pages", "next_id", "curr_page", "notches", "bottom", \
                 "on_try_close"
 
-    def __init__(self, master:tk.Misc, min_tab_notch_size:int=0) -> Notebook:
+    def __init__(self, master:tk.Misc, min_tab_notch_size:int=0,
+                 font:str="TkTextFont") -> Notebook:
         self.pages:list[NotebookPage] = []
         self.curr_page:NotebookPage = None
         self.on_try_close:Function[NotebookPage,Break] = lambda page: False
 
         super().__init__(master, **WIDGET_KWARGS, bg="black")
-        self.notches:TabNotches = TabNotches(self, min_tab_notch_size)
+        self.notches:TabNotches = TabNotches(self, min_tab_notch_size,
+                                             font=font)
         self.notches.pack(fill="both")
         self.notches.on_reshuffle = self.update_pages_list
         self.bottom:tk.Frame = tk.Frame(self, **WIDGET_KWARGS, bg="black")

@@ -1,6 +1,7 @@
 from __future__ import annotations
 from tkinter.filedialog import askdirectory
 from time import sleep, perf_counter
+from tkinter import font
 import tkinter as tk
 import sys
 import os
@@ -61,7 +62,8 @@ class App:
                                       sashwidth=4, bg="grey")
         pannedwindow.pack(fill="both", expand=True)
 
-        self.notebook:notebook.Notebook = notebook.Notebook(pannedwindow, 0)
+        self.notebook = notebook.Notebook(pannedwindow, 0,
+                                          font=settings.window.font)
         self.notebook.bind("<<Tab-Create>>", lambda _: self.new_tab())
         self.notebook.bind("<<Tab-Switched>>", self.change_selected_tab)
         self.notebook.bind("<<Close-All>>", self.root_close)
@@ -73,7 +75,8 @@ class App:
         add = tk.Button(left_frame, text="Add Folder", bg="black", fg="white",
                         activebackground="grey", activeforeground="white",
                         highlightthickness=0, takefocus=False, relief="flat",
-                        command=self.explorer_add_folder)
+                        command=self.explorer_add_folder,
+                        font=settings.window.font)
         add.grid(row=1, column=1, sticky="news")
         sep = tk.Canvas(left_frame, bg="grey", bd=0, highlightthickness=0,
                         width=1, height=1)
@@ -84,7 +87,8 @@ class App:
         rem = tk.Button(left_frame, text="Remove Folder", bg="black",
                         activebackground="grey", activeforeground="white",
                         highlightthickness=0, takefocus=False, fg="white",
-                        command=self.explorer_remove_folder, relief="flat")
+                        command=self.explorer_remove_folder, relief="flat",
+                        font=settings.window.font)
         rem.grid(row=1, column=3, sticky="news")
         left_frame.grid_rowconfigure(3, weight=1)
         left_frame.grid_columnconfigure((1, 3), weight=1)
@@ -100,7 +104,9 @@ class App:
             self.explorer_frame.v_scrollbar.hide:bool = True
         VirtualEvents(self.explorer_frame) # Must be before the BindFrame
         make_bind_frame(self.explorer_frame)
-        self.explorer:ExpandedExplorer = ExpandedExplorer(self.explorer_frame)
+        self.explorer = ExpandedExplorer(self.explorer_frame,
+                                         font=settings.explorer.font,
+                                         monofont=settings.explorer.monofont)
         self.explorer_frame.bind("<<Explorer-Open>>", self.open_tab_explorer)
         self.explorer_frame.bind("<<Explorer-Expanded>>",
                                  lambda e: self._explorer_expand())
@@ -137,7 +143,8 @@ class App:
     # Tab management
     def new_tab(self, filepath:str=None) -> BetterText:
         page:NotebookPage = self.notebook.tab_create()
-        text:BetterText = TextClass(page.frame, highlightthickness=0, bd=0)
+        text:BetterText = TextClass(page.frame, highlightthickness=0, bd=0,
+                                    font=settings.editor.font)
         if isinstance(text, BetterText):
             text._xviewfix.dlineinfo.assume_monospaced()
             text.ignore_tags_with_bg:bool = True
@@ -272,20 +279,28 @@ class App:
         self.root.notmaximised(wait=True)
         self.root.update_idletasks()
 
-        _, x, y = self.root.geometry().split("+")
         added, expanded = self._get_explorer_state()
         true_explorer_frame:tk.Frame = self.explorer_frame.master_frame
         curr_text:BetterText = self.page_to_text(self.notebook.curr_page)
         curr_text_path:str = None if curr_text is None else curr_text.filepath
-
-        settings.window.update(height=self.root.winfo_height(), x=x, y=y)
-        settings.explorer.update(width=true_explorer_frame.winfo_width())
-        settings.notebook.update(width=self.notebook.winfo_width())
-        settings.notebook.update(open=self._get_notebook_state())
-        settings.explorer.update(added=added, expanded=expanded)
-        settings.window.update(focused_text=curr_text_path)
+        # Update settings.explorer
+        settings.explorer.width = true_explorer_frame.winfo_width()
+        # Update settings.notebook
+        settings.notebook.width = self.notebook.winfo_width()
+        settings.notebook.open = self._get_notebook_state()
+        # Update settings.explorer
+        settings.explorer.expanded = expanded
+        settings.explorer.added = added
+        # Update settings.window
+        size, x, y = self.root.geometry().split("+")
+        width, height = size.split("x")
+        settings.window.x, settings.window.y = int(x), int(y)
+        settings.window.height = self.root.winfo_height()
+        settings.window.focused_text = curr_text_path
+        # Save settings
         settings.save()
 
+        # Destroy+cleanup plugins
         for text in self.text_to_page:
             plugin:Plugin = getattr(text, "plugin", None)
             if plugin:
@@ -446,7 +461,7 @@ if __name__ == "__main__":
             return None
 
     def force_singleton() -> MsgQueue:
-        # return None # For debugging
+        return None # For debugging
         with IPC.master_lock_file("bismuth-184", "startup.lock"):
             ipc:IPC = IPC("bismuth-184", sig=SIGUSR1)
             # If this process is the first one:

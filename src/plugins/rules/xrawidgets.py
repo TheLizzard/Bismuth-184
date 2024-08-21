@@ -79,11 +79,16 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
         for on in ("<Enter>", "<Leave>"):
             self.sidebar_text.bind(on, lambda e: "break")
 
+    # Override idlelib's implementation of update_font
+    def update_font(self):
+        self.sidebar_text.config(font=self.text.cget("font"))
+
     def attach(self) -> None:
         super().attach()
         self.text.add_widget(self.sidebar_text, column=-2)
         self.sidebar_text.config(bg=self.text.cget("bg"),
                                  fg=self.text.cget("fg"))
+        self.text.after(10, self.update_font)
         #self.sidebar_text.tag_config("sel", foreground="", background="")
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:

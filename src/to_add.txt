@@ -9,6 +9,7 @@ Editor:
 * Unclosed bracket in `FindReplaceManager` with "whole word" fails text="a()\na(x)", search="a("
 * For any file [save, close Bismuth, delete, open Bismuth] opens the file blank as if it was blank
 * Starting code never appears
+* On Windows, the window grows horizontally each time the Bismuth-184 is opened
 
 IPC:
 * Remove psutil dependency for checking if process exists

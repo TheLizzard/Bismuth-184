@@ -95,10 +95,10 @@ class Menu:
             return None
         self.hide(cancelled=True)
 
-    def add(self, text:str, command:Function) -> int:
+    def add(self, text:str, command:Function, **kwargs:dict) -> int:
         command:Function = chain(self.hide, command)
         widget:tk.Button = tk.Button(self.frame, command=command, text=text,
-                                     **BKWARGS)
+                                     **{**BKWARGS, **kwargs})
         widget.pack(fill="x", side="top")
         self.children.append(widget)
         return len(self.children)-1
@@ -137,10 +137,11 @@ class ExpandedExplorer(Explorer):
     __slots__ = "cwd", "menu", "set_cwd_id", "bin_folder", "renaming", \
                 "creating"
 
-    def __init__(self, master:tk.Misc) -> ExpandedExplorer:
+    def __init__(self, master:tk.Misc, font:str="TkDefaultFont",
+                 monofont:str="TkFixedFont") -> None:
         self.cwd:tk.Frame = None
-        super().__init__(master)
-        self._create_menu()
+        super().__init__(master, font=font, monofont=monofont)
+        self._create_menu(font=font)
         self.ggiver.right_click:Function[tk.Frame,str] = self.right_click
         self.bin_folder:str = self._find_empty_bin()
         os.makedirs(self.bin_folder, exist_ok=True)
@@ -165,20 +166,21 @@ class ExpandedExplorer(Explorer):
         return bin_folder
 
     # Menu
-    def _create_menu(self) -> None:
+    def _create_menu(self, font:str) -> None:
         self.menu:Menu = Menu(self.master)
-        self.menu.add("Rename", self.rename)
-        self.menu.add("Delete", self.delete)
+        self.menu.add("Rename", self.rename, font=font)
+        self.menu.add("Delete", self.delete, font=font)
         self.menu.add_separator()
-        self.menu.add("New file", self.newfile)
-        self.menu.add("New folder", self.newfolder)
+        self.menu.add("New file", self.newfile, font=font)
+        self.menu.add("New folder", self.newfolder, font=font)
         self.menu.add_separator()
         # self.menu.add("Open (externally)", self.open_item)
-        self.menu.add("Open in explorer", self.open_in_explorer)
-        self.menu.add("Open in terminal", self.open_in_terminal)
+        self.menu.add("Open in explorer", self.open_in_explorer, font=font)
+        self.menu.add("Open in terminal", self.open_in_terminal, font=font)
         self.menu.add_separator()
-        self.menu.add("Copy full path", self.copy_path)
-        self.set_cwd_id:int = self.menu.add("Set as working dir", self.set_cwd)
+        self.menu.add("Copy full path", self.copy_path, font=font)
+        self.set_cwd_id:int = self.menu.add("Set as working dir", self.set_cwd,
+                                            font=font)
         self.menu.on_cancel:Function[None] = self.menu_cancel
         # These 2 magical lines, fix a sizing issue with x11 on mutter. The
         #   issue is that the window doesn't want to get resized down to the

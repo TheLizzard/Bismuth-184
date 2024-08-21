@@ -46,11 +46,14 @@ PATH:str = os.path.abspath(os.path.dirname(__file__))
 
 class Explorer:
     __slots__ = "master", "changing", "ggiver", "root", "item_to_frame", \
-                "expanded_before"
+                "expanded_before", "font", "monofont"
 
-    def __init__(self, master:tk.Misc) -> Explorer:
-        self.changing:tk.Frame = None
+    def __init__(self, master:tk.Misc, font:str="TkDefaultFont",
+                 monofont:str="TkFixedFont") -> Explorer:
+        self.font:str = font
+        self.monofont:str = monofont
         self.master:tk.Misc = master
+        self.changing:tk.Frame = None
         self.master.grid_columnconfigure(1, weight=1)
         self.root:Root = Root(FileSystem(), autoexpand=False)
         self.item_to_frame:dict[Item:tk.Frame] = dict()
@@ -211,14 +214,14 @@ class Explorer:
             else:
                 text = "+"
             expandeder = tk.Label(frame, text=text, bg="black", fg="white",
-                                  font=("DejaVu Sans Mono", 9))
+                                  font=self.monofont)
             expandeder.grid(row=1, column=2, sticky="news")
             frame.expandeder = expandeder
         else:
             raise NotImplementedError(f"Don't have a clue to what {item} is")
 
         name = tk.Label(frame, text=item.purename, bg="black", fg="white",
-                        anchor="w")
+                        anchor="w", font=self.font)
         name.grid(row=1, column=4, sticky="news")
         frame.name = name
         return frame
