@@ -1,9 +1,12 @@
 from __future__ import annotations
 from os.path import dirname, join
+import string
 import json
 import os
 
-PATH:str = join(dirname(dirname(__file__)), "state.json")
+ALLOWED_CHARS:str = string.ascii_letters + string.digits + "_-"
+OS_NAME:str = "".join(char for char in os.name if char in ALLOWED_CHARS)
+PATH:str = join(dirname(dirname(__file__)), f"state.{OS_NAME}.json")
 
 DEFAULTS:str = """
 {

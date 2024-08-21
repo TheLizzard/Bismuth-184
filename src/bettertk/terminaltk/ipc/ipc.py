@@ -23,6 +23,7 @@ Handler:type = Callable["Event",Break|None]
 EventBindings:type = list[tuple[Threaded,Handler]]
 
 _TMP_FOLDER:str = tempfile.gettempdir()
+CHUNK_SIZE:int = 5120 # 5kb
 
 
 def format_to_permutation(format:str) -> Iterable[str]:
@@ -257,7 +258,7 @@ class IPC:
         assert_type(where, Location, "where")
         assert_type(event, EventType, "event")
         event:Event = Event(event, data, _from=self._root)
-        data:bytes = serialiser.enc_dumps(event)
+        data:bytes = serialiser.dumps(event).encode("utf-8")
         threads:list[Thread] = []
         for pid in self.find_where(where):
             thread:Thread = Thread(target=inner, args=(pid,), daemon=True)
@@ -406,15 +407,19 @@ class IPC:
         assert not self.dead, "IPC already closed"
         # For each file in our folder:
         for filename in self._fs.listfiles(self._root):
-            # Get the path and read it (we don't need to lock the fs for that)
+            # Get the path
             path:str = self._fs.join(self._root, filename)
-            with self._fs.open(path, "rb", lock=False) as file:
-                data:bytes = file.read()
-            # If we read and decoded the data correctly, delete the file
-            # Assume if we can decode data, it's the full data and we should
-            # not expect anything to write to that file anyways
+            # If we read and decode the data correctly, delete the file. Assume
+            # if we can decode data, it's the full data and we should not expect
+            # anything to write to that file anyways
             try:
-                event:Event = serialiser.enc_loads(data)
+                data:str = ""
+                with self._fs.open(path, "rb", lock=False) as file:
+                    while True:
+                        chunk:bytes = file.read(CHUNK_SIZE)
+                        if not chunk: break
+                        data += chunk.decode("utf-8")
+                event:Event = serialiser.loads(data)
                 assert_type(event, Event, "event")
             except (TypeError, ValueError, UnicodeDecodeError):
                 continue

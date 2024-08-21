@@ -128,24 +128,29 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Custom files
-# Non editor related files/Other projects
-src/C++ programs/
-src/state.state
 
-# Debug files
-backups/
-src/test.py
-src/test.cpp
-src/state.json
+# IDE state information
+src/state.posix.json
+src/state.java.json
+src/state.nt.json
+
+# File explorer bin
 src/file_explorer/$BIN/
-src/file_explorer/old/
+
+# Test files for file explorer
 src/file_explorer/test/
 src/file_explorer/tester.py
+
+# From BetterTk .gitignore
 src/bettertk/bettertk/flickering_test.py
 src/bettertk/terminaltk/test.py
 src/bettertk/terminaltk/sprites/copyrighted/
 src/bettertk/terminaltk/pty terminal/test.cpp
 src/bettertk/terminaltk/pty terminal/old/
+
+# Test files for IDLE
 bad.py
 bad.c
+
+# Not implemented yet
+term-only/

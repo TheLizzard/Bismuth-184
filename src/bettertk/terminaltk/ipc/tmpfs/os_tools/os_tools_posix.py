@@ -84,10 +84,10 @@ _sem_getvalue.restype = ctypes.c_int
 _sem_getvalue.errcheck = _errcheck_zero
 
 
-class NamedEvent:
+class NamedSemaphore:
     __slots__ = "csem", "name", "closed"
 
-    def __init__(self, name:str, *, create:bool=False) -> Semaphore:
+    def __init__(self, name:str, *, create:bool=False) -> NamedSemaphore:
         if create:
             self.csem = _sem_open(string_to_c(name), O_CREAT|O_EXCL, 0o644, 0)
         else:

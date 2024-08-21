@@ -1,5 +1,6 @@
 from __future__ import annotations
 from tkinter.filedialog import askopenfilename, asksaveasfilename
+from sys import getdefaultencoding
 import tkinter as tk
 import os
 
@@ -7,7 +8,8 @@ from bettertk.messagebox import tell as telluser, askyesno
 from bettertk.terminaltk.terminaltk import TerminalTk
 from .baserule import Rule, SHIFT, ALT, CTRL
 
-NO_SAVE:bool = False # for debug purposes
+DEFAULT_ENCODING:str = getdefaultencoding()
+NO_SAVE:bool = False # For debug only
 
 
 class SaveLoadManager(Rule):
@@ -134,8 +136,8 @@ class SaveLoadManager(Rule):
         if NO_SAVE:
             print("Stopping save")
         else:
-            with open(self.text.filepath, "w") as file:
-                file.write(data)
+            with open(self.text.filepath, "wb") as file:
+                file.write(data.encode(DEFAULT_ENCODING))
         self.text.filesystem_data:str = data
         self.text.event_generate("<<Saved-File>>")
 

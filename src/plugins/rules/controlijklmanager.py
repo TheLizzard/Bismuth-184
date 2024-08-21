@@ -9,9 +9,12 @@ class ControlIJKLManager(Rule):
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> SeeEnd:
         evs:tuple[str] = (
-                           # New line shortcuts (top and bottom)
-                           "<KeyPress-i>", "<KeyPress-k>",
-                           "<KeyPress-j>", "<KeyPress-l>",
+                           # New line shortcuts
+                           "<Control-i>", "<Control-k>",
+                           "<Control-I>", "<Control-K>",
+                           # Swap lines
+                           "<Control-j>", "<Control-l>",
+                           "<Control-J>", "<Control-L>",
                          )
         super().__init__(plugin, text, ons=evs)
         self.text:tk.Text = self.widget
@@ -19,25 +22,27 @@ class ControlIJKLManager(Rule):
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
         if not (event.state&CTRL):
             return False
-        on:str = on.removeprefix("keypress-")
-        return on, True
+        on:str = on.removeprefix("keypress-").removeprefix("control-").lower()
+        return on, event.state&SHIFT, True
 
-    def do(self, _:str, on:str) -> Break:
+    def do(self, _:str, on:str, shift:bool) -> Break:
         with self.plugin.see_end_wrapper():
             with self.plugin.undo_wrapper():
                 self.plugin.remove_selection()
                 if on == "i":
-                    return self.control_i()
+                    return self.control_i(shift)
                 if on == "k":
-                    return self.control_k()
+                    return self.control_k(shift)
                 if on == "j":
+                    if shift: return False
                     return self.control_j()
                 if on == "l":
+                    if shift: return False
                     return self.control_l()
         raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
 
     # Control-i and Control-k
-    def control_i(self) -> Break:
+    def control_i(self, shift:bool) -> Break:
         if self.text.compare("insert linestart", "==", "1.0"):
             file_start:bool = True
             new_pos:str = "1.0"
@@ -45,15 +50,15 @@ class ControlIJKLManager(Rule):
             file_start:bool = False
             new_pos:str = "insert -1l lineend"
         self.plugin.move_insert(new_pos)
-        self.text.event_generate("<Return>")
+        self.text.event_generate("<" + ("Shift-"*shift) + "Return>")
         if file_start:
             self.text.event_generate("<Left>")
         return True
 
-    def control_k(self) -> Break:
+    def control_k(self, shift:bool) -> Break:
         new_pos:str = "insert lineend"
         self.plugin.move_insert(new_pos)
-        self.text.event_generate("<Return>")
+        self.text.event_generate("<" + ("Shift-"*shift) + "Return>")
         return True
 
     # Control-j and Control-l

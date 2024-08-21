@@ -58,7 +58,7 @@ elif IS_UNIX:
                        # f"xterm*scrollbar.thumb: {THUMB_SPRITE}",
                      )
     XTERM_ARGS:str = "-b 0 -bw 0 -bc +ai -bg black -fg white -fa Monospace " \
-                     "-fs 12 -cu -sb -rightbar -sl 100000 "
+                     "-fs 12 -cu -sb -rightbar -sl 100000 -ti 340 "
     for XTERM_XRM in XTERM_XRMS:
         XTERM_ARGS += f"-xrm 'xterm*{XTERM_XRM}' "
     XTERM_ARGS:str = XTERM_ARGS.removesuffix(" ")

@@ -19,7 +19,7 @@ except ImportError:
 
 
 _signal_handlers:dict[int:Callable] = {}
-_events:list[NamedEvent] = []
+_events:list[NamedSemaphore] = []
 SELF_PID:int = os.getpid()
 _stop:bool = False
 
@@ -49,8 +49,8 @@ def signal_register(signal:int, handler:Callable) -> None:
     _signal_handlers[signal] = handler
     # Create event and start loop
     if _is_new_signal:
-        event:NamedEvent = NamedEvent(f"_signal_{SELF_PID}_{signal}",
-                                      create=True)
+        event:NamedSemaphore = NamedSemaphore(f"_signal_{SELF_PID}_{signal}",
+                                              create=True)
         _events.append(event)
         Thread(target=call_loop, daemon=True).start()
 
@@ -61,7 +61,8 @@ def signal_get(signal:int) -> Callable:
 def signal_send(pid:int, signal:int) -> None:
     assert signal != 0, "Use `pid_exists` function instead"
     try:
-        event:NamedEvent = NamedEvent(f"_signal_{pid}_{signal}", create=False)
+        event:NamedSemaphore = NamedSemaphore(f"_signal_{pid}_{signal}",
+                                              create=False)
     except OSError:
         return None # Signal not accepted by pid
     event.set()
@@ -75,6 +76,7 @@ def signal_cleanup() -> None:
         _events.pop().set()
 
 
-class NamedLock(NamedEvent):
-    acquire = lambda self: wait_clear(self)
-    release = lambda self: self.set(self)
+_namedlock_dict:dict = {"acquire":NamedSemaphore.wait_clear,
+                        "release":NamedSemaphore.set}
+NamedLock:type = type("NamedLock", (NamedSemaphore,), _namedlock_dict)
+NamedEvent:type = type("NamedEvent", (NamedSemaphore,), {})

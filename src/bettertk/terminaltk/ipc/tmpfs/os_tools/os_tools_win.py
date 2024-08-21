@@ -95,10 +95,10 @@ def unlock_file(file:File) -> None:
     UnlockFileEx(handle, 0, ~0, ~0, ctypes.byref(overlapped))
 
 
-class NamedEvent:
+class NamedSemaphore:
     __Slots__ = "cevent", "closed"
 
-    def __init__(self, name:str, *, create:bool=False) -> Semaphore:
+    def __init__(self, name:str, *, create:bool=False) -> NamedSemaphore:
         cname:LPCSTR = string_to_c(name)
         self.closed:bool = False
         if create:
