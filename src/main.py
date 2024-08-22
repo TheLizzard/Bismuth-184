@@ -461,7 +461,7 @@ if __name__ == "__main__":
             return None
 
     def force_singleton() -> MsgQueue:
-        return None # For debugging
+        # return None # For debugging
         with IPC.master_lock_file("bismuth-184", "startup.lock"):
             ipc:IPC = IPC("bismuth-184", sig=SIGUSR1)
             # If this process is the first one:
