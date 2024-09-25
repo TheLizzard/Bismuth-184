@@ -11,6 +11,9 @@ except ImportError:
 WARNINGS:bool = True
 DEBUG:bool = False
 
+Dependancy:type = tuple[str,bool]
+Dependancies:type = list[Dependancy]
+
 
 class ProtoPlugin:
     __slots__ = "rules", "widget", "loaded_rules"
@@ -32,59 +35,51 @@ class ProtoPlugin:
         while True:
             for i, rule in enumerate(rules):
                 Rule:type = rule.__class__
-                unmet:tuple[str] = self._try_load_rule(Rule)
-                if not unmet:
+                if self._should_load_rule(Rule, _pass):
                     if DEBUG: print(f"[DEBUG]: attaching {Rule.__name__}")
                     self.loaded_rules.add(Rule.__name__.lower())
                     rule.attach()
                     rules.pop(i)
                     break
-                msg:str = f"{Rule.__name__} requested {unmet[0]!r} library " \
-                          f"but it's not loaded."
-                if _pass == "warn":
-                    if Rule.REQUESTED_LIBRARIES_STRICT:
-                        continue
-                    print(f"[WARNING] {msg} {Rule.__name__} might "
-                          f"malfunction.")
-                    if DEBUG: print(f"[DEBUG]: attaching {Rule.__name__}")
-                    self.loaded_rules.add(Rule.__name__.lower())
-                    rule.attach()
-                    rules.pop(i)
-                    break
-                if _pass == "error":
-                    raise RuntimeError(msg)
             else:
                 break
 
-    def _try_load_rule(self, Rule:type) -> tuple[str]:
-        libraries:tuple[str] = self._get_rule_dependencies(Rule)
-        unmet:tuple[str] = self._unmet_dependencies(libraries)
+    def _should_load_rule(self, Rule:type[Rule], _pass:str) -> Success:
+        requests:Dependancies = self._get_rule_dependencies(Rule)
+        unmet:Dependancies = self._unmet_dependencies(requests)
+        if not unmet:
+            return True
+        err_msg:str = f"{Rule.__name__} requested {unmet[0]!r} library " \
+                      f"but it's not loaded."
+        if _pass == "warn":
+            for lib, strict in unmet:
+                if strict:
+                    return False
+            print(f"[WARNING] {err_msg} {Rule.__name__} might "
+                  f"malfunction.")
+            return True
+        if _pass == "error":
+            raise RuntimeError(err_msg)
+        return False
+
+    def _unmet_dependencies(self, requests:Dependancies) -> Dependancies:
+        unmet:list[Dependancy] = []
+        for req in requests:
+            lib, _ = req
+            if not self.is_library_loaded(lib):
+                unmet.append(req)
         return unmet
 
-    def _unmet_dependencies(self, libraries:tuple[str]) -> tuple[str]:
-        unmet:list[str] = []
-        for lib in libraries:
-            if not self.is_library_loaded(lib):
-                unmet.append(lib)
-        return tuple(unmet)
-
-    def _get_rule_dependencies(self, Rule:type) -> tuple[str]:
-        libraries:tuple[str]|str = Rule.REQUESTED_LIBRARIES
-        if isinstance(libraries, str):
-            libraries:tuple[str] = (libraries,)
-        assert isinstance(libraries, tuple|list), "TypeError"
-        for lib in libraries:
-            assert isinstance(lib, str), "TypeError"
+    def _get_rule_dependencies(self, Rule:type) -> Dependancies:
+        err:str = f"TypeError: Invalid REQUESTED_LIBRARIES in {Rule.__name__!r}"
+        libraries:Dependancies = Rule.REQUESTED_LIBRARIES
+        assert isinstance(libraries, tuple|list), err
+        for request in libraries:
+            assert isinstance(request, tuple|list), err
+            assert len(request) == 2, err
+            lib, strict = request
+            assert isinstance(lib, str) and isinstance(strict, bool), err
         return libraries
-
-    def request_library(self, method:str, requester:str, strict:bool=False):
-        if not self.is_library_loaded(method):
-            msg:str = f"{requester} requested the library {method!r} " \
-                      f"but it's not loaded."
-            if strict:
-                raise RuntimeError(msg)
-            elif WARNINGS:
-                print(f"[WARNING] {msg} {requester} might malfunction.")
 
     def detach(self) -> None:
         if self.widget.plugin == self:

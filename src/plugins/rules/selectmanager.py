@@ -15,8 +15,8 @@ MOUSE_START_MARK:str = "mouse_start"
 class SelectManager(Rule):
     __slots__ = "text", "old_sel_fg", "old_sel_bg", "old_inactivebg", \
                 "selecting", "set_linsert"
-    REQUESTED_LIBRARIES:tuple[str] = "insertdeletemanager"
-    REQUESTED_LIBRARIES_STRICT:bool = True
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("insertdeletemanager",True),
+                                                 ("jerrymanager",False)]
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
         evs = (
@@ -27,6 +27,7 @@ class SelectManager(Rule):
                 # Mouse
                 "<Double-Button-1>", "<Triple-Button-1>",
                 "<ButtonPress-1>", "<ButtonRelease-1>", "<B1-Motion>",
+                "<<ButtonPress-1>>", "<<ButtonRelease-1>>", "<<B1-Motion>>",
                 # User/program input
                 "<<Before-Insert>>", "<<After-Insert>>", "<<After-Delete>>",
                 # Backspace to stop other rules from handling it if selsected
@@ -87,6 +88,11 @@ class SelectManager(Rule):
         ctrl:bool = event.state & CTRL
         shift:bool = event.state & SHIFT
         alt:bool = event.state & ALT
+
+        if on in ("<buttonpress-1>", "<buttonrelease-1>", "<b1-motion>"):
+            on:str = on.removeprefix("<").removesuffix(">")
+        elif on in ("buttonpress-1", "buttonrelease-1"):
+            print("jerry failed us")
 
         if on in ("backspace", "delete", "<before-delete>"):
             start, end = self.plugin.get_selection()

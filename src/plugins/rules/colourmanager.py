@@ -22,8 +22,7 @@ class ColourConfig(dict):
 class ColourManager(Rule, ColorDelegator):
     __slots__ = "old_bg", "old_fg", "old_insertbg", "colorizer", "text", \
                 "coloriser"
-    REQUESTED_LIBRARIES:tuple[str] = "insertdeletemanager"
-    REQUESTED_LIBRARIES_STRICT:bool = True
+    REQUESTED_LIBRARIES:tuple[str] = [("insertdeletemanager",True)]
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> ColourManager:
         evs:tuple[str] = (

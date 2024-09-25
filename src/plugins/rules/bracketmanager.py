@@ -21,7 +21,7 @@ elif os.name == "nt":
                 ("'", "'", "'"),
                 ('"', '"', '"'))
 else:
-    raise NotImplementedError(f"OS {os.name!r} not recognised.")
+    raise NotImplementedError(f"OS {os.name=!r} not recognised.")
 
 TIME_HIGHLIGHT_BRACKETS:int = 1000
 

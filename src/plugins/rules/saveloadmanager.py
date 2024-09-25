@@ -14,8 +14,7 @@ NO_SAVE:bool = False # For debug only
 
 class SaveLoadManager(Rule):
     __slots__ = "text"
-    REQUESTED_LIBRARIES:tuple[str] = "save_module"
-    REQUESTED_LIBRARIES_STRICT:bool = True
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("save_module",True)]
 
     FILE_TYPES:tuple[(str, str)] = (("Text files", ".txt"),
                                     ("All types", "*"))

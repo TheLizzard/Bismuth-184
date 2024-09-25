@@ -10,6 +10,8 @@ Editor:
 * For any file [save, close Bismuth, delete, open Bismuth] opens the file blank as if it was blank
 * Starting code never appears
 * On Windows, the window grows horizontally each time the Bismuth-184 is opened
+* Control-R should use `xview` and `yview` instead of `see`
+* Pasting scrolls to the start of the line
 
 IPC:
 * Remove psutil dependency for checking if process exists

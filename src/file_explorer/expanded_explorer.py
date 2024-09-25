@@ -30,9 +30,9 @@ OPEN_IN_TERMINAL:str = 'python3 bettertk/open_terminal.py "{path}"'
 
 BKWARGS:dict = dict(activeforeground="white", activebackground="grey", bd=0,
                     bg="black", relief="flat", fg="white", justify="left",
-                    highlightthickness=0, anchor="nw")
+                    highlightthickness=0, anchor="nw", padx="2m", pady="1m")
 MENU_BD:int = 2
-MENU_SEP_PADY:int = 5
+MENU_SEP_PADY:int = "1m"
 MENU_SEP_HEIGHT:int = 2
 CIRCLE_PADX:int = 5
 CIRCLE_RADIUS:int = 4
@@ -56,7 +56,7 @@ class Menu:
         self.master:tk.Misc = master
         self.root:tk.Toplevel = tk.Toplevel(self.master)
         self.root.config(bg="grey")
-        # self.root.withdraw() # DONT uncomment (x11 on mutter sizing issue)
+        self.root.withdraw()
         self.shown:bool = False
         self.frame:tk.Frame = tk.Frame(self.root, bg="black", bd=0,
                                        highlightthickness=0)
@@ -123,23 +123,28 @@ class Menu:
         self.root.deiconify()
         self.remove_titlebar()
         self.root.attributes("-topmost", True)
+        # libxwayland has a bug so these 2 lines are necessary for wayland
+        # but not x11
+        self.root.update_idletasks()
+        self.root.geometry("")
 
     def remove_titlebar(self) -> None:
         if IS_UNIX:
             self.root.attributes("-type", "splash")
         elif IS_WINDOWS:
-            self.root.overrideredirect()
+            self.root.overrideredirect(True)
         else:
             raise NotImplementedError("UnrecognisedOS")
 
 
 class ExpandedExplorer(Explorer):
     __slots__ = "cwd", "menu", "set_cwd_id", "bin_folder", "renaming", \
-                "creating"
+                "creating", "font"
 
     def __init__(self, master:tk.Misc, font:str="TkDefaultFont",
                  monofont:str="TkFixedFont") -> None:
         self.cwd:tk.Frame = None
+        self.font:str = font
         super().__init__(master, font=font, monofont=monofont)
         self._create_menu(font=font)
         self.ggiver.right_click:Function[tk.Frame,str] = self.right_click
@@ -182,11 +187,6 @@ class ExpandedExplorer(Explorer):
         self.set_cwd_id:int = self.menu.add("Set as working dir", self.set_cwd,
                                             font=font)
         self.menu.on_cancel:Function[None] = self.menu_cancel
-        # These 2 magical lines, fix a sizing issue with x11 on mutter. The
-        #   issue is that the window doesn't want to get resized down to the
-        #   correct height
-        self.menu.root.update_idletasks()
-        self.menu.root.after_idle(self.menu.root.withdraw)
 
     def right_click(self, frame:tk.Frame) -> str:
         if (self.changing is not None) and (not self.menu.shown):
@@ -254,7 +254,7 @@ class ExpandedExplorer(Explorer):
     def rename(self) -> None:
         self.renaming:bool = True
         self.changing.entry = tk.Entry(self.changing, bg="black", fg="white",
-                                       insertbackground="white")
+                                       insertbackground="white", font=self.font)
         self.changing.entry.grid(row=1, column=4, sticky="news")
         self.changing.entry.bind("<Return>", self._rename)
         self.changing.entry.bind("<KP_Enter>", self._rename)

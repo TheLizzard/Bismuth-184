@@ -43,6 +43,7 @@ def make_pat() -> re.compile:
     iostream = r"([^.'\"\\#]\b|^)" + idleany("iostream", get_iostream()) + r"\b"
 
     include = idleany("include", [r"#(include|[^\n]*?(?=//|/\*|\n|$))"])
+    include = idleany("include", [r"#(include *|(?:\\\n|[^\n])*?(?=/(?:/|\*)|\n|$))"])
 
     multiline_comment = r"/\*[^\*]*((\*(?!/))[^\*]*)*(\*/)?"
     comment = idleany("comment", [r"//[^\n]*", multiline_comment])

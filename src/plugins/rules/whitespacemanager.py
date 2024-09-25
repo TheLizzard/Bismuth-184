@@ -14,8 +14,7 @@ RBRACKETS:dict[str:str] = {v:k for k,v in BRACKETS.items()}
 
 class WhiteSpaceManager(Rule):
     __slots__ = "text", "indentation", "after_id"
-    REQUESTED_LIBRARIES:tuple[str] = "insertdeletemanager"
-    REQUESTED_LIBRARIES_STRICT:bool = True
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("insertdeletemanager",True)]
 
     INDENTATIONS:dict[str,int] = {" ":4, "\t":1}
 
@@ -51,8 +50,15 @@ class WhiteSpaceManager(Rule):
             self.after_id:str = None
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
+        # Slight optimisation (no need to check for indentation type
+        #   if the text is short enough)
         if (on == "<raw-after-insert>") and (len(event.data["raw"][1]) < 50):
             return False
+        # If there's something selected, we can't handle backspace
+        if on == "backspace":
+            start, end = self.plugin.get_selection()
+            if start != end:
+                return False
         return event.state&SHIFT, True
 
     def do(self, on:str, shift:bool) -> Break:

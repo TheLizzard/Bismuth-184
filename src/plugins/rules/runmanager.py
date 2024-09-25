@@ -22,8 +22,7 @@ else:
 
 class RunManager(Rule):
     __slots__ = "text", "args", "term", "cwd", "tmp"
-    REQUESTED_LIBRARIES:tuple[str] = "bind_all"
-    REQUESTED_LIBRARIES_STRICT:bool = False
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("bind_all",True)]
 
     CD:list[str] = ["cd", "{folder}"]
     COMPILE:list[str] = None
@@ -62,9 +61,12 @@ class RunManager(Rule):
         if (self.term is not None) and (self.term.running()):
             self.term.queue_clear(stop_cur_proc=True)
             self.term.close()
+        self.cleanup()
+        super().destroy()
+
+    def cleanup(self, _:tk.Event=None) -> None:
         if self.tmp is not None:
             self.tmp.cleanup()
-        super().destroy()
 
     def do(self, on:str, shift:bool, data:str) -> Break:
         if on == "f5":
@@ -100,6 +102,7 @@ class RunManager(Rule):
             window_settings:BetterTkSettings = BetterTkSettings()
             window_settings.config(use_border=False)
             self.term = TerminalTk(self.widget, settings=window_settings)
+            self.term.bind("<<Closing-Terminal>>", self.cleanup)
             print_str:str = " Starting ".center(80, "=") + "\n"
         else:
             self.term.queue_clear(stop_cur_proc=True)
@@ -107,9 +110,8 @@ class RunManager(Rule):
             self.term.clear()
             print_str:str = " Restarting ".center(80, "=") + "\n"
 
-        if self.tmp is not None:
-            self.tmp.cleanup()
-        self.tmp:TemporaryDirectory = TemporaryDirectory()
+        if self.tmp is None:
+            self.tmp:TemporaryDirectory = TemporaryDirectory()
         self.term.topmost(True)
         self.term.topmost(False)
         self.term.focus_set()

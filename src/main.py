@@ -1,15 +1,15 @@
 from __future__ import annotations
 from tkinter.filedialog import askdirectory
 from time import sleep, perf_counter
-from tkinter import font
 import tkinter as tk
 import sys
 import os
 os.chdir(os.path.dirname(__file__))
 
 DEBUG_TIME:bool = False
-if DEBUG_TIME: from bettertk.messagebox import debug
-if DEBUG_TIME: timer:list[float] = [perf_counter()]
+if DEBUG_TIME:
+    from bettertk.messagebox import debug
+    timer:list[float] = [perf_counter()]
 
 from file_explorer.expanded_explorer import ExpandedExplorer, isfolder
 from bettertk.betterframe import make_bind_frame
@@ -109,7 +109,7 @@ class App:
                                          monofont=settings.explorer.monofont)
         self.explorer_frame.bind("<<Explorer-Open>>", self.open_tab_explorer)
         self.explorer_frame.bind("<<Explorer-Expanded>>",
-                                 lambda e: self._explorer_expand())
+                                 lambda _: self._explorer_expand())
 
         pannedwindow.add(left_frame, sticky="news",
                          width=settings.explorer.width)
@@ -145,6 +145,7 @@ class App:
         page:NotebookPage = self.notebook.tab_create()
         text:BetterText = TextClass(page.frame, highlightthickness=0, bd=0,
                                     font=settings.editor.font)
+        text.plugin:Plugin = None
         if isinstance(text, BetterText):
             text._xviewfix.dlineinfo.assume_monospaced()
             text.ignore_tags_with_bg:bool = True
@@ -170,7 +171,7 @@ class App:
         return text
 
     def plugin_manage(self, text:BetterText) -> None:
-        old:Plugin = getattr(text, "plugin", None)
+        old:Plugin = getattr(text, "plugin")
         for Plugin in plugins:
             if Plugin.can_handle(text.filepath):
                 # If same plugin, nop
@@ -203,7 +204,7 @@ class App:
                              icon="warning", center_widget=text)
             if not allow:
                 return True
-        plugin:Plugin = getattr(text, "plugin", None)
+        plugin:Plugin = getattr(text, "plugin")
         if plugin is not None:
             text.plugin.destroy()
         self.text_to_page.pop(text)
@@ -302,13 +303,44 @@ class App:
 
         # Destroy+cleanup plugins
         for text in self.text_to_page:
-            plugin:Plugin = getattr(text, "plugin", None)
+            plugin:Plugin = getattr(text, "plugin")
             if plugin:
                 plugin.destroy()
+            while text._tclCommands:
+                text.deletecommand(text._tclCommands[0])
 
         self.root.destroy()
         return "break"
 
+    # Add remove folder in explorer
+    def explorer_remove_folder(self) -> None:
+        if self.explorer.selected is None:
+            return None
+        selected:Item = self.explorer.selected.item
+        if selected not in self.explorer.root.children:
+            return None
+        self.explorer.remove(selected)
+
+    def explorer_add_folder(self) -> None:
+        path:str = askdirectory(master=self.root)
+        if not path:
+            return None
+        self.explorer.add(path, expand=True)
+
+    # Expand folder in explorer
+    def _explorer_expand(self, expanded:list[str]=None) -> None:
+        if expanded is not None:
+            self.expand_later.update(set(expanded))
+        changed:bool = True
+        while self.expand_later and changed:
+            changed:bool = False
+            for item, _ in self.explorer.root.recurse_children(withself=False):
+                if isfolder(item) and (item.fullpath in self.expand_later):
+                    self.expand_later.remove(item.fullpath)
+                    self.explorer.expand(item)
+                    changed:bool = True
+
+    # Get/set state
     def _get_notebook_state(self) -> list[tuple]:
         opened:list[tuple] = []
         for page in self.notebook.iter_pages():
@@ -345,7 +377,8 @@ class App:
                 text.edit_modified(True)
                 text.event_generate("<<Clear-Separators>>")
                 text.event_generate("<<Modified-Change>>")
-            text.event_generate("<<Move-Insert>>", data=(insert,))
+            if text.plugin:
+                text.plugin.move_insert(insert)
             text.mark_set("insert", insert)
             text.xview("moveto", xview)
             text.yview("moveto", yview)
@@ -367,20 +400,6 @@ class App:
                              center=True, icon="warning",
                              center_widget=text, block=False)
 
-    def explorer_remove_folder(self) -> None:
-        if self.explorer.selected is None:
-            return None
-        selected:Item = self.explorer.selected.item
-        if selected not in self.explorer.root.children:
-            return None
-        self.explorer.remove(selected)
-
-    def explorer_add_folder(self) -> None:
-        path:str = askdirectory(master=self.root)
-        if not path:
-            return None
-        self.explorer.add(path, expand=True)
-
     def _get_explorer_state(self) -> tuple[list[str],list[str]]:
         getpath = lambda item: item.fullpath
         added:list[str] = list(map(getpath, self.explorer.root.children))
@@ -395,18 +414,6 @@ class App:
         for path in added:
             self.explorer.add(path)
         self._explorer_expand(expanded)
-
-    def _explorer_expand(self, expanded:list[str]=None) -> None:
-        if expanded is not None:
-            self.expand_later.update(set(expanded))
-        changed:bool = True
-        while self.expand_later and changed:
-            changed:bool = False
-            for item, _ in self.explorer.root.recurse_children(withself=False):
-                if isfolder(item) and (item.fullpath in self.expand_later):
-                    self.expand_later.remove(item.fullpath)
-                    self.explorer.expand(item)
-                    changed:bool = True
 
     # The mainloop function
     def mainloop(self) -> None:
@@ -429,32 +436,34 @@ class App:
         for text, page in self.text_to_page.items():
             if page == self.notebook.curr_page:
                 text.focus_set()
-                return None
+                break
 
 
 if __name__ == "__main__":
     from err_handler import RunManager
 
     def start(ipc:IPC=None) -> tuple[App,IPC]:
-        if DEBUG_TIME: debug(f"Imports: {perf_counter()-timer[0]:.2f}")
-        if DEBUG_TIME: timer[0] = perf_counter()
+        if DEBUG_TIME:
+            debug(f"Imports: {perf_counter()-timer[0]:.2f}")
+            timer[0] = perf_counter()
         return App(ipc)
 
     def init(app:App) -> tuple[App,IPC]:
-        if DEBUG_TIME: debug(f"App create: {perf_counter()-timer[0]:.2f}")
-        if DEBUG_TIME: timer[0] = perf_counter()
+        if DEBUG_TIME:
+            debug(f"App create: {perf_counter()-timer[0]:.2f}")
+            timer[0] = perf_counter()
         app.init()
         for path in sys.argv[1:]:
             app.open(path)
         return app
 
     def run(app:App) -> None:
-        if DEBUG_TIME: debug(f"App init: {perf_counter()-timer[0]:.2f}")
-        if DEBUG_TIME: timer[0] = perf_counter()
-        for i in range(100):
-            app.root.update()
-        if DEBUG_TIME: debug(f"App 100 updates: {perf_counter()-timer[0]:.2f}")
-        if DEBUG_TIME: timer[0] = perf_counter()
+        if DEBUG_TIME:
+            debug(f"App init: {perf_counter()-timer[0]:.2f}")
+            timer[0] = perf_counter()
+            def inner() -> None:
+                debug(f"To idle: {perf_counter()-timer[0]-0.01:.2f}")
+            app.root.after(10, app.root.after_idle, inner)
         try:
             app.mainloop()
         except KeyboardInterrupt:

@@ -14,7 +14,7 @@ CTRL:int = 4
 
 class Rule:
     __slots__ = "ons", "widget", "ids", "plugin", "attached"
-    REQUESTED_LIBRARIES:tuple[str] = ()
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = []
 
     def __init__(self, plugin:BasePlugin, widget:tk.Misc, ons:tuple[str]):
         assert isinstance(ons, tuple), "TypeError"

@@ -11,8 +11,7 @@ from .baserule import Rule
 # /usr/lib/python3.10/idlelib/percolator.py
 class InsertDeleteManager(Rule, Delegator):
     __slots__ = "text"
-    REQUESTED_LIBRARIES:tuple[str] = "event_generate"
-    REQUESTED_LIBRARIES_STRICT:bool = True
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("event_generate",True)]
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> InsertDeleteManager:
         super().__init__(plugin, text, ons=())

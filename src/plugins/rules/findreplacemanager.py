@@ -10,6 +10,7 @@ from .baserule import Rule, SHIFT, ALT, CTRL
 from ..baseplugin import BasePlugin
 from .undomanager import UndoManager
 from .wrapmanager import WrapManager
+from .jerrymanager import JerryManager
 from .colourmanager import ColourManager
 from .selectmanager import SelectManager
 from .shortcutmanager import RemoveShortcuts
@@ -36,6 +37,7 @@ class MiniPlugin(BasePlugin):
         rules:list[Rule] = [
                              WrapManager,
                              UndoManager,
+                             JerryManager,
                              ColourManager,
                              SelectManager,
                              RemoveShortcuts,
@@ -71,8 +73,7 @@ class FindReplaceManager(Rule):
     __slots__ = "text", "window", "find", "replace", "regex", "matchcase", \
                 "wholeword", "button", "shown", "geom", "replace_label", \
                 "replace_str", "find_cache", "swap"
-    REQUESTED_LIBRARIES:tuple[str] = "colourmanager"
-    REQUESTED_LIBRARIES_STRICT:bool = True
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("colourmanager",True)]
     MAX_FINDS:int = 100
     HIT_TAG:str = "hit"
 

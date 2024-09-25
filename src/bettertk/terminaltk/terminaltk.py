@@ -39,16 +39,15 @@ def tk_wait_for_map(widget:tk.Misc) -> None:
 
 Cmd:type = tuple[str]
 CmdPredicate:type = Callable[int,bool]
-METHODS_TO_COPY_TERMINAL:tuple[str] = "close", "bind", "running", "clear", \
-                                      "send_signal", "ipc", "send_event", \
-                                      "sep_window"
+METHODS_TO_COPY_TERMINAL:tuple[str] = "bind", "running", "clear", "ipc", \
+                                      "send_signal", "send_event", "sep_window"
 METHODS_TO_COPY_TERMINAL_FRAME:tuple[str] = "queue", "queue_clear", "restart", \
-                                            "_term_bind"
+                                            "_term_bind", "close"
 
 
 class TerminalFrame(tk.Frame):
     def __init__(self, master:tk.Misc, **kwargs) -> TerminalFrame:
-        self.curr_cmd = self._last_cmd = None
+        self.curr_cmd = self._last_cmd = self.term = None
         self._to_call:list[Callable] = []
         self.started:bool = False
         self._cmd_queue:list[tuple[Cmd,CmdPredicate]] = []
@@ -76,6 +75,14 @@ class TerminalFrame(tk.Frame):
             self._to_call.pop(0)()
         if self.running():
             super().after(100, self._handle_msg_loop)
+
+    def close(self) -> None:
+        try:
+            super().event_generate("<<Closing-Terminal>>")
+        except tk.TclError:
+            pass
+        if self.term is not None:
+            self.term.close()
 
     def _term_bind(self, event:str, handler:Callable, *, threaded:bool) -> None:
         self.term.bind(event, handler, threaded=threaded)
@@ -162,7 +169,8 @@ class TerminalTk(BetterTk):
 
     def setup_buttons(self) -> None:
         self.sprites:dict[str,ImageTk.PhotoImage] = dict()
-        sprites = create_sprites(256>>1, 256>>3, 220, SPRITES_NEEDED)
+        sprites = create_sprites(size=32, compute_size=128,
+                                 sprites_wanted=SPRITES_NEEDED)
         for name, image in sprites.items():
             self.sprites[name] = ImageTk.PhotoImage(image, master=self)
 

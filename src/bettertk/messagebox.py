@@ -14,7 +14,7 @@ FRAME_KWARGS = dict(bd=0, highlightthickness=0, bg="black")
 BUTTON_KWARGS = dict(fg="white", activeforeground="white", bg="black",
                      activebackground="black")
 
-ICONS = creator.SpritesCache(256, 256>>2, 220)
+ICONS = creator.SpritesCache(size=64, compute_size=256)
 
 
 class Popup(BetterTk):
@@ -164,6 +164,12 @@ def debug(text:str) -> None:
     Tell(None, "Debug", text, icon="info", center=False, block=False)
 
 
+if __name__ == "__main__a":
+    # TeXInfo apparently uses className="info" for something...
+    tcl = tk._tkinter.create(None, "messagebox", "info", False, 1, True,
+                             False, None)
+
+
 if __name__ == "__main__":
     def tksleep(time:int) -> None:
         root.after(time*1000, root.quit)
@@ -177,6 +183,7 @@ if __name__ == "__main__":
     result = askyesno(root, title="Delete file?", message=msg, icon="warning")
     print(result)
 
-    msg:str = 'Are you sure you want to delete "Hi.txt"?'
-    result = tell(root, title="Delete file?", message=msg, icon="info")
-    print(result)
+    if result:
+        msg:str = 'You deleted "Hi.txt"?'
+        result = tell(root, title="Deleted file", message=msg, icon="info")
+        print(result)

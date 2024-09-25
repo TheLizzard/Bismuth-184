@@ -251,8 +251,11 @@ class BetterFrame(tk.Frame):
         if not self.check_mouse_over_self(event):
             return None
         assert event.delta != 0, "On Windows, `event.delta` should never be 0"
-        y_steps = int(-event.delta/abs(event.delta)*self.scroll_speed)
-        self.dummy_canvas.yview_scroll(y_steps, "units")
+        steps = int(-event.delta/abs(event.delta)*self.scroll_speed)
+        if event.state&1:
+            self.dummy_canvas.xview_scroll(steps, "units")
+        else:
+            self.dummy_canvas.yview_scroll(steps, "units")
 
     def _scroll_linux(self, event:tk.Event) -> None:
         if not self.check_mouse_over_self(event):

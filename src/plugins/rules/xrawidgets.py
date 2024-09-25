@@ -20,8 +20,7 @@ class SingletonMeta(type):
 
 class BarManager(Rule, metaclass=SingletonMeta):
     __slots__ = "label", "text"
-    REQUESTED_LIBRARIES:tuple[str] = "reparentmanager"
-    REQUESTED_LIBRARIES_STRICT:bool = True
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("reparentmanager",True)]
 
     FORMAT:str = "Ln: {line} Col: {column}"
 
@@ -49,7 +48,8 @@ class BarManager(Rule, metaclass=SingletonMeta):
 class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
     __slots__ = "text", "parent", "prev_end", "sidebar_text"
     REQUESTED_LIBRARIES:tuple[str] = "reparentmanager", "scrollbarmanager"
-    REQUESTED_LIBRARIES_STRICT:bool = True
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("reparentmanager",True),
+                                                 ("scrollbarmanager",True)]
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> BarManager:
         evs:tuple[str] = (
@@ -128,8 +128,7 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
 class ScrollbarManager(Rule, metaclass=SingletonMeta):
     __slots__ = "old_yscrollcommand", "old_xscrollcommand", "yscrollbar", \
                 "xscrollbar"
-    REQUESTED_LIBRARIES:tuple[str] = "reparentmanager"
-    REQUESTED_LIBRARIES_STRICT:bool = True
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("reparentmanager",True)]
 
     # https://stackoverflow.com/q/35412972/11106801
     HORIZONTAL_BAR:bool = True
@@ -170,8 +169,7 @@ class ScrollbarManager(Rule, metaclass=SingletonMeta):
 
 class MenuManager(Rule, metaclass=SingletonMeta):
     __slots__ = "menu"
-    REQUESTED_LIBRARIES:tuple[str] = "reparentmanager"
-    REQUESTED_LIBRARIES_STRICT:bool = True
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("reparentmanager",True)]
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> ScrollBarManager:
         super().__init__(plugin, text, ons=())

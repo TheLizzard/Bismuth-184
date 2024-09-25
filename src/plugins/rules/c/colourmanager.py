@@ -43,7 +43,7 @@ def get_keywords() -> Iterable[str]:
              "for", "goto", "if", "inline", "int", "long", "NULL", "register",
              "return", "short", "signed", "sizeof", "static", "struct",
              "switch", "typedef", "union", "unsigned", "void", "volatile",
-             "while", "restrict",
+             "while", "restrict", "true", "false",
            }
 
 def make_pat() -> re.compile:

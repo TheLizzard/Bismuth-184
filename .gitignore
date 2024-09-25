@@ -130,9 +130,10 @@ dmypy.json
 
 
 # IDE state information
-src/state.posix.json
-src/state.java.json
-src/state.nt.json
+src/settings/state.posix.thelizzard.json
+src/settings/state.posix.amnesia.json
+src/settings/state.java.thelizzard.json
+src/settings/state.nt.thelizzard.json
 
 # File explorer bin
 src/file_explorer/$BIN/
@@ -154,3 +155,5 @@ bad.c
 
 # Not implemented yet
 term-only/
+src/bettertk/terminaltk/sprites/diff.py
+src/bettertk/terminaltk/sprites/old_creator.py

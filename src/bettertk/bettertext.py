@@ -293,7 +293,8 @@ class BetterText(tk.Text):
         Intercept changes to wrap and make sure they are "none"
         Intercept changes to xscrollcommand and keep a reference to the
           function so we can call it later
-        Intercept changes to background and apply them to the canvas as well
+        Intercept changes to background/cursor and apply them to the
+          canvas as well
         """
         if len(kwargs) == 0:
             return super().config()
@@ -306,6 +307,8 @@ class BetterText(tk.Text):
                                              "highlightthickness must be 0"
         if "bg" in kwargs:
             self._canvas.config(bg=kwargs["bg"])
+        if "cursor" in kwargs:
+            self._canvas.config(cursor=kwargs["cursor"])
         self._xscrollcmd = kwargs.pop("xscrollcommand", self._xscrollcmd)
         if self._xscrollcmd:
             self._update_viewport(xoffset=self._xoffset)

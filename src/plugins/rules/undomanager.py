@@ -15,8 +15,7 @@ class UndoManager(Rule):
     __slots__ = "text", "old_undo", "old_separators", "old_maxundo", \
                 "paused", "after_id", "modified_since_last_sep", \
                 "last_char_type", "undo", "redo"
-    REQUESTED_LIBRARIES:tuple[str] = "insertdeletemanager"
-    REQUESTED_LIBRARIES_STRICT:bool = True
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("insertdeletemanager",True)]
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> UndoManager:
         self.modified_since_last_sep:bool = True

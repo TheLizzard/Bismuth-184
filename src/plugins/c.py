@@ -2,48 +2,13 @@ from __future__ import annotations
 import tkinter as tk
 import os
 
-try:
-    from baseplugin import BasePlugin
-    from rules.insertdeletemanager import InsertDeleteManager
-    from rules.seeinsertmanager import SeeInsertManager
-    from rules.controlijklmanager import ControlIJKLManager
-    from rules.wrapmanager import WrapManager
-    from rules.clipboardmanager import ClipboardManager
-    from rules.shortcutmanager import RemoveShortcuts
-    from rules.selectmanager import SelectManager
-    from rules.bracketmanager import BracketManager
-    from rules.commentmanager import CommentManager
-    from rules.undomanager import UndoManager
-    from rules.findreplacemanager import FindReplaceManager
-    from rules.reparentmanager import ReparentManager
-    from rules.xrawidgets import BarManager, LineManager, ScrollbarManager
-    # from rules.xrawidgets import MenuManager
-    from rules.c.commentmanager import CommentManager
-    from rules.c.colourmanager import ColourManager
-    from rules.c.whitespacemanager import WhiteSpaceManager
-    from rules.c.saveloadmanager import SaveLoadManager
-    from rules.c.runmanager import RunManager
-except ImportError:
-    from .baseplugin import BasePlugin
-    from .rules.insertdeletemanager import InsertDeleteManager
-    from .rules.seeinsertmanager import SeeInsertManager
-    from .rules.controlijklmanager import ControlIJKLManager
-    from .rules.wrapmanager import WrapManager
-    from .rules.clipboardmanager import ClipboardManager
-    from .rules.shortcutmanager import RemoveShortcuts
-    from .rules.selectmanager import SelectManager
-    from .rules.bracketmanager import BracketManager
-    from .rules.commentmanager import CommentManager
-    from .rules.undomanager import UndoManager
-    from .rules.findreplacemanager import FindReplaceManager
-    from .rules.reparentmanager import ReparentManager
-    from .rules.xrawidgets import BarManager, LineManager, ScrollbarManager
-    # from .rules.xrawidgets import MenuManager
-    from .rules.c.commentmanager import CommentManager
-    from .rules.c.colourmanager import ColourManager
-    from .rules.c.whitespacemanager import WhiteSpaceManager
-    from .rules.c.saveloadmanager import SaveLoadManager
-    from .rules.c.runmanager import RunManager
+from .baseplugin import BasePlugin
+from .common_rules import COMMON_RULES
+from .rules.c.runmanager import RunManager
+from .rules.c.colourmanager import ColourManager
+from .rules.c.commentmanager import CommentManager
+from .rules.c.saveloadmanager import SaveLoadManager
+from .rules.c.whitespacemanager import WhiteSpaceManager
 
 
 class CPlugin(BasePlugin):
@@ -52,29 +17,13 @@ class CPlugin(BasePlugin):
 
     def __init__(self, *args:tuple) -> CPlugin:
         rules:list[Rule] = [
-                             InsertDeleteManager,
-                             WrapManager,
-                             UndoManager,
-                             ControlIJKLManager,
-                             ColourManager,
-                             SelectManager,
-                             ClipboardManager,
-                             SeeInsertManager,
-                             WhiteSpaceManager,
-                             BracketManager,
-                             CommentManager,
-                             FindReplaceManager,
-                             SaveLoadManager,
                              RunManager,
-                             RemoveShortcuts,
-                             # Other widgets:
-                             ReparentManager,
-                             BarManager,
-                             ScrollbarManager,
-                             LineManager,
-                             # MenuManager,
+                             ColourManager,
+                             CommentManager,
+                             SaveLoadManager,
+                             WhiteSpaceManager,
                            ]
-        super().__init__(*args, rules)
+        super().__init__(*args, rules+COMMON_RULES)
 
     @classmethod
     def can_handle(Cls:type, filepath:str|None) -> bool:

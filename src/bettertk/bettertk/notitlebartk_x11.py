@@ -335,6 +335,7 @@ class NoTitlebarTk:
         XQueryTree(self.display, winid, ctypes.byref(root),
                    ctypes.byref(parent), ctypes.byref(children),
                    ctypes.byref(num_children))
+        num_children:int = num_children.value
         if num_children != 0:
             # Free children because it is a non-empty array of WINDOWs
             # WINDOW* children;
@@ -452,8 +453,7 @@ class NoTitlebarTk:
 
     def wait_for_func(self, waiting_for:T, func:Function[Args,T], *args:Args,
                       tcl:tk.Misc=None) -> None:
-        if tcl is None:
-            tcl:tk.Misc = self.root
+        tcl:tk.Misc = tcl or self.root
         def inner() -> None:
             if func(*args) == waiting_for:
                 tcl.quit()
@@ -485,6 +485,27 @@ class Draggable(NoTitlebarTk):
         self._offsetx:int = self.winfo_pointerx() - self.winfo_rootx()
         self._offsety:int = self.winfo_pointery() - self.winfo_rooty()
         self.dragging:bool = True
+
+
+# This crashes gnome-shell after making it use ~400MB of RAM???
+if __name__ == "__main__":
+    root = NoTitlebarTk()
+    label = tk.Label(root)
+    label.pack()
+
+    def inner(loop_number=0):
+        if loop_number == 10000:
+            label.config(text="Done")
+            root.quit()
+            return None
+        label.config(text=f"Loop: {loop_number:0>3}")
+        r = NoTitlebarTk(root)
+        r.after(100, r.destroy)
+        root.after(10, inner, loop_number+1)
+
+    inner()
+    root.mainloop()
+    raise SystemExit
 
 
 # Example 0
@@ -535,13 +556,11 @@ if __name__ == "__main__":
 
 # Test 1
 if (__name__ == "__main__") and TEST:
-    from time import sleep
     for i in range(1000):
         root = NoTitlebarTk()
         root.geometry("10x10+0+0")
-        for j in range(1000):
-            root.update()
-        root.destroy()
+        root.after_idle(root.after, 100, root.destroy)
+        root.mainloop()
 
         if i % 20 == 0:
             print(f"Passed {i}th test")
