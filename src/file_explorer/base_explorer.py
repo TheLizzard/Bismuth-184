@@ -25,6 +25,23 @@ MAX_ITEMS_ITENT:str = "..."
 assert MAX_ITEMS_TAKES <= MAX_ITEMS_IN_DIR, "Make sure this assertion holds"
 
 
+FILTER_FALSE_FILES   = [
+                         NEW_ITEM_NAME.__eq__,
+                         # python/rpython
+                         lambda s:s.endswith(".pyo"),
+                         lambda s:s.endswith(".pyc"),
+                         # git/github
+                         "LICENSE".__eq__,
+                       ]
+FILTER_FALSE_FOLDERS = [
+                         NEW_ITEM_NAME.__eq__,
+                         # python/rpython
+                         "__pycache__".__eq__,
+                         # git/github
+                         ".git".__eq__,
+                       ]
+
+
 def isfolder(item:Item, followsym:bool=False) -> bool:
     return isinstance(item, Folder)
 
@@ -156,11 +173,14 @@ class FileSystem:
                 files:tuple[str] = self.bound_listdir(files)
             if len(folders) > MAX_ITEMS_IN_DIR:
                 folders:tuple[str] = self.bound_listdir(folders)
-            # Skip all real filesystem files named NEW_ITEM_NAME
-            files:tuple[str] = filterfalse(NEW_ITEM_NAME.__eq__, files)
-            folders:tuple[str] = filterfalse(NEW_ITEM_NAME.__eq__, folders)
+            # Skip links:
             files:tuple[str] = filterfalse(islink, files)
             folders:tuple[str] = filterfalse(islink, folders)
+            # Other filters:
+            for filterer in FILTER_FALSE_FILES:
+                files:tuple[str] = filterfalse(filterer, files)
+            for filterer in FILTER_FALSE_FOLDERS:
+                folders:tuple[str] = filterfalse(filterer, folders)
             return tuple(zip(sorted(folders), repeat("folder"))) + \
                    tuple(zip(sorted(files), repeat("file"))), Error()
         except PermissionError:
@@ -318,10 +338,10 @@ class Item:
             return Error("Can't move roots")
         if target.master is None:
             return Error("Can't move to virtual root")
-        if target.fullpath.startswith(self.fullpath):
-            return Error("Can't move folder inside itself")
         if self.master == target:
             return Error("Nop???") # Can cause bugs. DO NOT ALLOW
+        if (target.fullpath+"/").startswith(self.fullpath+"/"):
+            return Error("Can't move folder inside itself")
 
         oldpath, oldmaster = self.fullpath, self.master
         newpath:str = self.root.filesystem.join(target.fullpath, self.name)

@@ -20,7 +20,7 @@ class ClipboardManager(Rule):
 
     def do(self, on:str) -> Break:
         with self.plugin.undo_wrapper():
-            self._do(on)
+            return self._do(on)
 
     def _do(self, on:str) -> Break:
         op:str = on[-1]

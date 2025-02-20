@@ -157,3 +157,7 @@ bad.c
 term-only/
 src/bettertk/terminaltk/sprites/diff.py
 src/bettertk/terminaltk/sprites/old_creator.py
+
+# Error logs
+src/bettertk/terminaltk/err_tb.txt
+src/error_logs

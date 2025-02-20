@@ -225,8 +225,10 @@ class WhiteSpaceManager(Rule):
             # Get the line up to idx
             # Repalce strings, with "\xfe"
             line:str = self.text.get(idx_linestart, idx)
-            line:str = self.plugin.text_replace_tag(line, idx_linestart, idx,
-                                                    "comment", "\xff")
+            nline:str = self.plugin.text_replace_tag(line, idx_linestart, idx,
+                                                     "comment", "\xff")
+            if nline.rstrip("\xff"): # For multiline comments
+                line:str = nline
             target:str = line[:len(line)-len(line.lstrip(inds))]
             line:str = line.rstrip(inds+"\xff")
             line:str = self.plugin.text_replace_tag(line, idx_linestart, idx,

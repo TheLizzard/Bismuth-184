@@ -81,7 +81,7 @@ def invert(func:Callable) -> Callable:
 
 def kill_proc(send_signal:Callable[int,None], is_alive:Callable[bool]) -> None:
     send_signal(SIGTERM)
-    if timeout(3, 0.05, invert(is_alive)): # 3 sec for cleanup before SIGKILL
+    if timeout(1, 0.05, invert(is_alive)): # 1 sec for cleanup before SIGKILL
         if SIGKILL is not None:
             send_signal(SIGKILL)
 

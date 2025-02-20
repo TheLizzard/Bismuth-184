@@ -91,8 +91,9 @@ class Menu:
     def cancel(self, event:tk.Event=None) -> None:
         if not self.shown:
             return None
-        if (event is not None) and self._ischild(event.widget):
-            return None
+        if (event is not None) and (event.keysym != "Escape"):
+            if self._ischild(event.widget):
+                return None
         self.hide(cancelled=True)
 
     def add(self, text:str, command:Function, **kwargs:dict) -> int:

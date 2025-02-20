@@ -44,12 +44,14 @@ class DLineInfoWrapper:
         assert self._inside, "You can only call this if inside the context"
         line += 1 # lines in tkinter start from 1
         if self._monospaced_size != 0:
-            return self._monospaced_get_width(line)
+            width:int = self._monospaced_get_width(line)
+            if width != -1: # if there's a tab in the input, fail gracefully
+                return width
         self.text.see(f"{line}.{char}", no_xscroll=True)
         width:int = self.text.dlineinfo(f"{line}.0")[2]
         if self._assume_monospaced:
             chars:str = self.text.get(f"{line}.0", f"{line}.0 lineend")
-            if chars:
+            if chars and ("\t" not in chars): # if tab/s, don't store value
                 size:float = width/len(chars)
                 if int(size) != size:
                     raise RuntimeError("Not a monospaced font but you called " \
@@ -63,8 +65,11 @@ class DLineInfoWrapper:
           just calculate the line length in python instead of
           using Text.xview, Text.yview, Text.see, and Text.dlineinfo
           which sometimes cause flickering and is super slow
+        Fails and returns -1 if there is a tab in the input.
         """
         chars:str = self.text.get(f"{line}.0", f"{line}.0 lineend")
+        if "\t" in chars: # force fail on tabs
+            return -1
         return len(chars) * self._monospaced_size
 
     def assume_monospaced(self) -> None:
@@ -80,6 +85,7 @@ class DLineInfoWrapper:
     def unknown_if_monospaced() -> None:
         assert not self._inside, "Don't call this from inside the context"
         self._assume_monospaced:bool = False
+        self._monospaced_size:int = 0
 
 
 # Not faster than the python code above but I had to check
@@ -674,7 +680,8 @@ if __name__ == "__main__":
     text:BetterText = BetterText(root, width=400, height=200, undo=True)
     text.mark_set("insert", "1.0")
     text.pack(fill="both", expand=True)
-    # text._xviewfix.dlineinfo.assume_monospaced()
+    text.config(font=("DejaVu Sans Mono", 9, "normal", "roman"))
+    text._xviewfix.dlineinfo.assume_monospaced()
 
     filepath:str = tk.__file__
     # filepath:str = join(dirname(dirname(dirname(__file__))), "bad.py")

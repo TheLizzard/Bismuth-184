@@ -8,6 +8,7 @@ from .rules.cpp.runmanager import RunManager
 from .rules.cpp.colourmanager import ColourManager
 from .rules.cpp.commentmanager import CommentManager
 from .rules.cpp.saveloadmanager import SaveLoadManager
+from .rules.cpp.stdinsertmanager import StdInsertManager
 from .rules.cpp.whitespacemanager import WhiteSpaceManager
 
 
@@ -21,6 +22,7 @@ class CppPlugin(BasePlugin):
                              ColourManager,
                              CommentManager,
                              SaveLoadManager,
+                             StdInsertManager,
                              WhiteSpaceManager,
                            ]
         super().__init__(*args, rules+COMMON_RULES)

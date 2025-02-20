@@ -11,7 +11,13 @@ Editor:
 * Starting code never appears
 * On Windows, the window grows horizontally each time the Bismuth-184 is opened
 * Control-R should use `xview` and `yview` instead of `see`
-* Pasting scrolls to the start of the line
+* Pasting scrolls to the start of the line (typing also has this problem)
+* Tabs are counted as 1 character when pressing the arrows
+* Alt-quotes still inserts 2 quotes
+* BetterText still has visual bugs when adding to a long line if a longer line exists
+* BetterText has problems when the longest line is only slighly longer than the text box (possibly because of the scrollbar)
+* Closing ] doesn't highlight correctly only when in string (only sometimes)
+* Control arrows don't account that "-" can be part of an int literal
 
 IPC:
 * Remove psutil dependency for checking if process exists
@@ -19,11 +25,10 @@ IPC:
 
 Terminal:
 * Add confirm close prompt when closing a running proc
-* Windows support (pty_terminal)
+* Finish implementing pty_terminal
 * Add settings window
 * Add a clear terminal button? (can't think of an icon for that)
 * Printing ANSI characters to resize the terminal doesn't work
-* A different `_handle_msg_loop` is started for each terminal.
 
 Notebook:
 * Clicking on the "+" should scroll to the end
@@ -44,4 +49,5 @@ Minor things/Low priority:
 * plugins.baseplugin.py@AllPlugin.find_bracket_match is a bit slow
 * Profile the program
 * Implement `MenuManager`?
-* Add settings window?
+* Add settings window for main window?
+* A different `_handle_msg_loop` is started for each terminal.

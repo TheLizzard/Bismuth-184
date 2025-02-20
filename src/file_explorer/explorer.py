@@ -307,17 +307,19 @@ class Explorer:
         self._expand(self.item_to_frame[item])
 
     # Functions you can call:
-    def add(self, path:str, expand:bool=False) -> None:
+    def add(self, path:str, expand:bool=False) -> Success:
         folder:Folder = self.root.add(path)
         if folder is not None:
             folder.update()
             self.update(soft=True)
             if expand:
                 self.expand(folder)
+            return True
+        return False
 
     def remove(self, path:str) -> None:
         self.root.remove(path)
-        self.update(soft=True)
+        self.update(soft=False)
 
 
 if __name__ == "__main__":

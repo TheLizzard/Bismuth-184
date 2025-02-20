@@ -7,7 +7,6 @@ import os
 
 from bettertk.terminaltk.terminaltk import TerminalTk
 from bettertk.messagebox import tell as telluser
-from bettertk import BetterTkSettings
 from .baserule import Rule, SHIFT, ALT, CTRL
 
 if os.name == "posix":
@@ -99,9 +98,7 @@ class RunManager(Rule):
             return None
 
         if (self.term is None) or (not self.term.running()):
-            window_settings:BetterTkSettings = BetterTkSettings()
-            window_settings.config(use_border=False)
-            self.term = TerminalTk(self.widget, settings=window_settings)
+            self.term = TerminalTk(self.widget)
             self.term.bind("<<Closing-Terminal>>", self.cleanup)
             print_str:str = " Starting ".center(80, "=") + "\n"
         else:

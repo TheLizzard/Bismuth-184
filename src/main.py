@@ -17,8 +17,8 @@ from bettertk.betterframe import BetterFrame
 from bettertk.betterscrollbar import BetterScrollBarVertical, \
                                      BetterScrollBarHorizontal
 from bettertk.messagebox import askyesno, tell as telluser
-from bettertk import BetterTk, BetterTkSettings
 from bettertk.bettertext import BetterText
+from bettertk import BetterTk
 from bettertk import notebook
 from plugins import VirtualEvents
 from settings.settings import curr as settings
@@ -38,17 +38,25 @@ TextClass = BetterText
 # TextClass = tk.Text
 
 
+def remove_duplicates(array:list[object]) -> list[object]:
+    seen:set[object] = set()
+    ret:list[object] = []
+    for obj in array:
+        if obj not in seen:
+            seen.add(obj)
+            ret.append(obj)
+    return ret
+
+
 class App:
     __slots__ = "root", "explorer", "notebook", "text_to_page", \
-                "explorer_frame", "expand_later"
+                "explorer_frame", "expand_later", "add_later"
 
     def __init__(self, ipc:IPC) -> App:
         self.expand_later:set[str] = set()
+        self.add_later:list[str] = []
         self.text_to_page:dict[BetterText:notebook.NotebookPage] = {}
-        window_settings:BetterTkSettings = BetterTkSettings()
-        window_settings.config(use_border=False)
-        self.root:BetterTk = BetterTk(settings=window_settings,
-                                      className="Bismuth-184")
+        self.root:BetterTk = BetterTk(className="Bismuth-184")
         self.root.title("Bismuth-184")
         self.root.iconphoto(False, "sprites/Bismuth_184.ico")
         self.root.protocol("WM_DELETE_WINDOW", self.root_close)
@@ -229,7 +237,11 @@ class App:
         if os.path.isfile(path):
             self.open_tab(path)
         elif os.path.isdir(path):
-            self.explorer.add(path, expand=True)
+            path:str = os.path.abspath(path)
+            getpath = lambda item: item.fullpath
+            added:list[str] = list(map(getpath, self.explorer.root.children))
+            if path not in added:
+                self.explorer.add(path, expand=True)
         else:
             raise RuntimeError(f"Unknown type for {path!r}")
 
@@ -407,13 +419,25 @@ class App:
         for item, _ in self.explorer.root.recurse_children(withself=False):
             if isfolder(item) and item.expanded:
                 expanded.append(item.fullpath)
-        expanded.extend(p for p in self.expand_later if os.path.isdir(p))
-        return added, expanded
+        # expanded.extend(filter(os.path.isdir, self.expand_later))
+        expanded.extend(self.expand_later)
+        return remove_duplicates(added+self.add_later), \
+               remove_duplicates(expanded)
 
     def _set_explorer_state(self, added:list[str], expanded:list[str]) -> None:
-        for path in added:
-            self.explorer.add(path)
         self._explorer_expand(expanded)
+        self.add_later.extend(added)
+        self._do_add_later()
+
+    def _do_add_later(self) -> None:
+        for path in self.add_later:
+            success:bool = self.explorer.add(path)
+            if success:
+                self.add_later.remove(path)
+                self._explorer_expand()
+                return self._do_add_later()
+        if self.add_later:
+            self.root.after(300, self._do_add_later)
 
     # The mainloop function
     def mainloop(self) -> None:
@@ -454,6 +478,7 @@ if __name__ == "__main__":
             timer[0] = perf_counter()
         app.init()
         for path in sys.argv[1:]:
+            if path == "--no-focus": continue
             app.open(path)
         return app
 
@@ -478,8 +503,12 @@ if __name__ == "__main__":
                 return ipc
             # Otherwise send events to first process (hope it isn't misbehaving)
             else:
-                ipc.event_generate("focus", where="others")
-                for arg in sys.argv[1:]:
+                args:list[str] = sys.argv[1:]
+                if "--no-focus" in args:
+                    args.remove("--no-focus")
+                else:
+                    ipc.event_generate("focus", where="others")
+                for arg in args:
                     ipc.event_generate("open", where="others", data=arg)
                 raise SystemExit()
 

@@ -12,7 +12,7 @@ class ColourConfig(BaseColourConfig):
     def __init__(self, kwargs:dict[str:dict[str:str]]={}) -> ColourConfig:
         super().__init__({
                            "keyword":    dict(foreground="orange"),
-                           "iostream":   dict(foreground="#ff75ff"),
+                           "builtins":   dict(foreground="#ff75ff"),
                            "string":     dict(foreground="lime"),
                            "definition": dict(foreground="cyan"), # parial use
                            "include":    dict(foreground="cyan"),
@@ -21,7 +21,7 @@ class ColourConfig(BaseColourConfig):
                         })
 
 
-def get_iostream() -> Iterable[str]:
+def get_builtins() -> Iterable[str]:
     return {
              "clearerr", "clrmemf", "fclose", "fdelrec", "feof", "ferror",
              "fflush", "fgetc", "fgetpos", "fgets", "fldata", "flocate",
@@ -31,9 +31,9 @@ def get_iostream() -> Iterable[str]:
              "remove", "rename", "rewind", "scanf", "setbuf", "setvbuf",
              "sprintf", "sscanf", "svc99", "tmpfile", "tmpnam", "ungetc",
              "vfprintf", "vprintf", "vsprintf", "fopen", "getc",
-             "EOF", "malloc", "calloc", "realloc", "free", "BUFSIZ",
+             "EOF", "malloc", "calloc", "realloc", "alloca", "free", "BUFSIZ",
              "STDERR_FILENO", "STDOUT_FILENO", "STDIN_FILENO", "stderr",
-             "stdout", "stdin",
+             "stdout", "stdin", "time", "srand",
            }
 
 def get_keywords() -> Iterable[str]:
@@ -44,12 +44,14 @@ def get_keywords() -> Iterable[str]:
              "return", "short", "signed", "sizeof", "static", "struct",
              "switch", "typedef", "union", "unsigned", "void", "volatile",
              "while", "restrict", "true", "false",
+             "uint8_t", "uint16_t", "uint32_t", "uint64_t", "int8_t", "int16_t",
+             "int32_t", "int64_t", "__uint128_t",
            }
 
 def make_pat() -> re.compile:
     kw = r"\b" + idleany("keyword", get_keywords()) + r"\b"
 
-    iostream = r"([^.'\"\\#]\b|^)" + idleany("iostream", get_iostream()) + r"\b"
+    iostream = r"([^.'\"\\#]\b|^)" + idleany("builtins", get_builtins()) + r"\b"
 
     include = idleany("include", [r"#(include *|(?:\\\n|[^\n])*?(?=/(?:/|\*)|\n|$))"])
 
@@ -61,8 +63,8 @@ def make_pat() -> re.compile:
     includestr = '(?<=include )\<[^\n>]*>'
     string = idleany("string", [sstring, dstring, includestr])
 
-    reg:str = kw + "|" + iostream + "|" + comment + "|" + include + "|" + \
-              string + "|" + idleany("SYNC", [r"\n"])
+    reg:str = comment + "|" + include + "|" + string + "|" + kw + "|" + \
+              iostream + "|" + idleany("SYNC", [r"\n"])
 
     return re.compile(reg, re.M|re.S)
 

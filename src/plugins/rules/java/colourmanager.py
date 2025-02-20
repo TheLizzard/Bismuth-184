@@ -48,11 +48,13 @@ def get_builtins() -> Iterable[str]:
              "NoSuchFieldError", "NoSuchMethodError", "NoClassDefFoundError",
              "UnsatisfiedLinkError", "VerifyError", "ThreadDeath",
              "VirtualMachineError", "InternalError", "OutOfMemoryError",
-             "StackOverflowError", "UnknownError",
+             "StackOverflowError", "UnknownError", "IOException",
+             "InvocationTargetException",
            ) + (
              "String", "Integer", "Float", "Boolean", "Byte", "Short",
-             "Character", "Long", "Double",
-             # "ArrayList", "HashSet", "HashMap",
+             "Character", "Long", "Double", "Class",
+             "ArrayList", "HashSet", "HashMap", "List", "Map", "Set",
+             "Map.Entry", "InputStream", "OutputStream",
            )
 
 def get_keywords() -> Iterable[str]:

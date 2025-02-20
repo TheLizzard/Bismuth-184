@@ -19,9 +19,8 @@ class RunManager(BaseRunManager):
 
     def compile(self, *, print_str:str="") -> bool:
         file:str = self.text.filepath
-        if file.endswith(".h"):
+        if not file.endswith(".c"):
             return False
-        assert file.endswith(".c"), f"{self.text.filepath!r} must be .h or .c file"
         files:set[str] = set()
         RunManager.get_c_files(file, files)
         files:list[str] = list(filter(os.path.exists, files))

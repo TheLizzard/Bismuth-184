@@ -74,7 +74,7 @@ class FindReplaceManager(Rule):
                 "wholeword", "button", "shown", "geom", "replace_label", \
                 "replace_str", "find_cache", "swap"
     REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("colourmanager",True)]
-    MAX_FINDS:int = 100
+    MAX_FINDS:int = 5000
     HIT_TAG:str = "hit"
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> None:
@@ -83,8 +83,8 @@ class FindReplaceManager(Rule):
                            # Find
                            "<Control-F>", "<Control-f>",
                            # Replace
-                           "<Control-R>", "<Control-r>",
-                           "<Control-H>", "<Control-h>",
+                           # "<Control-R>", "<Control-r>",
+                           # "<Control-H>", "<Control-h>",
                            # Hit invalidation (something else is doing this?)
                            # "<<Before-Insert>>", "<<Before-Delete>>",
                          )
@@ -211,8 +211,10 @@ class FindReplaceManager(Rule):
             MiniPlugin(self.find.master, self.replace).attach()
             self.replace.insert("end", self.replace_str)
             self.replace.bind("<Escape>", lambda e: self.hide())
+            self.find.bind("<Escape>", lambda e: self.hide())
         self.window.focus_force()
         self.window.focus_set()
+        self.find.focus_set()
 
     def fill_in_find(self) -> None:
         # Add whatever the user has selected in the editor
