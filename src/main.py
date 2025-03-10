@@ -358,8 +358,8 @@ class App:
         for page in self.notebook.iter_pages():
             text:BetterText = self.page_to_text(page)
             file:str = text.filepath
-            xview:str = text.xview()[0]
-            yview:str = text.yview()[0]
+            xview:str = str(text.xview()[0])
+            yview:str = str(text.yview()[0])
             insert:str = text.index("insert")
             saved:str = text.filesystem_data
             modified:str = text.edit_modified()

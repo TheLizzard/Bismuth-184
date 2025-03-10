@@ -667,27 +667,10 @@ class Folder(Item):
 
 
 class File(Item):
-    __slots__ = ("extension",)
+    __slots__ = ()
 
     def __init__(self, name:str, root:Root, master:Item) -> File:
         super().__init__(name, root=root, master=master)
-        self.fix_extension()
-
-    def fix_extension(self) -> None:
-        if self.name == MAX_ITEMS_ITENT:
-            self.extension:str = None
-            return None
-        extension = self.name.split(".")[-1]
-        if (extension in KNOWN_EXT) and (self.name != NEW_ITEM_NAME):
-            self.extension:str = extension
-        else:
-            self.extension:str = "file"
-
-    def rename(self, newname:str) -> Error:
-        error:Error = super().rename(newname)
-        if not error:
-            self.fix_extension()
-        return error
 
     def update(self, fullsync:bool=False) -> None:
         assert not fullsync, "Don't use this"

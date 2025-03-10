@@ -220,8 +220,10 @@ class FindReplaceManager(Rule):
         # Add whatever the user has selected in the editor
         start, end = self.text.plugin.get_selection()
         if start != end:
-            self.find.delete("1.0", "end")
-            self.find.insert("1.0", self.text.get(start, end))
+            text:str = self.text.get(start, end).strip("\n")
+            if text.find("\n") == -1:
+                self.find.delete("1.0", "end")
+                self.find.insert("1.0", text)
         # Select everything in the find box
         self.find.plugin.set_selection("1.0", "end -1c")
         self.find.focus_set()

@@ -48,7 +48,10 @@ class DLineInfoWrapper:
             if width != -1: # if there's a tab in the input, fail gracefully
                 return width
         self.text.see(f"{line}.{char}", no_xscroll=True)
-        width:int = self.text.dlineinfo(f"{line}.0")[2]
+        dlineinfo:tuple[int] = self.text.dlineinfo(f"{line}.0")
+        if dlineinfo is None:
+            return 0
+        width:int = dlineinfo[2]
         if self._assume_monospaced:
             chars:str = self.text.get(f"{line}.0", f"{line}.0 lineend")
             if chars and ("\t" not in chars): # if tab/s, don't store value
@@ -222,6 +225,7 @@ class BetterText(tk.Text):
         self._tags_with_font:set[str] = set()
         self.ignore_tags_with_bg:bool = False
         self._lock_tags_with_bg:bool = False
+        self._disabled:bool = False
         self._xscrollcmd = None
         self._xoffset:int = 0
         self._canvasx:int = 0
@@ -270,6 +274,14 @@ class BetterText(tk.Text):
 
         # self.after(100, lambda: self._update_viewport(xoffset=self._xoffset))
 
+    def disable(self) -> None:
+        self._disabled:bool = True
+
+    def enable(self) -> None:
+        self._disabled:bool = False
+        assert self.cget("wrap") == "none", "Disable wrap when enabling" \
+                                            " BetterText"
+
     def _redraw_sel_bg(self, event:tk.Event=None) -> None:
         """
         Redraw the sel tag on the canvas
@@ -304,7 +316,8 @@ class BetterText(tk.Text):
         """
         if len(kwargs) == 0:
             return super().config()
-        assert kwargs.pop("wrap", "none") == "none", "wrap must be none"
+        if not self._disabled:
+            assert kwargs.pop("wrap", "none") == "none", "wrap must be none"
         assert not kwargs.pop("border", 0), "border must be 0"
         assert not kwargs.pop("padx", 0), "padx must be 0"
         assert not kwargs.pop("pady", 0), "pady must be 0"
@@ -375,6 +388,8 @@ class BetterText(tk.Text):
         widget was large enough (vertically) to show all of the lines
         """
         # Get base x offset of the viewport and the max line length
+        if self._disabled:
+            return super().xview()
         max_line_width:int = max(self._xviewfix.line_lengths)
         if max_line_width == 0:
             print("error max(self._xviewfix.line_lengths)=0")
@@ -384,7 +399,7 @@ class BetterText(tk.Text):
         low:float = self._xoffset/max_line_width
         high:float = (self._xoffset+self._width)/max_line_width
         high:float = min(high, 1.0) # self._width might be > max_line_width
-        return (str(low), str(high))
+        return str(low), str(high)
 
     def xview(self, *args:tuple) -> tuple[str]|None:
         """
@@ -474,8 +489,11 @@ class BetterText(tk.Text):
         """
         Calculate the new xoffset and call `update_viewport`.
         """
-        xoffset:int = min(max(self._xviewfix.line_lengths)-self._width,
-                          max(0, self._xoffset+steps))
+        if self._disabled:
+            xoffset:int = 0
+        else:
+            xoffset:int = min(max(self._xviewfix.line_lengths)-self._width,
+                              max(0, self._xoffset+steps))
         self._update_viewport(xoffset=xoffset)
 
     def _on_xscroll_cmd(self, low:str, high:str) -> None:
@@ -507,8 +525,12 @@ class BetterText(tk.Text):
         if super().compare(f"{idx} linestart", "==", idx):
             tar_xoffset:int = 0
         else:
-            tar_xoffset:int = super().count(f"{idx} linestart", idx,
-                                            "xpixels")[0]
+            xpixels:list[int] = super().count(f"{idx} linestart", idx,
+                                              f"xpixels")
+            if xpixels is None:
+                assert self._disabled, "This should only happen when disabled"
+                xpixels:list[int] = [0]
+            tar_xoffset:int = xpixels[0]
         diff:int = cur_xoffset - tar_xoffset
         if DEBUG_SEE: print(f"{diff=}, {cur_xoffset=}, {tar_xoffset=}")
         if diff <= 0 <= diff+self._width-3:
@@ -530,37 +552,6 @@ class BetterText(tk.Text):
             self._update_viewport(xoffset=xoffset)
 
         super().yview_pickplace(idx)
-
-    """
-    def see(self, idx:str, no_xscroll:bool=False) -> None:
-        if no_xscroll:
-            return super().see(idx)
-        idx:str = super().index(idx)
-        threshold:float = 0.346*self._width + 13.34
-        cur_xoffset:int = self.textx(0)
-        super().see(idx)
-        tar_xoffset:int = super().bbox(idx)[0]+self.textx(0)-1
-        if cur_xoffset+2 <= tar_xoffset <= cur_xoffset+self._width-2:
-            # No need to scroll
-            return None
-        if (cur_xoffset == 0) and (tar_xoffset <= cur_xoffset+self._width-2):
-            # No need to scroll
-            return None
-        l:int = cur_xoffset-threshold
-        h:int = cur_xoffset+self._width+threshold
-        if l < tar_xoffset < h:
-            # Scroll so that idx is at the edge of the text box
-            xoffset:int = tar_xoffset-2
-            xoffset -= (self._width-4)*(cur_xoffset<tar_xoffset)
-        else:
-            # Scroll so that idx is at the middle of the text box
-            xoffset:int = tar_xoffset - int(self._width/2+0.5)
-        if cur_xoffset == xoffset:
-            return None
-        lln:int = max(1, *self._xviewfix.line_lengths)
-        xoffset:int = min(lln-self._width, max(0, xoffset))
-        self._update_viewport(xoffset=xoffset)
-    """
 
     # Keep track of the tags with background/font
     def tag_config(self, tagname:str, **kwargs) -> None:
@@ -624,7 +615,7 @@ class BetterText(tk.Text):
         # Set xview
         lvln:int = max(1, self._get_longest_visible_line_length())
         vis_low:float = str(self._xoffset/lvln)
-        super().xview("moveto", str(1.0 if high > 0.995 else vis_low))
+        super().xview("moveto", str(1.0 if high > 0.998 else vis_low))
 
         # Get the current textx(0)
         curr_xoffset:int = self.textx(0, real=False)
@@ -634,6 +625,8 @@ class BetterText(tk.Text):
         if self._canvasx != 0:
             self._redraw_tags_with_bg(update_idletasks=False)
         if self._xscrollcmd is not None:
+            if self._disabled:
+                low, high = 0.0, 1.0
             self._xscrollcmd(str(low), str(high))
 
     def _redraw_tags_with_bg(self, update_idletasks:bool=True, tag:str=None):

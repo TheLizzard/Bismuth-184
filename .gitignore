@@ -149,9 +149,8 @@ src/bettertk/terminaltk/sprites/copyrighted/
 src/bettertk/terminaltk/pty terminal/test.cpp
 src/bettertk/terminaltk/pty terminal/old/
 
-# Test files for IDLE
-bad.py
-bad.c
+# Test files
+tmp-test
 
 # Not implemented yet
 term-only/

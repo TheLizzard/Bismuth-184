@@ -1,5 +1,5 @@
 from __future__ import annotations
-from subprocess import Popen, PIPE
+from subprocess import Popen, DEVNULL
 from threading import Thread
 from sys import stderr
 import tkinter as tk
@@ -18,12 +18,15 @@ from bettertk.messagebox import askyesno, tell
 if IS_UNIX:
     OPEN_IN_EXPLORER:str = 'nautilus "{path}"'
     OPEN_DEFAULT:str = 'xdg-open "{path}"'
+    OPEN_GIT:str = "git gui"
 elif IS_WINDOWS:
     OPEN_IN_EXPLORER:str = 'explorer "{path}"'
     OPEN_DEFAULT:str = None
+    OPEN_GIT:str = None
 else:
     OPEN_IN_EXPLORER:str = None
     OPEN_DEFAULT:str = None
+    OPEN_GIT:str = None
     sys.stderr.write("Unknown OS, can't open files/folders in real explorer.\n")
 OPEN_IN_TERMINAL:str = 'python3 bettertk/open_terminal.py "{path}"'
 
@@ -72,7 +75,7 @@ class Menu:
             # This happens when the widget is destroyed
             #   but the bind_all still activates
             return False
-        while widget is not None:
+        while widget:
             if widget == self.root:
                 return True
             widget:tk.Misc = widget.master
@@ -91,7 +94,7 @@ class Menu:
     def cancel(self, event:tk.Event=None) -> None:
         if not self.shown:
             return None
-        if (event is not None) and (event.keysym != "Escape"):
+        if event and (event.keysym != "Escape"):
             if self._ischild(event.widget):
                 return None
         self.hide(cancelled=True)
@@ -115,6 +118,9 @@ class Menu:
         if "command" in kwargs:
             kwargs["command"] = chain(self.hide, kwargs.pop("command"))
         self.children[id].config(**kwargs)
+
+    def pop(self) -> None:
+        self.children.pop(-1).destroy()
 
     def popup(self, widget:tk.Misc, pos:tuple[int,int]=None) -> None:
         self.root.geometry("+{}+{}".format(*(pos or widget.winfo_pointerxy())))
@@ -140,7 +146,7 @@ class Menu:
 
 class ExpandedExplorer(Explorer):
     __slots__ = "cwd", "menu", "set_cwd_id", "bin_folder", "renaming", \
-                "creating", "font"
+                "creating", "font", "git_in_menu"
 
     def __init__(self, master:tk.Misc, font:str="TkDefaultFont",
                  monofont:str="TkFixedFont") -> None:
@@ -188,9 +194,10 @@ class ExpandedExplorer(Explorer):
         self.set_cwd_id:int = self.menu.add("Set as working dir", self.set_cwd,
                                             font=font)
         self.menu.on_cancel:Function[None] = self.menu_cancel
+        self.git_in_menu:bool = False
 
     def right_click(self, frame:tk.Frame) -> str:
-        if (self.changing is not None) and (not self.menu.shown):
+        if self.changing and (not self.menu.shown):
             return None
         if frame is None:
             return None
@@ -199,12 +206,27 @@ class ExpandedExplorer(Explorer):
             return None
         self.changing = self.selected = frame
         self.changing.focused_widget:tk.Misc = self.changing.focus_get()
+        # Set up exec path
         if super()._get_closest_folder(frame) == self.cwd:
             self.menu.config(self.set_cwd_id, text="Remove exec path (cwd)",
                              command=self.remove_cwd)
         else:
             self.menu.config(self.set_cwd_id, text="Set exec path (cwd)",
                              command=self.set_cwd)
+        # Set up git?
+        fs:FileSystem = frame.item.root.filesystem
+        git_path:str = fs.join(frame.item.fullpath, ".git")
+        if fs.exists(git_path) and fs.isfolder(git_path):
+            if not self.git_in_menu:
+                self.menu.add_separator()
+                self.menu.add("Open in git", self.open_in_git, font=self.font)
+                self.git_in_menu:bool = True
+        else:
+            if self.git_in_menu:
+                self.menu.pop()
+                self.menu.pop()
+                self.git_in_menu:bool = False
+        # Show menu
         self.menu.popup(self.master)
 
     def menu_cancel(self) -> None:
@@ -213,7 +235,7 @@ class ExpandedExplorer(Explorer):
     # Cwd stuff
     def set_cwd(self) -> None:
         self.master.update_idletasks()
-        if self.cwd is not None:
+        if self.cwd:
             self.remove_cwd()
         self.cwd:tk.Frame = super()._get_closest_folder(super().get_selected())
         data:tuple[str] = (self.cwd.item.fullpath,)
@@ -234,7 +256,7 @@ class ExpandedExplorer(Explorer):
 
     def recolour_frame(self, frame:tk.Frame, bg:str) -> None:
         super().recolour_frame(frame, bg)
-        if (frame == self.cwd) and (frame is not None):
+        if (frame == self.cwd) and frame:
             frame.cwd_dot.config(bg=bg)
 
     def remove_cwd(self) -> None:
@@ -337,24 +359,38 @@ class ExpandedExplorer(Explorer):
 
     # Open in ...
     def open_in_explorer(self) -> None:
-        if OPEN_IN_EXPLORER is not None:
+        if OPEN_IN_EXPLORER:
             cmd:str = OPEN_IN_EXPLORER.format(path=self.selected.item.fullpath)
-            proc:Popen = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+            proc:Popen = Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL,
+                               stdin=DEVNULL)
             self._no_zombie(proc)
         self.changing:tk.Frame = None
 
     def open_in_terminal(self) -> None:
-        if OPEN_IN_TERMINAL is not None:
+        if OPEN_IN_TERMINAL:
             cmd:str = OPEN_IN_TERMINAL.format(path=self.selected.item.fullpath)
-            proc:Popen = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+            proc:Popen = Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL,
+                               stdin=DEVNULL)
             self._no_zombie(proc)
         self.changing:tk.Frame = None
 
     def open_item(self) -> None:
-        if OPEN_DEFAULT is not None:
+        if OPEN_DEFAULT:
             cmd:str = OPEN_DEFAULT.format(path=self.selected.item.fullpath)
-            proc:Popen = Popen(cmd, stdout=PIPE, stderr=PIPE, shell=True)
+            proc:Popen = Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL,
+                               stdin=DEVNULL)
             self._no_zombie(proc)
+        self.changing:tk.Frame = None
+
+    def open_in_git(self) -> None:
+        if OPEN_GIT:
+            fs:FileSystem = self.changing.item.root.filesystem
+            git_path:str = fs.join(self.changing.item.fullpath, ".git")
+            if fs.exists(git_path) and fs.isfolder(git_path):
+                proc:Popen = Popen(OPEN_GIT, shell=True, stdout=DEVNULL,
+                                   stderr=DEVNULL, stdin=DEVNULL,
+                                   cwd=fs.dirname(git_path))
+                self._no_zombie(proc)
         self.changing:tk.Frame = None
 
     # Copy path

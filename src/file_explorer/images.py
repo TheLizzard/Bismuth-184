@@ -1,23 +1,58 @@
+from __future__ import annotations
+from mimetypes import guess_type, guess_extension
 from PIL import Image, ImageTk
+from glob import glob
 import tkinter as tk
-import os.path
+from os import path
+
+ICON_PATHS:list[str] = ["/usr/share/icons/Yaru/*/mimetypes",
+                        "/usr/share/icons/*/*/mimetypes"]
 
 
 def init(root:tk.Tk) -> None:
-    global TK_IMAGES
+    global TK_IMAGES, BLANK
     TK_IMAGES = {}
     for extension in EXTENSIONS:
-        path = os.path.join(base_folder, f"sprites/.{extension}.png")
-        img:Image.Image = Image.open(path)
+        imagepath = path.join(base_folder, f"sprites/.{extension}.png")
+        img:Image.Image = Image.open(imagepath)
         img:Image.Image = img.resize((WIDTH,HEIGHT), Image.LANCZOS)
         tk_image = ImageTk.PhotoImage(img, master=root)
         TK_IMAGES[extension] = tk_image
     TK_IMAGES["*"] = TK_IMAGES["star"]
     TK_IMAGES[None] = TK_IMAGES["blank"]
+    BLANK = TK_IMAGES["star"]
+
+_ICON_PATHS:list[str] = []
+for icon_path in ICON_PATHS:
+    _ICON_PATHS.extend(sorted(glob(icon_path)))
 
 
+_CACHE:dict[str:ImageTk.PhotoImage] = {}
+def get_sprite(master:tk.Misc, filepath:str) -> ImageTk.PhotoImage:
+    # If in cache
+    if filepath in _CACHE:
+        return _CACHE[filepath]
+    # Get mimetype
+    mimetype, _ = guess_type(filepath)
+    # If no mimetype
+    if mimetype is None:
+        return BLANK
+    imagename:str = mimetype.replace("/", "-") + ".png"
+    for imagepath in _ICON_PATHS:
+        fullpath:str = path.join(imagepath, imagename)
+        if not path.exists(fullpath):
+            continue
+        img:Image.Image = Image.open(fullpath)
+        img:Image.Image = img.resize((WIDTH,HEIGHT), Image.LANCZOS)
+        _CACHE[filepath] = ImageTk.PhotoImage(img, master=master)
+        break
+    else:
+        _CACHE[filepath] = BLANK
+    return _CACHE[filepath]
+
+BLANK:ImageTk.PhotoImage = None
 EXTENSIONS = ("py", "txt", "cpp", "folder", "rar", "star", "blank")
-base_folder:str = os.path.dirname(__file__)
+base_folder:str = path.dirname(__file__)
 WIDTH:int = 16
 HEIGHT:int = 16
 
@@ -96,7 +131,8 @@ if __name__ == "__main__":
     canvas.pack()
 
     y = HEIGHT
-    for extension, tk_img in TK_IMAGES.items():
+    for ext in EXTENSIONS:
+        tk_img = get_sprite("file." + ext)
         canvas.create_image(20, y, image=tk_img)
         y += int(HEIGHT*2)
 

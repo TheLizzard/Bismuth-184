@@ -97,9 +97,11 @@ class Slave:
             return self.send("error", "EmptyCommand")
         if command[0] == "cd":
             return self.cd(command)
+        elif command[0] == "export":
+            return self.export(command)
         try:
             self.proc:Popen = Popen(command, stdin=stdin, stdout=stdout,
-                                    stderr=stderr, shell=False)
+                                    stderr=stderr, shell=False, env=os.environ)
         except FileNotFoundError:
             self.send("error", f"Invalid executable: {command[0]!r}")
             return None
@@ -120,8 +122,8 @@ class Slave:
         self.proc.send_signal(signal)
 
     def cd(self, command:tuple[str]) -> None:
-        exit_code:int = 1
         assert command[0] == "cd", "InternalError"
+        exit_code:int = 1
         if len(command) == 1:
             print("slave: cd: no argument")
         elif len(command) == 2:
@@ -132,6 +134,17 @@ class Slave:
                 print(error)
         else:
             print("slave: cd: too many arguments")
+        self.send("finished", data=exit_code)
+
+    def export(self, command:tuple[str]) -> None:
+        assert command[0] == "export", "InternalError"
+        exit_code:int = 1
+        if len(command) == 3:
+            _, variable, value = command
+            os.environ[variable] = value
+            exit_code:int = 0
+        else:
+            print("slave: export: needs exactly 2 arguments")
         self.send("finished", data=exit_code)
 
 

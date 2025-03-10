@@ -11,60 +11,114 @@ class ColourConfig(BaseColourConfig):
 
     def __init__(self, kwargs:dict[str:dict[str:str]]={}) -> ColourConfig:
         super().__init__({
-                           "comment":    dict(foreground="red"),
-                           "keyword":    dict(foreground="orange"),
-                           "builtins":   dict(foreground="#ff75ff"),
-                           "string":     dict(foreground="lime"),
-                           "definition": dict(foreground="cyan"), # parial use
-                           "include":    dict(foreground="cyan"),
+                           "comment":      dict(foreground="red"),
+                           "keyword":      dict(foreground="orange"),
+                           "builtins":     dict(foreground="#ff75ff"),
+                           "string":       dict(foreground="lime"),
+                           "definition":   dict(foreground="cyan"), # parial use
+                           "preprocessor": dict(foreground="cyan"),
                            **kwargs
                         })
 
 
 def get_builtins() -> Iterable[str]:
-    main = ["cin", "cout", "cerr", "clog", "wcin", "wcout", "wcerr", "wclog",
-            "printf", "malloc", "free", "calloc", "realloc", "alloca",
-            "puts", "strlen", "strcpy", "string", "endl", "vector",
-            "tuple", "tie", "countr_zero", "to_string", "rotl", "rotr",
-            "shuffle", "begin", "end", "swap", "rand", "srand", "time",
-            "time_t", "upper_bound", "hash", "sqrt", "tan", "sin", "cos",
-            "unordered_set", "unordered_map", "bitset"]
+    # At some point, I should prob put all of these in a file
+    #   that gets reloaded every 1-2 min.
+    c_funcs =[
+               "open", "close", "flock", "assert", "getchar", "srand", "time",
+               "rand",
+             ]
+    stdlib = [
+               "cin", "cout", "cerr", "clog", "wcin", "wcout", "wcerr", "wclog",
+               "printf", "malloc", "free", "calloc", "realloc", "alloca",
+               "puts", "strlen", "strcpy", "string", "endl", "vector",
+               "tuple", "tie", "countr_zero", "to_string", "rotl", "rotr",
+               "shuffle", "begin", "end", "swap", "rand",
+               "time_t", "upper_bound", "hash", "sqrt", "tan", "sin", "cos",
+               "atan", "acos", "asin", "unordered_set", "unordered_map",
+               "bitset", "min", "max", "find", "pair", "copy", "move",
+               "memcpy", "isdigit", "pow", "isnan", "isinf", "tolower",
+               "toupper", "wstring", "accumulate", "wstring_convert",
+               "codecvt_utf8", "codecvt_utf8_utf16", "numeric_limits",
+               "make_pair", "exp", "views", "views::chunk", "ranges",
+               "ranges::view", "mutex", "ref", "thread", "this_thread",
+               "this_thread::sleep_for", "chrono::milliseconds", "chrono",
+               "thread::hardware_concurrency", "reverse", "chrono::seconds",
+               "chrono::high_resolution_clock", "chrono::duration_cast",
+               "chrono::high_resolution_clock::now", "from_chars", "getline",
+               "errc", "errc::invalid_argument", "errc::result_out_of_range",
+               "errc::broken_pipe", "filesystem", "filesystem::is_directory",
+               "filesystem::exists", "filesystem::create_directory",
+               "string::npos", "optional", "make_optional", "nullopt",
+               "ranges::find", "uniform_int_distribution", "mt19937",
+               "random_device", "fixed", "setprecision", "get",
+               # Type stuff
+               "is_integral", "is_integral_v", "is_unsigned", "is_unsigned_v",
+               "enable_if_t", "integral", "is_same_v", "conditional_t",
+               # IO/Streams
+               "istreambuf_iterator", "fstream", "ifstream", "ofstream",
+               "ios", "ios::binary", "ios::out", "ios::in", "stringstream",
+               "hex", "setfill", "setw", "flush", "ostream", "istream",
+               # Exceptions
+               "runtime_error", "invalid_argument",
+             ] + c_funcs
+    stdlib.sort(key=lambda s: -len(s)) # Longest first
+    return [f"std::{builtin}" for builtin in stdlib] + ["std::"] + c_funcs
     return main + [f"std::{builtin}" for builtin in main] + ["std::"]
 
 def get_keywords() -> Iterable[str]:
-    return ["asm", "else", "new", "this", "auto", "enum", "operator",
-            "throw", "bool", "explicit", "private", "true", "break",
-            "export", "protected", "try", "case", "extern", "public",
-            "typedef", "catch", "false", "register", "typeid", "char",
-            "float", "reinterpret_cast", "typename", "class", "for",
-            "return", "union", "const", "friend", "short", "unsigned",
-            "const_cast", "goto", "signed", "using", "continue", "if",
-            "sizeof", "virtual", "default", "inline", "static", "void",
-            "delete", "int", "static_cast", "volatile", "do", "long",
-            "struct", "wchar_t", "double", "mutable", "switch", "while",
-            "dynamic_cast", "namespace", "template", "NULL", "noexcept",
-            "uint8_t", "uint16_t", "uint32_t", "uint64_t", "__uint128_t",
-            "int8_t", "int16_t", "int32_t", "int64_t", "__int128",
-            "size_t", "constexpr", "static_assert"]
+    return [
+             "asm", "else", "new", "this", "auto", "enum", "operator",
+             "throw", "bool", "explicit", "private", "true", "break",
+             "export", "protected", "try", "case", "extern", "public",
+             "typedef", "catch", "false", "register", "typeid", "char",
+             "float", "reinterpret_cast", "typename", "class", "for",
+             "return", "union", "const", "friend", "short", "unsigned",
+             "const_cast", "goto", "signed", "using", "continue", "if",
+             "sizeof", "virtual", "default", "inline", "static", "void",
+             "delete", "int", "static_cast", "volatile", "do", "long",
+             "struct", "wchar_t", "double", "mutable", "switch", "while",
+             "dynamic_cast", "namespace", "template", "NULL", "noexcept",
+             "uint8_t", "uint16_t", "uint32_t", "uint64_t", "__uint128_t",
+             "int8_t", "int16_t", "int32_t", "int64_t", "__int128",
+             "size_t", "constexpr", "static_assert", "nullptr", "not",
+             "override", "thread_local",
+             # C++20 specific type stuff I have no idea how to use
+             "concept", "requires",
+           ]
+
+def idleany(name:str, alternates:list[str]) -> str:
+    return f"(?P<{name}>{'|'.join(alternates)})"
 
 def make_pat() -> re.compile:
     kw = r"\b" + idleany("keyword", get_keywords()) + r"\b"
 
-    iostream = r"([^.'\"\\#]\b|^)" + idleany("builtins", get_builtins()) + r"\b"
+    # notlookbehind("::", "->", "//", ".", "#", ···) is equivalent to
+    # noncapture(notlookbehind("::", "->", "//"), notlookbehind(".", "#", ···))
+    builtins = r"((?:(?<!::|\->|//)(?<!\.|'|\"|#))\b|^)" + \
+               idleany("builtins", get_builtins()) + r"\b"
 
-    include = idleany("include", [r"#(include|[^\n]*?(?=//|/\*|\n|$))"])
-    include = idleany("include", [r"#(include *|(?:\\\n|[^\n])*?(?=/(?:/|\*)|\n|$))"])
+    # Oh God. I am on my 3rd iteration of this regex... Why is this so hard
+    # Note the regex is still wrong. It doesn't correctly parse
+    #    r"#define x // y \\\n"
+    preprocessor = idleany("preprocessor",
+                           [r"#(include|[^\n]*?(?=//|/\*|\n|$))"])
+    preprocessor = idleany("preprocessor",
+                           [r"#(include *|(?:\\\n|[^\n])*?(?=/(?:/|\*)|\n|$))"])
+    preprocessor = idleany("preprocessor",
+                           [r"#(?:include *|(?:[^\n]*?\\\n)*[^\n]*?(?=//|$))"])
 
     multiline_comment = r"/\*[^\*]*((\*(?!/))[^\*]*)*(\*/)?"
     comment = idleany("comment", [r"//[^\n]*", multiline_comment])
 
-    sstring = r"'[^'\\\n]*(\\.[^'\\\n]*)*(?:'|\n|$)"
-    dstring = r'"[^"\\\n]*(\\.[^"\\\n]*)*(?:"|\n|$)'
-    includestr = '(?<=include )\<[^\n>]*>'
+    strprefix = r"(?:L)?"
+    sstring = strprefix + r"'[^'\\\n]*(\\.[^'\\\n]*)*(?:'|\n|$)"
+    dstring = strprefix + r'"[^"\\\n]*(\\.[^"\\\n]*)*(?:"|\n|$)'
+    includestr = r'(?<=include )\<[^\n>]*>'
     string = idleany("string", [sstring, dstring, includestr])
 
-    reg:str = kw + "|" + comment + "|" + include + "|" + string + "|" + \
-              iostream + "|" + idleany("SYNC", [r"\n"])
+    reg = kw + "|" + preprocessor + "|" + string + "|" + comment + "|" + \
+          builtins + "|" + idleany("SYNC", [r"\n"])
 
     return re.compile(reg, re.M|re.S)
 

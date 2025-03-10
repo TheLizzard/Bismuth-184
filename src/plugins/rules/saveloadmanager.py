@@ -161,9 +161,17 @@ class SaveLoadManager(Rule):
         try:
             data:str = data.decode("utf-8").replace("\r\n", "\n")
             data:str = data.removesuffix("\n")
-        except UnicodeError:
-            title:str = "Unknown encoding"
-            msg:str = "Error couldn't open file."
+            for char in data:
+                # https://stackoverflow.com/q/71879883/11106801
+                # Not fixed by: https://github.com/python/cpython/issues/64567
+                if (char == "\x00") or (128 <= ord(char) < 160):
+                    raise UnicodeError(f"tkinter doesn't like {char=!r}")
+        except UnicodeError as error:
+            err_str:str = str(error)
+            if len(err_str) > 45:
+                err_str:str = err_str.replace("in position", "in\nposition")
+            title:str = "UnicodeError"
+            msg:str = f"Error couldn't open file.\n{err_str}"
             telluser(self.text, title=title, message=msg, icon="error",
                      center=True, center_widget=self.text)
             self.text.after(10, self.text.event_generate, "<<Close-Tab>>")

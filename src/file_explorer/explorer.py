@@ -77,12 +77,6 @@ class Explorer:
             return frame
         raise NotImplementedError(f"What is {frame.item}?")
 
-    def _get_sprite(self, extension:str) -> ImageTk.PhotoImage:
-        if extension in images.EXTENSIONS:
-            return images.TK_IMAGES[extension]
-        else:
-            return images.TK_IMAGES["*"]
-
     def _get_shown_children(self, frame:tk.Frame, *, withself:bool):
         iterator = frame.item.recurse_children(withself=withself,
                                                only_shown=True)
@@ -113,7 +107,8 @@ class Explorer:
         return self.selected
 
     def fix_icon(self, frame:tk.Frame) -> None:
-        image:tk.PhotoImage = self._get_sprite(frame.item.extension)
+        image:tk.PhotoImage = images.get_sprite(self.master,
+                                                frame.item.fullpath)
         frame.icon.itemconfig(frame.icon.id, image=image)
 
     def recolour_frame(self, frame:tk.Frame, bg:str) -> None:
@@ -202,7 +197,7 @@ class Explorer:
         self.fix_indentation(frame)
 
         if isfile(item):
-            tk_icon = self._get_sprite(item.extension)
+            tk_icon = images.get_sprite(self.master, item.fullpath)
             icon = tk.Canvas(frame, bg="black", bd=0, highlightthickness=0,
                              width=tk_icon.width(), height=tk_icon.height())
             icon.id:int = icon.create_image(0, 0, anchor="nw", image=tk_icon)

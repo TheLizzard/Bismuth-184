@@ -1,7 +1,7 @@
 from __future__ import annotations
 from tkinter.filedialog import askopenfilename, asksaveasfilename
 from tempfile import TemporaryDirectory
-import tkinter as tk
+from shutil import which
 import sys
 import os
 
@@ -10,9 +10,9 @@ from bettertk.messagebox import tell as telluser
 from .baserule import Rule, SHIFT, ALT, CTRL
 
 if os.name == "posix":
-    PRINTF:tuple[str] = ("printf",)
+    PRINTF:tuple[str] = (which("printf"),)
 elif os.name == "nt":
-    BASE_PATH:str = os.path.dirname(__file__)
+    BASE_PATH:str = os.path.abspath(os.path.dirname(__file__))
     PRINTF:tuple[str] = (sys.executable, os.path.join(BASE_PATH, "helpers",
                                                       "printf.py"))
 else:
@@ -20,7 +20,7 @@ else:
 
 
 class RunManager(Rule):
-    __slots__ = "text", "args", "term", "cwd", "tmp"
+    __slots__ = "text", "args", "term", "cwd", "tmp", "effective_cwd"
     REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("bind_all",True)]
 
     CD:list[str] = ["cd", "{folder}"]
@@ -42,6 +42,15 @@ class RunManager(Rule):
         self.term:TerminalTk = None
         self.args:list[str] = []
         self.cwd:str = None
+
+    def set_env_var(self, variable:str, value:str|Iterable[str]) -> None:
+        if variable in ("PATH", "LIBRARY_PATH", "LD_LIBRARY_PATH"):
+            assert isinstance(value, list|set|tuple), "TypeError"
+            value:str = ":".join(value) + ":" + os.environ.get(variable, "")
+            value:str = value.strip(":")
+        assert isinstance(value, str), "TypeError"
+        os.environ[variable] = value # Security issue
+        self.term.queue(["export", variable, value], condition=(0).__eq__)
 
     def attach(self) -> None:
         super().attach()
@@ -113,17 +122,18 @@ class RunManager(Rule):
         self.term.topmost(False)
         self.term.focus_set()
         self.cd(print_str=print_str)
-        if self.compile():
+        if self.compile(): # must be after self.cd
             self.execute(args)
         self.after()
 
     def cd(self, req_cwd:str=None, *, print_str:str="") -> None:
         if self.CD is None:
             return None
-        cwd:str = self.cwd or req_cwd or os.path.expanduser("~")
-        command:tuple[str] = self.format(self.CD, {"folder":cwd})
-        self.term.queue([*PRINTF, print_str])
-        self.term.queue(command)
+        self.effective_cwd:str = self.cwd or req_cwd or self.tmp.name
+        command:tuple[str] = self.format(self.CD, {"folder":self.effective_cwd})
+        if print_str:
+            self.term.queue([*PRINTF, print_str], condition=(0).__eq__)
+        self.term.queue(command, condition=(0).__eq__)
 
     def compile(self, *, print_str:str="", command:list[str]=None) -> bool:
         if (self.COMPILE is None) and (command is None):
@@ -133,8 +143,9 @@ class RunManager(Rule):
         command:list[str] = command or self.COMPILE
         command:list[str] = self.format(command, {"file":self.text.filepath,
                                                   "tmp":self.tmp.name})
-        self.term.queue([*PRINTF, print_str], condition=(0).__eq__)
-        self.term.queue(command)
+        if print_str:
+            self.term.queue([*PRINTF, print_str], condition=(0).__eq__)
+        self.term.queue(command, condition=(0).__eq__)
         return True
 
     def execute(self, args:Iterable[str], *, print_str:str="") -> None:
@@ -142,16 +153,18 @@ class RunManager(Rule):
             return None
         command = self.format(self.RUN, {"file":self.text.filepath,
                                          "tmp":self.tmp.name}) + list(args)
-        self.term.queue([*PRINTF, print_str], condition=(0).__eq__)
-        self.term.queue(command)
+        if print_str:
+            self.term.queue([*PRINTF, print_str], condition=(0).__eq__)
+        self.term.queue(command, condition=(0).__eq__)
 
     def after(self, *, print_str:str="", command:list[str]=None) -> None:
         if (self.AFTER is None) and (command is None):
             return None
         command:list[str] = command or self.AFTER
         command:list[str] = self.format(command, {"file":self.text.filepath})
-        self.term.queue([*PRINTF, print_str], condition=(0).__eq__)
-        self.term.queue(command)
+        if print_str:
+            self.term.queue([*PRINTF, print_str], condition=(0).__eq__)
+        self.term.queue(command, condition=(0).__eq__)
 
     def test(self, args:Iterable[str], *, print_str:str="") -> None:
         if self.RUN is None:

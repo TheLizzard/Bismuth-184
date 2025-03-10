@@ -18,6 +18,9 @@ class ColourConfig(dict):
                            **kwargs
                         })
 
+KEYWORD_GROUPS:str = r"match_softkw|case_softkw\d*|case_default_underscore|" \
+                     r"keyword\d*"
+
 
 class ColourManager(Rule, ColorDelegator):
     __slots__ = "old_bg", "old_fg", "old_insertbg", "colorizer", "text", \
@@ -93,7 +96,6 @@ class ColourManager(Rule, ColorDelegator):
 
     def _add_tag(self, start, end, head, tag):
         tag:str = "SYNC" if tag == "SYNC" else tag.lower()
-        kw_groups = ("match_softkw", "case_softkw", "case_softkw2",
-                     "case_default_underscore")
-        self.tag_add("keyword" if tag in kw_groups else tag,
-                     f"{head}+{start:d}c", f"{head}+{end:d}c")
+        if re.match(KEYWORD_GROUPS, tag):
+            tag:str = "keyword"
+        self.tag_add(tag, f"{head}+{start:d}c", f"{head}+{end:d}c")
