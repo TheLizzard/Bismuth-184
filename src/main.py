@@ -149,7 +149,7 @@ class App:
         raise KeyError("InternalError")
 
     # Tab management
-    def new_tab(self, filepath:str=None) -> BetterText:
+    def new_tab(self) -> BetterText:
         page:NotebookPage = self.notebook.tab_create()
         text:BetterText = TextClass(page.frame, highlightthickness=0, bd=0,
                                     font=settings.editor.font)
@@ -158,25 +158,25 @@ class App:
             text._xviewfix.dlineinfo.assume_monospaced()
             text.ignore_tags_with_bg:bool = True
         page.add_frame(text)
-        text.filesystem_data:str = ""
-        text.save_module:bool = True
-        text.filepath:str = filepath
+        text.inserted_default:bool = False
+        text.filepath:str = ""
         self.text_to_page[text] = page
         page.focus()
         self.plugin_manage(text)
         text.focus_set()
-        text.bind("<<Request-Save>>", self.request_save, add=True)
-        text.bind("<<Request-Open>>", self.request_open, add=True)
+        text.bind("<<Saved-File>>", self.maybe_change_plugin, add=True)
+        text.bind("<<Opened-File>>", self.maybe_change_plugin, add=True)
         text.bind("<<Modified-Change>>", self.rename_tab, add=True)
-        if filepath:
-            text.filepath:str = filepath
-            text.event_generate("<<Trigger-Open>>")
-        else:
-            text.insert("end", text.plugin.DEFAULT_CODE)
-            text.event_generate("<<Clear-Separators>>")
-            text.edit_modified(False)
-            text.event_generate("<<Modified-Change>>")
         return text
+
+    def maybe_change_plugin(self, event:tk.Event) -> None:
+        self.plugin_manage(event.widget)
+        if not event.widget.inserted_default:
+            event.widget.inserted_default:bool = True
+            if event.widget.get("1.0", "end -1c"):
+                return None
+            event.widget.event_generate("<<Force-Set-Data>>",
+                                        data=event.widget.plugin.DEFAULT_CODE)
 
     def plugin_manage(self, text:BetterText) -> None:
         old:Plugin = getattr(text, "plugin")
@@ -199,6 +199,7 @@ class App:
 
     def rename_tab(self, event:tk.Event) -> None:
         filename:str = self.get_filename(event.widget.filepath)
+        if not filename: return None
         if event.widget.edit_modified():
             filename:str = f"*{filename}*"
         self.text_to_page[event.widget].rename(filename)
@@ -223,12 +224,13 @@ class App:
         path:str = self.explorer.selected.item.fullpath
         self.open_tab(path)
 
-    def open_tab(self, path:str) -> None:
+    def open_tab(self, filepath:str) -> None:
         for text, page in self.text_to_page.items():
-            if text.filepath == path:
+            if text.filepath == filepath:
                 page.focus()
                 return None
-        self.new_tab(path)
+        text:BetterText = self.new_tab()
+        text.event_generate("<<Force-Open>>", data=filepath)
 
     def open(self, path:str) -> None:
         """
@@ -244,47 +246,6 @@ class App:
                 self.explorer.add(path, expand=True)
         else:
             raise RuntimeError(f"Unknown type for {path!r}")
-
-    # Save/Close
-    def request_save(self, event:tk.Event) -> None:
-        # Read existing if possible
-        if event.widget.filepath is None:
-            filesystem_data:bytes = None
-        elif not os.path.exists(event.widget.filepath):
-            filesystem_data:bytes = None
-        else:
-            with open(event.widget.filepath, "br") as file:
-                filesystem_data:bytes = file.read().replace(b"\r\n", b"\n")
-                filesystem_data:bytes = filesystem_data.removesuffix(b"\n")
-        # Get the current data in the editor
-        data:bytes = event.widget.filesystem_data.encode("utf-8") \
-                                                 .removesuffix(b"\n")
-        # Compare and ask if we can replace data
-        if (filesystem_data is not None) and (data != filesystem_data):
-            title:str = "Merge conflict"
-            msg:str = "The file has been modified on the filesystem.\n" \
-                      "Are you sure you want to save it?"
-            allow:bool = askyesno(self.root, title=title, icon="warning",
-                                  message=msg, center=True,
-                                  center_widget=event.widget)
-            if not allow:
-                return None
-        # Actual save
-        event.widget.event_generate("<<Trigger-Save>>")
-        self.plugin_manage(event.widget)
-
-    def request_open(self, event:tk.Event) -> None:
-        if event.widget.edit_modified():
-            title:str = "Discard changes to this file?"
-            msg:str = "You haven't saved this file. Are you sure you\n" \
-                      "want to continue and discard the changes?"
-            ret:bool = askyesno(self.root, title=title, icon="warning",
-                                message=msg, center=True,
-                                center_widget=event.widget)
-            if not ret:
-                return None
-        event.widget.event_generate("<<Trigger-Open>>")
-        self.plugin_manage(event.widget)
 
     # Handle the get/set state
     def root_close(self, event:tk.Event=None) -> str:
@@ -357,60 +318,15 @@ class App:
         opened:list[tuple] = []
         for page in self.notebook.iter_pages():
             text:BetterText = self.page_to_text(page)
-            file:str = text.filepath
-            xview:str = str(text.xview()[0])
-            yview:str = str(text.yview()[0])
-            insert:str = text.index("insert")
-            saved:str = text.filesystem_data
-            modified:str = text.edit_modified()
-            if modified:
-                data:str = text.get("1.0", "end").removesuffix("\n")
-            else:
-                data:str = None
-            opened.append([file, data, xview, yview, insert, saved, modified])
+            plugin_state:object = text.plugin.get_state()
+            opened.append(plugin_state)
         return opened
 
     def _set_notebook_state(self, opened:list[tuple]) -> None:
-        files:set[str] = set()
-        for file, data, xview, yview, insert, saved, modified in opened:
-            if file in files:
-                title:str = "Single file in multiple tabs"
-                msg:str = "Please don't open the same file in multiple\n" \
-                          "tabs as that can cause problems for this editor"
-                telluser(self.root, title=title, message=msg, center=True,
-                         icon="warning")
-            elif file is not None:
-                files.add(file)
-            text:BetterText = self.new_tab(file)
-            if modified:
-                text.filesystem_data:str = saved
-                text.delete("0.0", "end")
-                text.insert("end", data)
-                text.edit_modified(True)
-                text.event_generate("<<Clear-Separators>>")
-                text.event_generate("<<Modified-Change>>")
-            if text.plugin:
-                text.plugin.move_insert(insert)
-            text.mark_set("insert", insert)
-            text.xview("moveto", xview)
-            text.yview("moveto", yview)
-            # Validity check:
-            if (file is not None) and modified:
-                problem:bool = True
-                if os.access(file, os.R_OK):
-                    with open(file, "rb") as fd:
-                        filedata:bytes = fd.read().replace(b"\r\n", b"\n")
-                        filedata:bytes = filedata.removesuffix(b"\n")
-                        problem:bool = saved.encode("utf-8") != filedata
-                if problem:
-                    title:str = "Merge Conflict"
-                    msg:str = f"The file {file} has been\nmodified on " \
-                              "you system and there are changes in this " \
-                              "editor.\nThis means that you have a " \
-                              "merge conflict."
-                    telluser(self.root, title=title, message=msg,
-                             center=True, icon="warning",
-                             center_widget=text, block=False)
+        for plugin_state in opened:
+            text:BetterText = self.new_tab()
+            text.inserted_default:bool = True
+            text.plugin.set_state(plugin_state)
 
     def _get_explorer_state(self) -> tuple[list[str],list[str]]:
         getpath = lambda item: item.fullpath

@@ -124,6 +124,19 @@ class ProtoPlugin:
         #   and then fix XViewFixManager
         return getattr(method, "__func__", method) is not function
 
+    def get_state(self) -> object:
+        state:dict[str:object] = dict()
+        for rule in self.rules:
+            state[rule.__class__.__name__] = rule.get_state()
+        return state
+
+    def set_state(self, state:object) -> None:
+        assert isinstance(state, dict), "TypeError"
+        for rule in self.rules:
+            rule_name:str = rule.__class__.__name__
+            if rule_name in state:
+                rule.set_state(state[rule_name])
+
 
 # Don't change order; mod2 might mean "key press"
 ALL_MODIFIERS = ("shift", "caps", "control",

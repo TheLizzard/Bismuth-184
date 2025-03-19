@@ -8,7 +8,6 @@ Editor:
 * On Control-j and Control-l, undo moves insert to the end of the line
 * Control-j and Control-l move the viewport to the end of the longest line
 * Unclosed bracket in `FindReplaceManager` with "whole word" fails text="a()\na(x)", search="a("
-* For any file [save, close Bismuth, delete, open Bismuth] opens the file blank as if it was blank
 * Starting code never appears
 * On Windows, the window grows horizontally each time the Bismuth-184 is opened
 * Control-R should use `xview` and `yview` instead of `see`
@@ -19,6 +18,7 @@ Editor:
 * BetterText has problems when the longest line is only slighly longer than the text box (possibly because of the scrollbar)
 * Closing ] doesn't highlight correctly only when in string (only sometimes)
 * Control arrows don't account that "-" can be part of an int literal
+* Umarks don't move with text
 
 IPC:
 * Remove psutil dependency for checking if process exists

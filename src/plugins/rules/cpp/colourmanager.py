@@ -51,10 +51,17 @@ def get_builtins() -> Iterable[str]:
                "filesystem::exists", "filesystem::create_directory",
                "string::npos", "optional", "make_optional", "nullopt",
                "ranges::find", "uniform_int_distribution", "mt19937",
-               "random_device", "fixed", "setprecision", "get",
+               "uniform_real_distribution", "random_device", "fixed",
+               "setprecision", "get", "make_tuple", "bit_cast", "array",
+               "abs", "all_of", "any_of", "none_of", "distance", "round",
+               "chrono::steady_clock", "chrono::steady_clock::now",
+               "this_thread::sleep_until", "chrono::duration",
+               "ostringstream", "istringstream", "clamp", "stof",
+               "fmod", "numbers", "numbers::e", "numbers::pi",
                # Type stuff
                "is_integral", "is_integral_v", "is_unsigned", "is_unsigned_v",
                "enable_if_t", "integral", "is_same_v", "conditional_t",
+               "is_floating_point", "is_floating_point_v",
                # IO/Streams
                "istreambuf_iterator", "fstream", "ifstream", "ofstream",
                "ios", "ios::binary", "ios::out", "ios::in", "stringstream",
@@ -98,15 +105,13 @@ def make_pat() -> re.compile:
     builtins = r"((?:(?<!::|\->|//)(?<!\.|'|\"|#))\b|^)" + \
                idleany("builtins", get_builtins()) + r"\b"
 
-    # Oh God. I am on my 3rd iteration of this regex... Why is this so hard
-    # Note the regex is still wrong. It doesn't correctly parse
-    #    r"#define x // y \\\n"
+    # Oh God. I am on my 4rd iteration of this regex...
     preprocessor = idleany("preprocessor",
                            [r"#(include|[^\n]*?(?=//|/\*|\n|$))"])
     preprocessor = idleany("preprocessor",
                            [r"#(include *|(?:\\\n|[^\n])*?(?=/(?:/|\*)|\n|$))"])
     preprocessor = idleany("preprocessor",
-                           [r"#(?:include *|(?:[^\n]*?\\\n)*[^\n]*?(?=//|$))"])
+                        [r"#(?:include *|(?:[^\n]*?\\\n)*[^\n]*?(?=//|/\*|$))"])
 
     multiline_comment = r"/\*[^\*]*((\*(?!/))[^\*]*)*(\*/)?"
     comment = idleany("comment", [r"//[^\n]*", multiline_comment])

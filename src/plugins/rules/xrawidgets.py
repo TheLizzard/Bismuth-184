@@ -59,6 +59,8 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
                            "<<Reloaded-File>>",
                            # If the text widget scrolls, scroll the linenumbers
                            "<<Y-Scroll>>",
+                           # Display user marks
+                           "<<Set-UMark>>", "<<Remove-UMark>>",
                          )
         Rule.__init__(self, plugin, text, ons=evs)
         self.text:tk.Text = text
@@ -88,16 +90,21 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
         self.text.add_widget(self.sidebar_text, column=-2)
         self.sidebar_text.config(bg=self.text.cget("bg"),
                                  fg=self.text.cget("fg"))
+        self.sidebar_text.tag_remove("umark", "1.0", "end")
+        self.sidebar_text.tag_config("umark", foreground="cyan")
         self.text.after(10, self.update_font)
         #self.sidebar_text.tag_config("sel", foreground="", background="")
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
+        umark_line:int = -1
         if on == "<raw-after-insert>":
             if "\n" not in event.data["raw"][1]:
                 return False
-        return True
+        if on.endswith("-umark>"):
+            umark_line:int = event.data
+        return umark_line, True
 
-    def do(self, on:str) -> Break:
+    def do(self, on:str, umark_line:int) -> Break:
         if on in ("<y-scroll>", "<reloaded-file>"):
             self.sidebar_text.yview("moveto", self.text.yview()[0])
             return False
@@ -105,6 +112,14 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
                   "<undo-triggered>", "<redo-triggered>"):
             end:int = int(float(self.text.index("end -1c")))
             LineNumbers.update_sidebar_text(self, end)
+            return False
+        if on == "<set-umark>":
+            self.sidebar_text.tag_add("umark", f"{umark_line}.0",
+                                      f"{umark_line}.0 lineend")
+            return False
+        if on == "<remove-umark>":
+            self.sidebar_text.tag_remove("umark", f"{umark_line}.0",
+                                         f"{umark_line}.0 lineend")
             return False
         raise RuntimeError(f"Unhandled {on!r} in {self.__class__.__name__}")
 

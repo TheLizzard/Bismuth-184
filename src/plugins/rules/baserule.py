@@ -84,3 +84,10 @@ class Rule:
 
     def do(self, on:str, *data) -> Break:
         return False
+
+    def get_state(self) -> object:
+        return None
+
+    def set_state(self, state:object) -> None:
+        if state is not None:
+            raise RuntimeError("State was saved but not loaded")

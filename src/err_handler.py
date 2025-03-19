@@ -1,7 +1,6 @@
 from __future__ import annotations
-from traceback import format_exception, format_exc
+from traceback import format_exc
 import tkinter as tk
-import traceback
 import os
 
 PATH:str = os.path.abspath(os.path.dirname(__file__))
@@ -154,6 +153,14 @@ def _setup_window(root, string:str) -> tuple[tk.Frame,tk.Text]:
     def close() -> None:
         root.destroy()
     def write_to_file() -> None:
+        nonlocal string
+        try:
+            string = text.get("1.0", "end")
+        except Exception as error:
+            new_err:str = "Error when getting text from tkinter to save"
+            string += "\n\n" + " Non critical error ".center(80, "=") + "\n"
+            string += new_err + "\n" + "-"*len(new_err) + "\n" + \
+                      format_exc().rstrip("\n") + "\n" + "="*80 + "\n"
         _display2(string)
         button.destroy()
 

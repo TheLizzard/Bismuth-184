@@ -218,7 +218,7 @@ class FindReplaceManager(Rule):
 
     def fill_in_find(self) -> None:
         # Add whatever the user has selected in the editor
-        start, end = self.text.plugin.get_selection()
+        start, end = self.plugin.get_selection()
         if start != end:
             text:str = self.text.get(start, end).strip("\n")
             if text.find("\n") == -1:

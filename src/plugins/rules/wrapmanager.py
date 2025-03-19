@@ -31,7 +31,7 @@ class WrapManager(Rule):
         return True
 
     def do(self, on:str) -> Break:
-        if on in ("<opened-file>", "reloaded-file"):
+        if on in ("<opened-file>", "<reloaded-file>"):
             self._config_wrap()
             return False
         raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")

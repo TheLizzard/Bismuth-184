@@ -49,6 +49,6 @@ class StdInsertManager(Rule):
             self.text.insert("insert", "std::cout << ")
             new_idx:str = self.text.index("insert")
             self.text.insert("insert", " << std::endl;")
-            self.text.plugin.move_insert(new_idx)
+            self.plugin.move_insert(new_idx)
             return True
         raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")

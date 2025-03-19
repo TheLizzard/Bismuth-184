@@ -82,7 +82,8 @@ class Compiler:
         command += self._get_flags()
         # Linked libraries
         for folder, libs in sorted(self.links.items()):
-            command += [f"-L{folder}"]
+            if folder:
+                command += [f"-L{folder}"]
             for lib in libs:
                 command += [f"-l{lib}"]
 
@@ -112,7 +113,7 @@ class Compiler:
                            stdout=PIPE, stderr=PIPE, stdin=DEVNULL,
                            env=environ, cwd=self.effective_cwd)
         try:
-            proc.wait(1)
+            proc.wait(3)
         except TimeoutExpired:
             proc.kill()
             self.error:str = "g++ -MM took too long"
@@ -213,7 +214,7 @@ class Compiler:
         """
         - cpp-flags
             # +std=c++20     To remove the default -std=c++20
-            # +std=c++14     To add -std=c++14
+            # -std=c++14     To add -std=c++14
         # file.cpp
         """
         for file in listdir(folder):
@@ -231,6 +232,8 @@ class Compiler:
                - libtorch => /usr/lib/   libtorch.so
                - libgmp1 => /usr/lib/    libgmp1.so
                - lib!gmp2 => /usr/lib64
+            - curses
+               # libncurses              -lncurses
         # file.cpp
         """
         root:str = path.join(folder, "cpp-libs")
@@ -266,10 +269,9 @@ class Compiler:
 
             elif folder.startswith("lib"):
                 lib:str = folder.removeprefix("lib")
-                if fullfolder:
-                    self.links[fullfolder].add(lib)
-                else:
-                    self.links[""].add(lib)
+                if path.isfile(fullfolder):
+                    fullfolder:str = ""
+                self.links[fullfolder].add(lib)
 
 
 PROG = make_pat()

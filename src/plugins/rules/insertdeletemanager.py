@@ -33,7 +33,7 @@ class InsertDeleteManager(Rule, Delegator):
         _tags:tuple[str] = (tags,) if isinstance(tags, str) else tags
         _tags:tuple[str] = () if _tags is None else _tags
         tags:tuple[str] = tuple(set(_tags)-{"program"})
-        data:dict[str:tuple] = {"raw": (index,chars,_tags)}
+        data:dict[str:tuple] = {"raw": (index, chars, _tags)}
         data["abs"] = (self._index(index), chars, _tags)
         # Raw events can't be stopped by _VirtualEvents.paused
         self.text.event_generate("<<Raw-Before-Insert>>", data=data)
