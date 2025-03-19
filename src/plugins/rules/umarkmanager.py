@@ -74,4 +74,4 @@ class UMarkManager(Rule):
         for line in state:
             if not isinstance(line, int): return None
         for line in state:
-            self.text.event_generate("<<Set-UMark>>", data=mark)
+            self.text.event_generate("<<Set-UMark>>", data=line)
