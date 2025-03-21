@@ -57,7 +57,7 @@ def get_builtins() -> Iterable[str]:
                "chrono::steady_clock", "chrono::steady_clock::now",
                "this_thread::sleep_until", "chrono::duration",
                "ostringstream", "istringstream", "clamp", "stof",
-               "fmod", "numbers", "numbers::e", "numbers::pi",
+               "fmod", "numbers", "numbers::e", "numbers::pi", "exit",
                # Type stuff
                "is_integral", "is_integral_v", "is_unsigned", "is_unsigned_v",
                "enable_if_t", "integral", "is_same_v", "conditional_t",

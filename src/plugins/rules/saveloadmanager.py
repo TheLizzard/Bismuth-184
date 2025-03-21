@@ -233,6 +233,7 @@ class SaveLoadManager(Rule):
         return (save_state, view_state)
 
     def set_state(self, state:object) -> None:
+        assert not self.text.filepath, "set_state called too late"
         if not isinstance(state, list|tuple): return None
         save_state, view_state = state
         self._set_state_save(*save_state)
