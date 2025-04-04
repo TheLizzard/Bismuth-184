@@ -61,6 +61,7 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
                            "<<Y-Scroll>>",
                            # Display user marks
                            "<<Set-UMark>>", "<<Remove-UMark>>",
+                           "<<Remove-All-UMarks>>",
                          )
         Rule.__init__(self, plugin, text, ons=evs)
         self.text:tk.Text = text
@@ -120,6 +121,9 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
         if on == "<remove-umark>":
             self.sidebar_text.tag_remove("umark", f"{umark_line}.0",
                                          f"{umark_line}.0 lineend")
+            return False
+        if on == "<remove-all-umarks>":
+            self.sidebar_text.tag_remove("umark", "1.0", "end")
             return False
         raise RuntimeError(f"Unhandled {on!r} in {self.__class__.__name__}")
 

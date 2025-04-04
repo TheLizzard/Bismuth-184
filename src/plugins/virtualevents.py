@@ -76,10 +76,17 @@ class _VirtualEvents:
                 handled:bool = False
                 for func, all in funcs:
                     if all or (not other):
-                        result:str = func(event)
-                        handled:bool = True
-                        if result == "break":
-                            return "break"
+                        try:
+                            result:str = func(event)
+                        except Exception as error:
+                            if hasattr(tk, "report_full_exception"):
+                                tk.report_full_exception(self.widget, error)
+                            else:
+                                self.widget._report_exception()
+                        else:
+                            handled:bool = True
+                            if result == "break":
+                                return "break"
                 return "handled" if handled else ""
         # If [the event is not virtual or no event handlers are bound to that
         #   event] and drop is True, use the old `event_generate`

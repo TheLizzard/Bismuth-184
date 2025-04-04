@@ -1,9 +1,16 @@
 from __future__ import annotations
-from traceback import format_exc
+from traceback import format_exception, format_exc
+from subprocess import Popen, DEVNULL
+from functools import partial
+from threading import Thread
+from sys import executable
 import tkinter as tk
+import sys
 import os
 
-PATH:str = os.path.abspath(os.path.dirname(__file__))
+
+THIS:str = os.path.abspath(__file__)
+PATH:str = os.path.dirname(THIS)
 ERR_PATH_FORMAT:str = os.path.join(PATH, "error_logs", "error.{n}.txt")
 
 def get_err_path() -> str:
@@ -30,12 +37,50 @@ BUTTON_KWARGS:dict = dict(activeforeground="white", activebackground="grey",
                           takefocus=False)
 
 
-class ErrorCatcher:
-    __slots__ = "inside", "handler", "ign_err"
+def get_full_traceback(err:Exception) -> Traceback:
+    """
+    Returns the full traceback of `err` from the very start of the program.
+    """
+    class FakeTraceback:
+        def __init__(self, frame, lasti, lineno, next):
+            self.tb_lineno = lineno
+            self.tb_frame = frame
+            self.tb_lasti = lasti
+            self.tb_next = next
+        def reverse(self, new_last):
+            self, _next = new_last, self
+            while _next:
+                _next.tb_next, _next, self = self, _next.tb_next, _next
+            return self
 
-    def __init__(self, handler:Callable[None], ign_err:bool) -> ErrorCatcher:
+    raw_traceback = err.__traceback__
+    err_traceback = None
+    while raw_traceback:
+        err_traceback = FakeTraceback(raw_traceback.tb_frame,
+                                      raw_traceback.tb_lasti,
+                                      raw_traceback.tb_lineno, err_traceback)
+        raw_traceback = raw_traceback.tb_next
+
+    raw_traceback = sys._getframe().f_back.f_back
+    main_traceback = err_traceback.reverse(None)
+    while raw_traceback:
+        main_traceback = FakeTraceback(raw_traceback, raw_traceback.f_lasti,
+                                       raw_traceback.f_lineno, main_traceback)
+        raw_traceback = raw_traceback.f_back
+
+    return main_traceback
+
+def report_full_exception(widget:tk.Widget, err:BaseException) -> None:
+    widget._root().report_callback_exception(type(err), err,
+                                             get_full_traceback(err))
+tk.report_full_exception = report_full_exception
+
+
+class ErrorCatcher:
+    __slots__ = "inside", "handler"
+
+    def __init__(self, handler:Callable[None]) -> ErrorCatcher:
         self.handler:Callable[None] = handler
-        self.ign_err:bool = ign_err
         self.inside:bool = False
 
     def __enter__(self) -> ErrorCatcher:
@@ -43,18 +88,19 @@ class ErrorCatcher:
         self.inside:bool = True
         return self
 
-    def __exit__(self, exc_type:type, exc_val:Exception, exc_tb:object) -> bool:
-        if exc_type is None:
+    def __exit__(self, exc:type, val:Exception, tb:object) -> bool:
+        if exc:
+            return self.handler(exc, val, tb)
+        else:
             return False
-        self.handler()
-        return self.ign_err
 
 
 class RunManager:
     __slots__ = "funcs", "started_exec"
 
     def __init__(self) -> None:
-        tk.Tk.report_callback_exception = lambda*a:self.report_exc(False)
+        tk.Tk.report_callback_exception = partial(self.report_exc,
+                                                  critical=False)
         self.funcs:list[tuple[Callable,bool]] = []
         self.started_exec:bool = False
 
@@ -70,9 +116,11 @@ class RunManager:
 
     def error_chatcher(self, critical:bool=True, *,
                        ign_err:bool=True) -> ErrorCatcher:
-        def inner() -> None:
-            self.report_exc(critical, msg="Exception caught by ErrorCatcher")
-        return ErrorCatcher(inner, ign_err=ign_err)
+        def inner(exc:type, val:Exception, tb:object) -> None:
+            self.report_exc(exc, val, tb, critical=critical,
+                            msg="Exception caught by ErrorCatcher")
+            return ign_err
+        return ErrorCatcher(inner)
 
     def register(self, func:Callable, *, exit_on_error:bool=False) -> None:
         assert not self.started_exec, "Can't register any functions after " \
@@ -90,39 +138,48 @@ class RunManager:
             try:
                 args:object = func(*_format_args(args))
             except BaseException as error:
-                if not isinstance(error, SystemExit):
-                    self.report_exc(critical=exit_on_error)
-                    if not exit_on_error:
-                        continue
+                if isinstance(error, SystemExit):
+                    return None
+                self.report_exc(type(error), error, get_full_traceback(error),
+                                critical=exit_on_error)
+                if not exit_on_error:
+                    continue
                 return None
 
-    def report_exc(self, critical:bool, msg:str="") -> None:
+    def report_exc(self, *exc:tuple, critical:bool, msg:str="") -> None:
         if critical:
             pre_string:str = " Critical error ".center(80, "=")
         else:
             pre_string:str = " Non critical error ".center(80, "=")
-        string:str = pre_string + "\n" + format_exc().rstrip("\n") + "\n"
+        tb:str = "".join(format_exception(*exc)).rstrip("\n")
+        string:str = pre_string + "\n" + tb + "\n"
         if msg:
             string += msg + "\n"
-        self._display(string + "="*80)
+        string += "="*80
+        string:str = string.replace("\x00", "\\x00")
+        proc:Popen = Popen([executable, THIS], shell=False, stdin=DEVNULL,
+                           stdout=DEVNULL, stderr=DEVNULL,
+                           env=os.environ|{"_display_err":string})
+        Thread(target=proc.wait, name="subproc-reaper", daemon=False).start()
 
-    def _display(self, string:str) -> None:
-        try_n:int = 0
-        while True:
-            try:
-                if try_n == 0:
-                    _display0(string)
-                elif try_n == 1:
-                    _display1(string)
-                elif try_n == 2:
-                    _display2(string)
-                else:
-                    pass # No display, ignore the error
-                break
-            except Exception as error:
-                print(error)
-                try_n += 1
 
+# Main display dispatcher
+def _display(string:str) -> None:
+    try_n:int = 0
+    while True:
+        try:
+            if try_n == 0:
+                _display0(string)
+            elif try_n == 1:
+                _display1(string)
+            elif try_n == 2:
+                _display2(string)
+            else:
+                pass # No display, ignore the error
+            break
+        except Exception as error:
+            print(error)
+            try_n += 1
 
 # Different displays
 def _display0(string:str) -> None:
@@ -205,25 +262,32 @@ def _try_set_iconphoto(root:tk.Tk|BetterTk) -> HasErrorer:
 
 
 if __name__ == "__main__":
-    def start() -> int:
-        global root
-        root = tk.Tk()
-        root.after(200, lambda: 1/0)
-        root.bind("<Delete>", lambda e: 1/0)
-        return 1
+    string:str|None = os.environ.get("_display_err", None)
+    if string is None:
+        def start() -> int:
+            global root
+            root = tk.Tk()
+            root.after(20, lambda: 1/0) # Raise error
+            root.bind("<Delete>", lambda e: 1/0)
+            return 1
 
-    def init(arg:int) -> tuple[str,bool]:
-        assert arg == 1
-        return ("123", False)
+        def init(arg:int) -> tuple[str,bool]:
+            assert arg == 1
+            return ("123", False)
 
-    def run(arg1:str, arg2:bool) -> None:
-        try:
-            root.mainloop()
-        except KeyboardInterrupt:
-            return None
+        def run(arg1:str, arg2:bool) -> None:
+            try:
+                for i in range(100):
+                    root.update()
+                print(1/0) # Raise error
+            except KeyboardInterrupt:
+                return None
 
-    manager:RunManager = RunManager()
-    manager.register(start, exit_on_error=True)
-    manager.register(init, exit_on_error=False)
-    manager.register(run, exit_on_error=False)
-    manager.exec()
+        manager:RunManager = RunManager()
+        manager.register(start, exit_on_error=True)
+        manager.register(init, exit_on_error=False)
+        manager.register(run, exit_on_error=False)
+        manager.exec()
+
+    else:
+        _display(string)

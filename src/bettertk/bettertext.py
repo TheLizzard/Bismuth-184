@@ -18,9 +18,10 @@ class DLineInfoWrapper:
     dlineinfo
     """
     __slots__ = "text", "xview", "yview", "_inside", "_assume_monospaced", \
-                "_monospaced_size"
+                "_monospaced_size", "_shown_monospace_err"
 
     def __init__(self, text:tk.Text) -> DLineInfo:
+        self._shown_monospace_err:bool = False
         self._assume_monospaced:bool = False
         self._monospaced_size:int = 0
         self._inside:bool = False
@@ -56,7 +57,8 @@ class DLineInfoWrapper:
             chars:str = self.text.get(f"{line}.0", f"{line}.0 lineend")
             if chars and ("\t" not in chars): # if tab/s, don't store value
                 size:float = width/len(chars)
-                if int(size) != size:
+                if (int(size) != size) and (not self._shown_monospace_err):
+                    self._shown_monospace_err:bool = True
                     raise RuntimeError("Not a monospaced font but you called " \
                                        ".assume_monospaced()")
                 self._monospaced_size:int = int(size)
@@ -165,7 +167,13 @@ class XViewFix(Delegator):
         self.delegate.event_generate("<<XViewFix-Before-Insert>>")
         self._on_before_insert(index, chars)
         self.delegate.insert(index, chars, tags)
-        self.fix_dirty(char=char)
+        try:
+            self.fix_dirty(char=char)
+        except RuntimeError as err:
+            if hasattr(tk, "report_full_exception"):
+                tk.report_full_exception(self.text, err)
+            else:
+                self.text._report_exception()
         self.delegate.event_generate("<<XViewFix-After-Insert>>")
 
     def delete(self, index1:str, index2:str|None=None) -> None:

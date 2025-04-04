@@ -125,9 +125,9 @@ class App:
                          width=settings.notebook.width)
 
     def init(self) -> None:
-        self._set_notebook_state(settings.notebook.open)
         self._set_explorer_state(settings.explorer.added,
                                  settings.explorer.expanded)
+        self._set_notebook_state(settings.notebook.open)
         for text, page in self.text_to_page.items():
             if text.filepath == settings.window.focused_text:
                 page.focus()
@@ -326,7 +326,13 @@ class App:
         for plugin_state in opened:
             text:BetterText = self.new_tab()
             text.inserted_default:bool = True
-            text.plugin.set_state(plugin_state)
+            try:
+                text.plugin.set_state(plugin_state)
+            except Exception as error:
+                if hasattr(tk, "report_full_exception"):
+                    tk.report_full_exception(text, error)
+                else:
+                    text._report_exception()
 
     def _get_explorer_state(self) -> tuple[list[str],list[str]]:
         getpath = lambda item: item.fullpath

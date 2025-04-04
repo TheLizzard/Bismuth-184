@@ -14,7 +14,7 @@ from .rules.cpp.whitespacemanager import WhiteSpaceManager
 
 class CppPlugin(BasePlugin):
     __slots__ = ()
-    DEFAULT_CODE:str = '#include <iostream>\n\nusing namespace std;\n\nint main(){\n    // comment\n    cout << "Hello, world!" << endl;\n    return 0;\n}'
+    DEFAULT_CODE:str = '#include <iostream>\n\nint main() {\n    // comment\n    std::cout << "Hello, world!" << std::endl;\n    return 0;\n}'
 
     def __init__(self, *args:tuple) -> CppPlugin:
         rules:list[Rule] = [

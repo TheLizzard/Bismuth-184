@@ -10,7 +10,6 @@ Editor:
 * Unclosed bracket in `FindReplaceManager` with "whole word" fails text="a()\na(x)", search="a("
 * Starting code never appears
 * On Windows, the window grows horizontally each time the Bismuth-184 is opened
-* Control-R should use `xview` and `yview` instead of `see`
 * Pasting scrolls to the start of the line (typing also has this problem)
 * Tabs are counted as 1 character when pressing the arrows
 * Alt-quotes still inserts 2 quotes
@@ -18,7 +17,11 @@ Editor:
 * BetterText has problems when the longest line is only slighly longer than the text box (possibly because of the scrollbar)
 * Closing ] doesn't highlight correctly only when in string (only sometimes)
 * Control arrows don't account that "-" can be part of an int literal
-* Umarks don't move with text
+* Check if umarks are computationally expensive
+* Arrow key don't work as expected with "# no-wrap"
+* Deleting an opened file while Bismuth-184 is closed causes an empty untitled page
+* Control-2 and Control-j don't remove selections
+* Control-m doesn't remove marks that are on empty lines
 
 IPC:
 * Remove psutil dependency for checking if process exists
