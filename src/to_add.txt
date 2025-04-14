@@ -8,18 +8,16 @@ Editor:
 * On Control-j and Control-l, undo moves insert to the end of the line
 * Control-j and Control-l move the viewport to the end of the longest line
 * Unclosed bracket in `FindReplaceManager` with "whole word" fails text="a()\na(x)", search="a("
-* Starting code never appears
 * On Windows, the window grows horizontally each time the Bismuth-184 is opened
 * Pasting scrolls to the start of the line (typing also has this problem)
 * Tabs are counted as 1 character when pressing the arrows
-* Alt-quotes still inserts 2 quotes
+* Alt-quotes still inserts 2 quotes (both ' and ")
 * BetterText still has visual bugs when adding to a long line if a longer line exists
 * BetterText has problems when the longest line is only slighly longer than the text box (possibly because of the scrollbar)
 * Closing ] doesn't highlight correctly only when in string (only sometimes)
 * Control arrows don't account that "-" can be part of an int literal
 * Check if umarks are computationally expensive
-* Arrow key don't work as expected with "# no-wrap"
-* Deleting an opened file while Bismuth-184 is closed causes an empty untitled page
+* Up/Down arrow keys don't work as expected with "# no-wrap"
 * Control-2 and Control-j don't remove selections
 * Control-m doesn't remove marks that are on empty lines
 

@@ -58,6 +58,8 @@ def get_builtins() -> Iterable[str]:
                "this_thread::sleep_until", "chrono::duration",
                "ostringstream", "istringstream", "clamp", "stof",
                "fmod", "numbers", "numbers::e", "numbers::pi", "exit",
+               "atan2", "signbit", "forward", "bind", "function", "deque",
+               "aligned_alloc", "fill_n", "memset",
                # Type stuff
                "is_integral", "is_integral_v", "is_unsigned", "is_unsigned_v",
                "enable_if_t", "integral", "is_same_v", "conditional_t",
@@ -66,6 +68,7 @@ def get_builtins() -> Iterable[str]:
                "istreambuf_iterator", "fstream", "ifstream", "ofstream",
                "ios", "ios::binary", "ios::out", "ios::in", "stringstream",
                "hex", "setfill", "setw", "flush", "ostream", "istream",
+               "uppercase", "dec",
                # Exceptions
                "runtime_error", "invalid_argument",
              ] + c_funcs

@@ -72,7 +72,6 @@ class SaveLoadManager(Rule):
         return False
 
     def _chk_fs_modified(self) -> bool:
-        print(os.path.exists(self.text.filepath))
         if not self.text.filepath:
             return False
         if not os.path.exists(self.text.filepath):
@@ -81,8 +80,6 @@ class SaveLoadManager(Rule):
             filesystem_data:bytes = file.read() \
                                         .replace(b"\r\n", b"\n") \
                                         .rstrip(b"\n")
-        print(repr(filesystem_data),
-              repr(self.text.filesystem_data.encode("utf-8")), sep="\n")
         if not filesystem_data:
             return False
         return filesystem_data != self.text.filesystem_data.encode("utf-8")
@@ -184,25 +181,9 @@ class SaveLoadManager(Rule):
             return None
         with open(self.text.filepath, "rb") as file:
             data:bytes = file.read()
-        try:
-            data:str = data.decode("utf-8") \
-                           .replace("\r\n", "\n") \
-                           .removesuffix("\n")
-            for char in data:
-                # https://stackoverflow.com/q/71879883/11106801
-                # Not fixed by: https://github.com/python/cpython/issues/64567
-                if (char == "\x00") or (128 <= ord(char) < 160):
-                    raise UnicodeError(f"tkinter doesn't like {char=!r}")
-        except UnicodeError as error:
-            err_str:str = str(error)
-            if len(err_str) > 45:
-                err_str:str = err_str.replace("in position", "in\nposition")
-            title:str = "UnicodeError"
-            msg:str = f"Error couldn't open file.\n{err_str}"
-            telluser(self.text, title=title, message=msg, icon="error",
-                     center=True, center_widget=self.text)
-            self.text.after(10, self.text.event_generate, "<<Close-Tab>>")
-            return None
+        # Make sure there are no illegal characters
+        data:str|None = self._security(data, decode=True)
+        if data is None: return None
         # Delete old
         current_data:str = self.text.get("1.0", "end -1c")
         if current_data.rstrip("\n") != data:
@@ -250,28 +231,87 @@ class SaveLoadManager(Rule):
         self.text.filesystem_data:str = saved_data
         # Check for merge conflict
         if self.text.filepath:
-            if not modified:
-                self._internal_open(reload=False)
-                return None
-            problem:bool = True
-            if self._can_read():
+            if not self._can_read():
+                msg:str = f"The file {self.text.filepath}\ncan't be read."
+                telluser(self.text, title="Can't read file", message=msg,
+                         center=True, icon="warning",
+                         center_widget=self.text, block=False)
+            elif modified:
                 with open(self.text.filepath, "rb") as fd:
                     filedata:bytes = fd.read() \
                                        .replace(b"\r\n", b"\n") \
                                        .rstrip(b"\n")
-                    problem:bool = saved_data.encode("utf-8") != filedata
-            if problem:
-                title:str = "Merge Conflict"
-                msg:str = f"The file {self.text.filepath} has been\n" \
-                          f"modified on your system and there are " \
-                          f"changes in this editor.\nThis means that " \
-                          f"you have a merge conflict."
-                telluser(self.text, title=title, message=msg,
-                         center=True, icon="warning",
-                         center_widget=self.text, block=False)
+                if saved_data.encode("utf-8") != filedata:
+                    title:str = "Merge Conflict"
+                    msg:str = f"The file {self.text.filepath} has been\n" \
+                              f"modified on your system and there are " \
+                              f"changes in this editor.\nThis means that " \
+                              f"you have a merge conflict."
+                    telluser(self.text, title=title, message=msg,
+                             center=True, icon="warning",
+                             center_widget=self.text, block=False)
+            else:
+                self._internal_open(reload=False)
         # Set the data
+        data:str|None = self._security(data, decode=False)
+        if data is None: return None
         self.text.delete("1.0", "end")
-        self.text.insert("end", data)
+        self.text.insert("end", data, "program")
         self.text.event_generate("<<Clear-Separators>>")
         self.text.event_generate("<<Opened-File>>")
         self._edit_modified(modified)
+
+    def _security(self, data:bytes|str, *, decode:bool) -> str|None:
+        try:
+            if decode:
+                data:str = data.decode("utf-8")
+            assert isinstance(data, str), "data should a string at this point"
+            data:str = data.replace("\r\n", "\n").removesuffix("\n")
+            char:str = _get_first_non_printable(data)
+            if char:
+                raise UnicodeError(f"{char=!r} isn't accepted by the security")
+            return data
+        except UnicodeError as error:
+            err_str:str = str(error)
+            if len(err_str) > 45:
+                err_str:str = err_str.replace("in position", "in\nposition")
+            title:str = "UnicodeError"
+            msg:str = "Error couldn't open file."
+            filepath:str = getattr(self.text, "filepath", "")
+            if filepath:
+                msg += f"\n{filepath}"
+            msg += f"\n{err_str}"
+            telluser(self.text, title=title, message=msg, icon="error",
+                     center=True, center_widget=self.text)
+            self.text.after(10, self.text.event_generate, "<<Close-Tab>>")
+            return None
+
+
+# Security
+# https://stackoverflow.com/q/71879883/11106801
+# Not fixed by: https://github.com/python/cpython/issues/64567
+def _string_is_non_printable(string:str) -> bool:
+    # https://stackoverflow.com/a/6875607/11106801
+    return len(string)+2 != len(repr(string))
+
+def _find_satisfying_char_binary_search(predicate:Callable[str,bool],
+                                        input_str:str) -> str:
+    assert predicate(input_str), "predicate(input_str) must be true"
+    while True:
+        assert len(input_str) > 0, "Impossible"
+        if len(input_str) == 1:
+            assert predicate(input_str), "Impossible"
+            return input_str
+        # Binary search
+        lower_string:str = input_str[:len(input_str)//2]
+        if predicate(lower_string): # If lower half matches
+            input_str:str = lower_string
+        else: # Else upper half must match
+            input_str:str = input_str[len(input_str)//2:]
+
+def _get_first_non_printable(string:str) -> str:
+    for char in "\n\t\r\"'\\":
+        string:str = string.replace(char, "")
+    if not _string_is_non_printable(string):
+        return ""
+    return _find_satisfying_char_binary_search(_string_is_non_printable, string)
