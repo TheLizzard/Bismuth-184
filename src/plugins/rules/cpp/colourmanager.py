@@ -59,7 +59,7 @@ def get_builtins() -> Iterable[str]:
                "ostringstream", "istringstream", "clamp", "stof",
                "fmod", "numbers", "numbers::e", "numbers::pi", "exit",
                "atan2", "signbit", "forward", "bind", "function", "deque",
-               "aligned_alloc", "fill_n", "memset",
+               "aligned_alloc", "fill_n", "memset", "skipws", "noskipws",
                # Type stuff
                "is_integral", "is_integral_v", "is_unsigned", "is_unsigned_v",
                "enable_if_t", "integral", "is_same_v", "conditional_t",

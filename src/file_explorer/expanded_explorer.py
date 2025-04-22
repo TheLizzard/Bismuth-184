@@ -146,7 +146,8 @@ class Menu:
 
 class ExpandedExplorer(Explorer):
     __slots__ = "cwd", "menu", "set_cwd_id", "bin_folder", "renaming", \
-                "creating", "font", "git_in_menu"
+                "creating", "font", "git_in_menu", \
+                "set_cwd_id", "open_term_id"
 
     def __init__(self, master:tk.Misc, font:str="TkDefaultFont",
                  monofont:str="TkFixedFont") -> None:
@@ -186,9 +187,9 @@ class ExpandedExplorer(Explorer):
         self.menu.add("New file", self.newfile, font=font)
         self.menu.add("New folder", self.newfolder, font=font)
         self.menu.add_separator()
-        # self.menu.add("Open (externally)", self.open_item)
         self.menu.add("Open in explorer", self.open_in_explorer, font=font)
-        self.menu.add("Open in terminal", self.open_in_terminal, font=font)
+        self.open_term_id:int = self.menu.add("Open in terminal",
+                                              self.open_in_terminal, font=font)
         self.menu.add_separator()
         self.menu.add("Copy full path", self.copy_path, font=font)
         self.set_cwd_id:int = self.menu.add("Set as working dir", self.set_cwd,
@@ -213,7 +214,14 @@ class ExpandedExplorer(Explorer):
         else:
             self.menu.config(self.set_cwd_id, text="Set exec path (cwd)",
                              command=self.set_cwd)
-        # Set up git?
+        # Open in terminal/open in in explorer
+        if isfolder(self.changing.item):
+            self.menu.config(self.open_term_id, text="Open in terminal",
+                             command=self.open_in_terminal)
+        else:
+            self.menu.config(self.open_term_id, text="Open (externally)",
+                             command=self.open_item)
+        # Set up git
         fs:FileSystem = frame.item.root.filesystem
         git_path:str = fs.join(frame.item.fullpath, ".git")
         if fs.exists(git_path) and fs.isfolder(git_path):

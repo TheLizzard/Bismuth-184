@@ -22,10 +22,6 @@ class ColourConfig(BaseColourConfig):
 
 def get_builtins() -> Iterable[str]:
     return (
-             "System.out.print", "System.err.print",
-             "System.out.println", "System.err.println",
-             "Sytem.out", "System.err", "System.in",
-           ) + (
              "Throwable", "Exception", "CloneNotSupportedException",
              "InterruptedException", "ReflectiveOperationException",
              "ClassNotFoundException", "IllegalAccessException",
@@ -49,12 +45,24 @@ def get_builtins() -> Iterable[str]:
              "UnsatisfiedLinkError", "VerifyError", "ThreadDeath",
              "VirtualMachineError", "InternalError", "OutOfMemoryError",
              "StackOverflowError", "UnknownError", "IOException",
-             "InvocationTargetException",
+             "InvocationTargetException", "TimeoutException",
            ) + (
              "String", "Integer", "Float", "Boolean", "Byte", "Short",
              "Character", "Long", "Double", "Class",
              "ArrayList", "HashSet", "HashMap", "List", "Map", "Set",
-             "Map.Entry", "InputStream", "OutputStream",
+             "InputStream", "OutputStream",
+           ) + (
+             "System", "Thread",
+           ) + (
+             r"Map\.Entry", r"Integer\.parseInt", r"System\.exit",
+             r"String\.format", r"System\.currentTimeMillis",
+             r"System\.out\.print", r"System\.err\.print",
+             r"System\.out\.println", r"System\.err\.println",
+             r"System\.out", r"System\.err", r"System\.in",
+             r"System\.currentTimeMillis", r"Thread\.sleep",
+             r"System\.getenv", r"Map\.of", r"System\.getenv",
+             r"String\.valueOf", r"Character\.digit", r"Math\.min",
+             r"Math\.max", r"Float\.parseFloat",
            )
 
 def get_keywords() -> Iterable[str]:
@@ -72,7 +80,8 @@ def get_keywords() -> Iterable[str]:
 def make_pat() -> re.compile:
     kw = r"\b" + idleany("keyword", get_keywords()) + r"\b"
 
-    builtins = r"([^.'\"\\#]\b|^)" + idleany("builtins", get_builtins()) + r"\b"
+    builtins = sorted(get_builtins(), key=len, reverse=True)
+    builtins = r"([^.'\"\\#]\b|^)" + idleany("builtins", builtins) + r"\b"
 
     multiline_comment = r"/\*[^\*]*((\*(?!/))[^\*]*)*(\*/)?"
     comment = idleany("comment", [r"//[^\n]*", multiline_comment])

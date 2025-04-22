@@ -43,7 +43,8 @@ class ClipboardManager(Rule):
             try:
                 copied:str = self.text.clipboard_get()
             except tk.TclError:
-                msg:str = "Clipboard contents too large"
+                msg:str = "Clipboard contents too large,\n" \
+                          "empty, or not a string."
                 telluser(self.text, title="Can't paste", message=msg,
                          center=True, icon="error")
                 return True

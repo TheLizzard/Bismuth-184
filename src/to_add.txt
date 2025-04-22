@@ -46,6 +46,7 @@ File Explorer:
 * Deleting a top level folder causes problems
 * Deleting an item fails if another file with same name has been deleted
 * Deleting files takes too long to show in GUI
+* Removing a folder doesn't remove it from being cwd
 
 Minor things/Low priority:
 * Disable line numbers when "# no-wrap"?
