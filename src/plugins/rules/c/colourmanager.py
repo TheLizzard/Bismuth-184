@@ -33,7 +33,7 @@ def get_builtins() -> Iterable[str]:
              "vfprintf", "vprintf", "vsprintf", "fopen", "getc",
              "EOF", "malloc", "calloc", "realloc", "alloca", "free", "BUFSIZ",
              "STDERR_FILENO", "STDOUT_FILENO", "STDIN_FILENO", "stderr",
-             "stdout", "stdin", "time", "srand",
+             "stdout", "stdin", "time", "srand", "memcpy", "tolower", "strcmp",
            }
 
 def get_keywords() -> Iterable[str]:
@@ -45,7 +45,7 @@ def get_keywords() -> Iterable[str]:
              "switch", "typedef", "union", "unsigned", "void", "volatile",
              "while", "restrict", "true", "false",
              "uint8_t", "uint16_t", "uint32_t", "uint64_t", "int8_t", "int16_t",
-             "int32_t", "int64_t", "__uint128_t",
+             "int32_t", "int64_t", "__uint128_t", "size_t",
            }
 
 def make_pat() -> re.compile:

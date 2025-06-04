@@ -207,6 +207,9 @@ class NoTitlebarTk:
             _default_root = None
         self.root.destroy()
 
+    def move_to_current_workspace(self) -> Success:
+        return False # Implement me
+
 
 class Draggable(NoTitlebarTk):
     def __init__(self):

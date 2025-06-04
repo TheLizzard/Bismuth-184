@@ -10,7 +10,7 @@ import ctypes
 # Defining types
 CHAR = ctypes.c_char
 UCHAR = ctypes.c_ubyte
-BOOL = ctypes.c_bool
+BOOL = ctypes.c_int
 INT = ctypes.c_int
 UINT = ctypes.c_uint
 LONG = ctypes.c_long
@@ -19,7 +19,9 @@ PTR = ctypes.c_void_p
 
 CHAR_PTR = ctypes.POINTER(CHAR)
 UINT_PTR = ctypes.POINTER(UINT)
-ULONG = ctypes.c_ulong
+INT_PTR = ctypes.POINTER(INT)
+ULONG_PTR = ctypes.POINTER(ULONG)
+LONG_PTR = ctypes.POINTER(LONG)
 
 
 VISUAL = UCHAR*56
@@ -33,6 +35,7 @@ CURSOR = LONG   # Not sure?
 PIXMAP = LONG   # Not sure?
 WINDOW_PTR = ctypes.POINTER(WINDOW)
 VISUAL_PTR = ctypes.POINTER(VISUAL)
+ATOM_PTR = ctypes.POINTER(ATOM)
 class HINTS(ctypes.Structure):
     _fields_ = (("flags", ULONG),
                 ("functions", ULONG),
@@ -69,6 +72,16 @@ class XVISUALINFO(ctypes.Structure):
                 ("colormap_size", INT),
                 ("bits_per_rgb", INT))
 XVISUALINFO_PTR = ctypes.POINTER(XVISUALINFO)
+
+class XCLIENT_MESSAGE_EVENT(ctypes.Structure):
+    _fields_ = (("type", INT),
+                ("serial", ULONG),
+                ("send_event", BOOL),
+                ("display", DISPLAY),
+                ("window", WINDOW),
+                ("message_type", ATOM),
+                ("format", INT),
+                ("data", ULONG*5))
 
 def errcheck_not_zero(value, func, args):
     if value in (0, None):
@@ -110,6 +123,22 @@ ALLOCNONE = 0
 TRUECOLOR = 4
 CWCOLORMAP = 8192
 
+NONE = LONG(0)
+FALSE = INT(0)
+TRUE = INT(1)
+CLIENT_MESSAGE = INT(33)
+
+SUBSTRUCTURE_REDIRECT_MASK = 524288
+SUBSTRUCTURE_NOTIFY_MASK = 1048576
+
+_NET_CLIENT_SOURCE_INDICATOR = string_to_c("_NET_CLIENT_SOURCE_INDICATOR")
+_NET_WM_DESKTOP = string_to_c("_NET_WM_DESKTOP")
+_MOTIF_WM_HINTS = string_to_c("_MOTIF_WM_HINTS")
+_NET_CURRENT_DESKTOP = string_to_c("_NET_CURRENT_DESKTOP")
+_NET_CLIENT_SOURCE_INDICATOR = string_to_c("_NET_CLIENT_SOURCE_INDICATOR")
+CARDINAL = string_to_c("CARDINAL")
+
+
 # Defining functions
 XInternAtom = libx11.XInternAtom
 XInternAtom.argtypes = (PTR, CHAR_PTR, BOOL)
@@ -122,12 +151,14 @@ XOpenDisplay.restype = DISPLAY
 XOpenDisplay.errcheck = errcheck_not_zero
 
 XChangeProperty = libx11.XChangeProperty
-XChangeProperty.argtypes = (DISPLAY, WINDOW, ATOM, ATOM, INT, INT, HINTS_PTR, INT)
+XChangeProperty.argtypes = (DISPLAY, WINDOW, ATOM, ATOM, INT, INT, HINTS_PTR,
+                            INT)
 XChangeProperty.restype = INT
 XChangeProperty.errcheck = errcheck_not_zero
 
 XQueryTree = libx11.XQueryTree
-XQueryTree.argtypes = (DISPLAY, WINDOW, WINDOW_PTR, WINDOW_PTR, WINDOW_PTR, UINT_PTR)
+XQueryTree.argtypes = (DISPLAY, WINDOW, WINDOW_PTR, WINDOW_PTR, WINDOW_PTR,
+                       UINT_PTR)
 XQueryTree.restype = INT
 XQueryTree.errcheck = errcheck_not_zero
 
@@ -150,7 +181,8 @@ XDefaultRootWindow.argtypes = (DISPLAY, )
 XDefaultRootWindow.restype = WINDOW
 
 XChangeWindowAttributes = libx11.XChangeWindowAttributes
-XChangeWindowAttributes.argtypes = (DISPLAY, WINDOW, ULONG, XSETWINDOWATTRIBUTES_PTR)
+XChangeWindowAttributes.argtypes = (DISPLAY, WINDOW, ULONG,
+                                    XSETWINDOWATTRIBUTES_PTR)
 XChangeWindowAttributes.restype = INT
 XChangeWindowAttributes.errcheck = errcheck_not_zero
 
@@ -209,14 +241,28 @@ XMoveResizeWindow.argtypes = (DISPLAY, WINDOW, INT, INT, UINT, UINT)
 XMoveResizeWindow.restype = INT
 XMoveResizeWindow.errcheck = errcheck_not_zero
 
-XClearArea = libx11.XClearArea
-XClearArea.argtypes = (DISPLAY, WINDOW, INT, INT, UINT, UINT, BOOL)
-XClearArea.restype = INT
-XClearArea.errcheck = errcheck_not_zero
+XFree = libx11.XFree
+XFree.argtypes = (PTR,)
+XFree.restype = INT
+XFree.errcheck = errcheck_not_zero
+
+XSendEvent = libx11.XSendEvent
+XSendEvent.argtypes = (DISPLAY, WINDOW, BOOL, LONG, PTR)
+XSendEvent.restype = INT
+XSendEvent.errcheck = errcheck_not_zero
+
+XGetWindowProperty = libx11.XGetWindowProperty
+XGetWindowProperty.argtypes = (DISPLAY, WINDOW, ATOM, LONG, LONG, BOOL,
+                               ATOM, ATOM_PTR, INT_PTR, ULONG_PTR, ULONG_PTR,
+                               PTR)
+XGetWindowProperty.restype = INT
+XGetWindowProperty.errcheck = errcheck_zero
+
 
 XRECTANGLE = PTR
 XRECTANGLE_PTR = ctypes.POINTER(XRECTANGLE)
 XSERVERREGION = ULONG
+
 
 if libx11fixes is not None:
     XFixesCreateRegion = libx11fixes.XFixesCreateRegion
@@ -300,7 +346,8 @@ class NoTitlebarTk:
 
     """
     def _change_shape(self) -> None:
-        # https://sites.ualberta.ca/dept/chemeng/AIX-43/share/man/info/en_US/a_doc_lib/x11/specs/pdf/shape.PDF
+        # https://sites.ualberta.ca/dept/chemeng/AIX-43/share/man/info/en_US/
+        #   a_doc_lib/x11/specs/pdf/shape.PDF
         pass
         # No clue what I am doing here or how to even import libx-shape
     """
@@ -344,8 +391,7 @@ class NoTitlebarTk:
 
     def _overrideredirect(self) -> None:
         # Change the motif hints of the window
-        motif_hints = XInternAtom(self.display, string_to_c("_MOTIF_WM_HINTS"),
-                                  False)
+        motif_hints = XInternAtom(self.display, _MOTIF_WM_HINTS, FALSE)
         hints = HINTS()
         hints.flags = 2 # Specify that we're changing the window decorations.
         hints.decorations = False
@@ -353,6 +399,62 @@ class NoTitlebarTk:
                         PropModeReplace, ctypes.byref(hints), 5)
         # Flush the changes
         XFlush(self.display)
+
+    def move_to_current_workspace(self) -> Success:
+        # Get all of the atoms needed
+        try:
+            net_curr_workspace = XInternAtom(self.display, _NET_CURRENT_DESKTOP,
+                                             FALSE)
+            net_src_indicator = XInternAtom(self.display,
+                                            _NET_CLIENT_SOURCE_INDICATOR,
+                                            FALSE)
+            net_wm_workspace = XInternAtom(self.display, _NET_WM_DESKTOP, FALSE)
+            cardinal = XInternAtom(self.display, CARDINAL, FALSE)
+        except Exception as error:
+            if DEBUG: print(f"[WARNING]: {error} in move workspace.1")
+            return False
+        # Get the current workspace
+        actual_type = ATOM()
+        actual_format = INT()
+        nitems = ULONG()
+        bytes_after = ULONG()
+        prop = PTR(0)
+        root_window = XDefaultRootWindow(self.display)
+        try:
+            XGetWindowProperty(self.display, root_window, net_curr_workspace,
+                               0, ~0, FALSE, cardinal,
+                               ctypes.byref(actual_type),
+                               ctypes.byref(actual_format),
+                               ctypes.byref(nitems),
+                               ctypes.byref(bytes_after),
+                               ctypes.byref(prop))
+            assert actual_type.value == cardinal, "Impossible"
+            assert nitems.value == 1, "Impossible"
+            curr_workspace = ctypes.cast(prop, ctypes.POINTER(ULONG)) \
+                                                 .contents.value
+        except Exception as error:
+            if DEBUG: print(f"[WARNING]: {error} in move workspace.2")
+            return False
+        finally:
+            if prop:
+                XFree(prop)
+        # Create Event
+        event = XCLIENT_MESSAGE_EVENT()
+        ctypes.memset(ctypes.byref(event), 0, ctypes.sizeof(event))
+        event.type = CLIENT_MESSAGE
+        event.window = self.window
+        event.message_type = net_wm_workspace
+        event.format = 32
+        event.data[0] = curr_workspace
+        event.data[1] = net_src_indicator
+        event.data[2] = event.data[3] = event.data[4] = 0
+        # Send event
+        XSendEvent(self.display, root_window, FALSE,
+                   SUBSTRUCTURE_REDIRECT_MASK|SUBSTRUCTURE_NOTIFY_MASK,
+                   ctypes.byref(event))
+        # Flush
+        XFlush(self.display)
+        return True
 
     def reparent_window(self, child:WINDOW, x:int, y:int) -> None:
         self._reparent_window(child, self.window, x, y)
@@ -487,29 +589,8 @@ class Draggable(NoTitlebarTk):
         self.dragging:bool = True
 
 
-# This crashes gnome-shell after making it use ~400MB of RAM???
-if __name__ == "__main__":
-    root = NoTitlebarTk()
-    label = tk.Label(root)
-    label.pack()
-
-    def inner(loop_number=0):
-        if loop_number == 10000:
-            label.config(text="Done")
-            root.quit()
-            return None
-        label.config(text=f"Loop: {loop_number:0>3}")
-        r = NoTitlebarTk(root)
-        r.after(100, r.destroy)
-        root.after(10, inner, loop_number+1)
-
-    inner()
-    root.mainloop()
-    raise SystemExit
-
-
 # Example 0
-if __name__ == "__main__":
+if __name__ == "__main__" and False:
     root = NoTitlebarTk()
     root.geometry("400x400")
     root.make_non_clickable()
@@ -544,14 +625,57 @@ if __name__ == "__main__":
     tk.Label(root, text="Master").pack(fill="x")
     tk.Button(root, text="Exit", command=root.destroy).pack(fill="x")
     tk.Button(root, text="Minimise", command=root.iconify).pack(fill="x")
-    tk.Button(root, text="Fullscreen", command=root.toggle_fullscreen).pack(fill="x")
+    tk.Button(root, text="Fullscreen",
+              command=root.toggle_fullscreen).pack(fill="x")
 
     tk.Label(child, text="Child").pack(fill="x")
     tk.Button(child, text="Exit", command=child.destroy).pack(fill="x")
     tk.Button(child, text="Minimise", command=child.iconify).pack(fill="x")
-    tk.Button(child, text="Fullscreen", command=child.toggle_fullscreen).pack(fill="x")
+    tk.Button(child, text="Fullscreen",
+              command=child.toggle_fullscreen).pack(fill="x")
 
     root.mainloop()
+
+
+if __name__ == "__main__":
+    root = NoTitlebarTk()
+    root.geometry("150x150")
+
+    but = tk.Button(root, text="Close", command=root.destroy)
+    but.pack(fill="both", expand=True)
+
+    def bring_to_curr_workspace(i:int=0) -> None:
+        succ:bool = root.move_to_current_workspace()
+        if succ:
+            print(f"{i}: Moved to curr desktop")
+        else:
+            print(f"{i}: Failed to move to curr desktop")
+        root.after(1000, bring_to_curr_workspace, i+1)
+
+    # root.after(100, root.move_to_current_workspace)
+    root.after(1000, bring_to_curr_workspace)
+    root.mainloop()
+
+
+# This crashes gnome-shell after making it use ~400MB of RAM???
+if __name__ == "__main__" and TEST:
+    root = NoTitlebarTk()
+    label = tk.Label(root)
+    label.pack()
+
+    def inner(loop_number=0):
+        if loop_number == 10000:
+            label.config(text="Done")
+            root.quit()
+            return None
+        label.config(text=f"Loop: {loop_number:0>3}")
+        r = NoTitlebarTk(root)
+        r.after(100, r.destroy)
+        root.after(10, inner, loop_number+1)
+
+    inner()
+    root.mainloop()
+    raise SystemExit
 
 
 # Test 1
@@ -624,7 +748,7 @@ parent = WINDOW()
 XQueryTree(display, handle, ctypes.byref(WINDOW()), ctypes.byref(parent),
            ctypes.byref(WINDOW()), ctypes.byref(UINT()))
 
-motif_hints = XInternAtom(display, string_to_c("_MOTIF_WM_HINTS"), False)
+motif_hints = XInternAtom(display, _MOTIF_WM_HINTS, FALSE)
 hints = uchar_ptr((2, 0, 0, 0, 0))
 XChangeProperty(display, parent, motif_hints, XA_ATOM, 32, PropModeReplace,
                 hints, 5)

@@ -219,7 +219,7 @@ class ExpandedExplorer(Explorer):
             self.menu.config(self.open_term_id, text="Open in terminal",
                              command=self.open_in_terminal)
         else:
-            self.menu.config(self.open_term_id, text="Open (externally)",
+            self.menu.config(self.open_term_id, text="Open externally",
                              command=self.open_item)
         # Set up git
         fs:FileSystem = frame.item.root.filesystem

@@ -373,6 +373,8 @@ class App:
             self.root.after(200, self._check_ipc_queue, ipc)
 
     def focus_force(self) -> None:
+        # Bring to current workspace
+        self.root.move_to_current_workspace()
         # Bring to top
         self.root.attributes("-topmost", True)
         self.root.attributes("-topmost", False)
@@ -386,8 +388,6 @@ class App:
 
 
 if __name__ == "__main__":
-    from err_handler import RunManager
-
     def start(ipc:IPC=None) -> tuple[App,IPC]:
         if DEBUG_TIME:
             debug(f"Imports: {perf_counter()-timer[0]:.2f}")
@@ -416,7 +416,7 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             return None
 
-    def force_singleton() -> MsgQueue:
+    def force_singleton() -> IPC:
         # return None # For debugging
         with IPC.master_lock_file("bismuth-184", "startup.lock"):
             ipc:IPC = IPC("bismuth-184", sig=SIGUSR1)
@@ -434,6 +434,7 @@ if __name__ == "__main__":
                     ipc.event_generate("open", where="others", data=arg)
                 raise SystemExit()
 
+    from err_handler import RunManager
     manager:RunManager = RunManager()
     manager.register(force_singleton)
     manager.register(start, exit_on_error=True)

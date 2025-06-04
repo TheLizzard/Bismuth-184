@@ -24,6 +24,7 @@ Editor:
 IPC:
 * Remove psutil dependency for checking if process exists
 * Use semaphores on Windows instead of events (CreateSemaphoreA/WaitForSingleObject/ReleaseSemaphore)
+* There's prob a race condition where the event is sent before the file writing is finished and flushed
 
 Terminal:
 * Add confirm close prompt when closing a running proc
@@ -47,6 +48,12 @@ File Explorer:
 * Deleting an item fails if another file with same name has been deleted
 * Deleting files takes too long to show in GUI
 * Removing a folder doesn't remove it from being cwd
+
+BetterTk Window:
+* There is a bug where `event_generate("<Control-w>")` causes a recursion error (`error_logs/error.0007.txt`)
+
+Error Handler:
+* The traceback is corrupted when a recursion error is detected (`error_logs/error.0007.txt`)
 
 Minor things/Low priority:
 * Disable line numbers when "# no-wrap"?

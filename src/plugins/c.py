@@ -13,7 +13,7 @@ from .rules.c.whitespacemanager import WhiteSpaceManager
 
 class CPlugin(BasePlugin):
     __slots__ = ()
-    DEFAULT_CODE:str = '#include <stdio.h>\n\nint main(){\n    // comment\n    printf("Hello, World!\\n");\n    return 0;\n}'
+    DEFAULT_CODE:str = '#include <stdio.h>\n\nint main() {\n    // comment\n    printf("Hello, World!\\n");\n    return 0;\n}'
 
     def __init__(self, *args:tuple) -> CPlugin:
         rules:list[Rule] = [

@@ -176,14 +176,37 @@ class SaveLoadManager(Rule):
         self.text.event_generate("<<Saved-File>>")
 
     def _internal_open(self, *, reload:bool) -> None:
+        success:bool = self._try_internal_open(reload=reload)
+        if not success:
+            self.text.after(10, self.text.event_generate, "<<Close-Tab>>")
+
+    def _try_internal_open(self, *, reload:bool) -> Success:
         # Check if the file can be read
         if not self._can_read():
-            return None
+            return False
+        # Check the file's size and refuse/ask the user if they really
+        #   want to open it
+        filesize:int = _filesize(self.text.filepath)
+        filesize_str:str = _pretty_print_size(filesize)
+        if filesize > 100*MB: # >100MB - refuse to open
+            msg:str = f"This file is too big ({filesize_str})."
+            telluser(self.text, title="Huge file", icon="error", message=msg,
+                     center=True, center_widget=self.text)
+            return False
+        if filesize > 2*MB: # (2MB, 100MB] - ask to open
+            msg:str = f"This file is {filesize_str}. Are you\n" \
+                      f"sure you want to open it?"
+            allow:bool = askyesno(self.text, title="Huge file", icon="warning",
+                                  message=msg, center=True,
+                                  center_widget=self.text)
+            if not allow:
+                return False
+        # Read the file
         with open(self.text.filepath, "rb") as file:
             data:bytes = file.read()
         # Make sure there are no illegal characters
         data:str|None = self._security(data, decode=True)
-        if data is None: return None
+        if data is None: return False
         # Delete old
         current_data:str = self.text.get("1.0", "end -1c")
         if current_data.rstrip("\n") != data:
@@ -197,6 +220,7 @@ class SaveLoadManager(Rule):
         else:
             self.text.event_generate("<<Opened-File>>")
             self.plugin.move_insert("1.0")
+        return True
 
     # Save/Load state
     def get_state(self) -> object:
@@ -264,6 +288,7 @@ class SaveLoadManager(Rule):
     def _security(self, data:bytes|str, *, decode:bool) -> str|None:
         try:
             if decode:
+                assert isinstance(data, bytes), "if decode, data must be bytes"
                 data:str = data.decode("utf-8")
             assert isinstance(data, str), "data should a string at this point"
             data:str = data.replace("\r\n", "\n").removesuffix("\n")
@@ -315,3 +340,36 @@ def _get_first_non_printable(string:str) -> str:
     if not _string_is_non_printable(string):
         return ""
     return _find_satisfying_char_binary_search(_string_is_non_printable, string)
+
+
+SIZE_FACTOR:int = 1000
+B:int = 1
+KB:int = SIZE_FACTOR*B
+MB:int = SIZE_FACTOR*KB
+GB:int = SIZE_FACTOR*MB
+TB:int = SIZE_FACTOR*GB
+PB:int = SIZE_FACTOR*TB
+EB:int = SIZE_FACTOR*PB
+
+def _pretty_print_size(size:int) -> str:
+    """
+    Convert the size (in bytes) passed in to a human readable string
+      rounded to 3 significant figures
+    """
+    for name in ("B", "KB", "MB", "GB", "TB", "PB", "EB"):
+        if size < SIZE_FACTOR: break
+        size /= SIZE_FACTOR
+    return f"{size:.3g}{name}"
+
+def _filesize(path:str) -> int:
+    """
+    Return the size (in bytes) of the file
+    """
+    size:int = 0
+    chunk_size:int = 100*MB
+    with open(path, "rb") as file:
+        while True:
+            data:bytes = file.read(chunk_size)
+            if not data: break
+            size += len(data)
+    return size

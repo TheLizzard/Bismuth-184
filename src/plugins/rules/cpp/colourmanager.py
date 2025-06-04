@@ -60,15 +60,19 @@ def get_builtins() -> Iterable[str]:
                "fmod", "numbers", "numbers::e", "numbers::pi", "exit",
                "atan2", "signbit", "forward", "bind", "function", "deque",
                "aligned_alloc", "fill_n", "memset", "skipws", "noskipws",
+               "unique_ptr", "shared_ptr", "make_unique", "make_shared",
+               "div",
                # Type stuff
                "is_integral", "is_integral_v", "is_unsigned", "is_unsigned_v",
                "enable_if_t", "integral", "is_same_v", "conditional_t",
-               "is_floating_point", "is_floating_point_v",
+               "is_floating_point", "is_floating_point_v", "remove_reference",
+               "true_type", "false_type",
                # IO/Streams
                "istreambuf_iterator", "fstream", "ifstream", "ofstream",
                "ios", "ios::binary", "ios::out", "ios::in", "stringstream",
                "hex", "setfill", "setw", "flush", "ostream", "istream",
-               "uppercase", "dec",
+               "uppercase", "dec", "ios_base::end", "ios_base",
+               "ios_base::beg",
                # Exceptions
                "runtime_error", "invalid_argument",
              ] + c_funcs
