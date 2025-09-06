@@ -17,8 +17,10 @@ class SaveLoadManager(Rule):
     __slots__ = "text"
     REQUESTED_LIBRARIES:list[tuple[str,bool]] = []
 
-    FILE_TYPES:tuple[(str, str)] = (("Text files", ".txt"),
-                                    ("All types", "*"))
+    FILE_TYPES:tuple[tuple[str,str]] = (
+                                         ("All types", "*"),
+                                         ("Text files", ".txt"),
+                                       )
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
         evs:tuple[str] = (

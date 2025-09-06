@@ -210,10 +210,16 @@ class NoTitlebarTk:
     def move_to_current_workspace(self) -> Success:
         return False # Implement me
 
+    def resizable(self, x:bool=None, y:bool=None) -> None:
+        # Windows strips away our overrideredirect if we call `.resizable`
+        #   in tkinter. Caused by commit: Bismuth 4.3.6@bettertk/__init__.py
+        # TODO: Fix me. (Not urgent since BetterTk handles it pretty well)
+        return None
+
 
 class Draggable(NoTitlebarTk):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, master:tk.Misc=None):
+        super().__init__(master)
         self.dragging:bool = False
         self.bind("<Button-1>" ,self.clickwin)
         self.bind("<B1-Motion>", self.dragwin)

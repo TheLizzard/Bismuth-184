@@ -233,7 +233,7 @@ class WhiteSpaceManager(Rule):
             line:str = line.rstrip(inds+"\xff")
             line:str = self.plugin.text_replace_tag(line, idx_linestart, idx,
                                                     "string", "\xfe")
-            if not line.rstrip("\xfe"):
+            if (not line.rstrip("\xfe")) and (not stack):
                 # Follow ()s iff not in string/comment
                 return target
             for j, char in enumerate(reversed(line)):

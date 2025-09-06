@@ -28,4 +28,14 @@ class PythonPlugin(BasePlugin):
     def can_handle(Cls:type, filepath:str|None) -> bool:
         if filepath is None:
             return False
-        return filepath.endswith(".py")
+        # Check if it's a .py file
+        if filepath.endswith(".py"):
+            return True
+        # Check if there is a python shebang
+        try:
+            with open(filepath, "r") as file:
+                if (file.read(2) == "#!") and ("python" in file.readline()):
+                    return True
+        except:
+            pass
+        return False
