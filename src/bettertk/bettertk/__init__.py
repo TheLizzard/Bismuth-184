@@ -25,8 +25,8 @@ THEME_OPTIONS = ("light", "dark")
 
 # Unchangable settings:
 NUMBER_OF_CUSTOM_BUTTONS = 10 # The number of custom buttons allowed at 1 time
-MIN_WIDTH = 240 # The minimum width to hide the dummy window
-MIN_HEIGHT = 80 # The minimum height to hide the dummy window
+MIN_WIDTH = 130 # The minimum width
+MIN_HEIGHT = 45 # The minimum height
 
 
 __author__ = "TheLizzard"
