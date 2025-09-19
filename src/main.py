@@ -1,9 +1,14 @@
+#!/bin/python3
 from __future__ import annotations
 from tkinter.filedialog import askdirectory
 from time import sleep, perf_counter
 import tkinter as tk
 import sys
 import os
+
+for i in range(1, len(sys.argv)):
+    if sys.argv[i] == "--no-focus": continue
+    sys.argv[i] = os.path.abspath(sys.argv[i])
 os.chdir(os.path.dirname(__file__))
 
 DEBUG_TIME:bool = False
