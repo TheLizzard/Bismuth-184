@@ -5,10 +5,14 @@ from time import perf_counter
 import tkinter as tk
 
 
+ALL_SPRITE_NAMES:set[str] = {"pause", "play", "stop", "close", "restart",
+                             "kill", "settings", "warning", "info", "error",
+                             "spinner1", "spinner2", "spinner3", "spinner4",
+                             "spinner5", "spinner6"}
+
 Colour:type = tuple[int,int,int]
 
 ε:float = 0.01
-DEBUG:bool = False
 BLACK:Colour = (0,0,0)
 WHITE:Colour = (255,255,255)
 RED:Colour = (255,0,0)
@@ -115,6 +119,12 @@ class DrawImage:
         self.image:Image = Image.new("RGBA", (size,size), (0,0,0,0))
         self.pix = self.image.load()
         self.size:int = size
+
+    def copy(self) -> DrawImage:
+        new:DrawImage = DrawImage(self.size)
+        new.image:Image = self.image.copy()
+        new.pix = new.image.load()
+        return new
 
     def crop_resize(self, show_size:int, inner_size:int) -> Image.Image:
         a = (self.size-inner_size)/2
@@ -274,7 +284,7 @@ def draw_restart(r1, r2, d1, d2, l, s, br, size:int) -> DrawImage:
     return image
 
 def draw_close(r:int, w:int, br:int, size:int) -> DrawImage:
-    """ Same as draw_error but with ORANGE instead of RED """
+    """ Same as "error" but with ORANGE instead of RED """
     r, w, br = r/256*size, w/256*size, br/256*size
     image:DrawImage = DrawImage(size)
     image.draw_circle((size>>1,size>>1), br, colour=ORANGE)
@@ -316,7 +326,7 @@ def draw_settings(n, r1, r2, ir1, ir2, or1, or2, br, size, reverse=False) -> Dra
     return image
 
 def draw_stop(y1, y2, w, r, br, size) -> DrawImage:
-    """ Same as draw_info but with ORANGE instead of BLUE """
+    """ Same as "info" but with ORANGE instead of BLUE """
     w, r, br = w/256*size, r/256*size, br/256*size
     y1, y2 = y1/256*size, y2/256*size
     image:DrawImage = DrawImage(size)
@@ -344,7 +354,7 @@ def draw_warning(s, y1, y2, y3, w, size) -> DrawImage:
     return image
 
 def draw_info(y1, y2, w, r, br, size) -> DrawImage:
-    """ Same as draw_stop but with BLUE instead of ORANGE """
+    """ Same as "stop" but with BLUE instead of ORANGE """
     w, r, br = w/256*size, r/256*size, br/256*size
     y1, y2 = y1/256*size, y2/256*size
     image:DrawImage = DrawImage(size)
@@ -354,7 +364,7 @@ def draw_info(y1, y2, w, r, br, size) -> DrawImage:
     return image
 
 def draw_error(r:int, w:int, br:int, size:int) -> DrawImage:
-    """ Same as draw_close but with RED instead of ORANGE """
+    """ Same as "close" but with RED instead of ORANGE """
     r, w, br = r/256*size, w/256*size, br/256*size
     image:DrawImage = DrawImage(size)
     image.draw_circle((size>>1,size>>1), br, colour=RED)
@@ -369,19 +379,91 @@ def draw_test(size) -> DrawImage:
     image.draw_circumference((size>>1,size>>1), 0, 80, 90, 180, colour=BLACK)
     return image
 
+# TODO
 def draw_addon() -> Image.Image: ...
 
+def draw_spinners(spinners_wanted:set[int], r:int, d:int, br:int,
+                  size:int) -> dict[str:list[Image.Image]]:
+    _MAIN_COLOUR:Colour = BLUE
+    _SUB_COLOUR:Colour = WHITE
+    def circle_spinner(spinner:int, frames:tuple[list[int]]) -> None:
+        # Helper for the spinners that are just blinking circles
+        _frames:list[Image.Image] = []
+        for frame in reversed(frames):
+            img_cpy:DrawImage = image.copy()
+            for pos, circle in enumerate(frame):
+                if circle:
+                    x:int = (size>>1) - d*(pos-1)
+                    img_cpy.draw_circle((x,size>>1), r, colour=_SUB_COLOUR)
+            _frames.append(img_cpy)
+        sprites[f"spinner{spinner}"] = _frames
 
-ALL_SPRITE_NAMES:set[str] = {"pause", "play", "stop", "close", "restart",
-                             "kill", "settings", "warning", "info", "error"}
-#ALL_SPRITE_NAMES = {"warning", "info", "error"}
+    def line_spinner(spinner:int) -> None:
+        # Helper for the spinners that are just lines
+        _frames:list[Image.Image] = []
+        for dir in reversed("|/-\\|/-\\"):
+            img_cpy:DrawImage = image.copy()
+            x1, y2 = x2, y2 = (0, 0)
+            if dir == "|":
+                x1 = x2 = size>>1
+                y1:int = (size>>1) - d
+                y2:int = (size>>1) + d
+            elif dir == "-":
+                x1:int = (size>>1) - d
+                x2:int = (size>>1) + d
+                y1 = y2 = size>>1
+            elif dir == "/":
+                in_sqrt2:float = 1/sqrt(2)
+                x1:int = (size>>1) - int(d*in_sqrt2)
+                x2:int = (size>>1) + int(d*in_sqrt2)
+                y1:int = (size>>1) - int(d*in_sqrt2)
+                y2:int = (size>>1) + int(d*in_sqrt2)
+            elif dir == "\\":
+                in_sqrt2:float = 1/sqrt(2)
+                x1:int = (size>>1) - int(d*in_sqrt2)
+                x2:int = (size>>1) + int(d*in_sqrt2)
+                y1:int = (size>>1) + int(d*in_sqrt2)
+                y2:int = (size>>1) - int(d*in_sqrt2)
+                pass
+            img_cpy.draw_rounded_line((x1,y1), (x2,y2), r, colour=_SUB_COLOUR)
+            _frames.append(img_cpy)
+        sprites[f"spinner{spinner}"] = _frames
+
+    r, d, br = r/256*size, d/256*size, br/256*size
+    image:DrawImage = DrawImage(size)
+    image.draw_circle((size>>1,size>>1), br, colour=_MAIN_COLOUR)
+    sprites:dict[str:list[Image.Image]] = dict()
+    for spinner in spinners_wanted:
+        if spinner == 1:
+            circle_spinner(spinner, [(0,0,0), (1,0,0), (0,1,0), (0,0,1)])
+        elif spinner == 2:
+            circle_spinner(spinner,
+                           [(0,0,0), (1,0,0), (1,1,0), (0,1,1), (0,0,1)])
+        elif spinner == 3:
+            circle_spinner(spinner,
+                           [(0,0,0), (1,0,0), (1,1,0), (1,1,1),
+                            (0,1,1), (0,0,1)])
+        elif spinner == 4:
+            circle_spinner(spinner,
+                           [(0,0,0), (0,0,1), (0,1,1), (1,1,1),
+                            (0,1,1), (0,0,1)])
+        elif spinner == 5:
+            circle_spinner(spinner,
+                           [(1,0,0), (0,1,0), (0,0,1), (0,1,0)])
+        elif spinner == 6:
+            line_spinner(spinner)
+        else:
+            raise NotImplementedError()
+    return sprites
+
+
+ImageType:type = Image.Image | list[Image.Image]
 
 def init(*, size:int, compute_size:int=None, crop:bool=True,
-         sprites_wanted:set[str]=ALL_SPRITE_NAMES) -> dict[str:Image.Image]:
+         sprites_wanted:set[str]=ALL_SPRITE_NAMES) -> dict[str:ImageType]:
     size, show_size = (compute_size or size<<1), size
     inner_size:int = int(220/256*size)
-    sprites:dict[str,Image.Image] = dict()
-    start:float = perf_counter()
+    sprites:dict[str,DrawImage|list[DrawImage]] = dict()
     if "pause" in sprites_wanted:
         sprites["pause"] = draw_pause(108, 88, 15, 100, size)
     if "play" in sprites_wanted:
@@ -404,12 +486,24 @@ def init(*, size:int, compute_size:int=None, crop:bool=True,
         sprites["info"] = draw_info(75, 135, 20, 15, 100, size)
     if "error" in sprites_wanted:
         sprites["error"] = draw_error(65, 15, 100, size)
-    if crop:
-        sprites = {name:img.crop_resize(show_size, inner_size) for name,img in sprites.items()}
-    else:
-        sprites = {name:img.image for name,img in sprites.items()}
-    if DEBUG: print(f"[DEBUG]: Overall: {perf_counter()-start:.2f} seconds")
-    return sprites
+    if any(name.startswith("spinner") for name in sprites_wanted):
+        spinners_wanted:set[int] = set(int(name.removeprefix("spinner")) \
+                                       for name in sprites_wanted \
+                                       if name.startswith("spinner"))
+        sprites.update(draw_spinners(spinners_wanted, 25, 60, 100, size))
+    ret:dict[str:ImageType] = dict()
+    for name in sprites_wanted:
+        draws:DrawImage|list[DrawImage] = sprites[name]
+        if not isinstance(draws, list):
+            draws:list[DrawImage] = [draws]
+        imgs:list[Image.Image] = []
+        for draw in draws:
+            if crop:
+                imgs.append(draw.crop_resize(show_size, inner_size))
+            else:
+                imgs.append(draw.image)
+        ret[name] = imgs if len(imgs)>1 else imgs[0]
+    return ret
 
 
 class SpritesCache:
@@ -420,7 +514,7 @@ class SpritesCache:
         self.compute_size:int = compute_size
         self.size:int = size
 
-    def __getitem__(self, key:str) -> Image.Image|None:
+    def __getitem__(self, key:str) -> ImageType|None:
         if key not in ALL_SPRITE_NAMES:
             return None
         if key not in self.sprites:
@@ -430,16 +524,17 @@ class SpritesCache:
 
 
 if __name__ == "__main__":
-    DEBUG:bool = True
     size:int = 256>>1
     wanted:set[str] = {"info", "play", "close", "warning", "error", "kill"}
-    sprites:dict[str:Image.Image] = init(size=size, sprites_wanted=wanted)
+    sprites:dict[str:Image.Image] = SpritesCache(size=size)
 
     root = tk.Tk()
     root.geometry("+0+0")
     root.resizable(False, False)
 
-    tksprites = {name:ImageTk.PhotoImage(img) for name,img in sprites.items()}
+    start:float = perf_counter()
+    tksprites = {name:ImageTk.PhotoImage(sprites[name]) for name in wanted}
+    print(f"[DEBUG]: Overall: {perf_counter()-start:.2f} seconds")
 
     labels = []
     for i, name in enumerate(wanted):
@@ -449,3 +544,48 @@ if __name__ == "__main__":
         im.bind("<Button-1>", lambda e: print(e.x, e.y))
         label = tk.Label(root, text=name, bg="black", fg="white")
         label.grid(row=1, column=i, sticky="ew")
+
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    DELAY:int = 850 # milliseconds
+    size:int = 256>>1
+    wanted:set[str] = {"spinner1", "spinner2", "spinner3", "spinner4",
+                       "spinner5", "spinner6"}
+    sprites:dict[str:list[Image.Image]] = SpritesCache(size=size)
+
+    root = tk.Tk()
+    root.geometry("+0+0")
+    root.resizable(False, False)
+
+    def loop(label:tk.Label, imgs:list[ImageTk.PhotoImage], i:int=0) -> None:
+        label.config(image=imgs[i])
+        label.after(DELAY, loop, label, imgs, (i+1)%len(imgs))
+
+    def save_as_gif(name:str, filename:str) -> None:
+        frames:list[Image.Image] = sprites[name]
+        # If transparent: disposal=2
+        # loop=0 means loop forever
+        frames[0].save(filename, save_all=True, append_images=frames[1:],
+                       duration=DELAY, loop=0, format="gif")
+
+    tkimgs:list[list[ImageTk.PhotoImage]] = []
+    for i, name in enumerate(sorted(wanted)):
+        start:float = perf_counter()
+        _tkimgs = [ImageTk.PhotoImage(img) for img in sprites[name]]
+        tkimgs.append(_tkimgs)
+        print(f"[DEBUG]: {name!r}: {perf_counter()-start:.2f} seconds")
+
+        im = tk.Label(root, bd=0, highlightthickness=0, bg="black")
+        im.grid(row=0, column=i)
+        im.bind("<Button-1>", lambda e: print(e.x, e.y))
+        label = tk.Label(root, text=name, bg="black", fg="white")
+        label.grid(row=1, column=i, sticky="ew")
+        loop(im, tkimgs[-1])
+
+        from os import path
+        if path.exists("spinners/"):
+            save_as_gif(name, f"spinners/{name}.gif")
+
+    root.mainloop()

@@ -147,6 +147,7 @@ src/bettertk/terminaltk/pty terminal/test.cpp
 src/bettertk/terminaltk/pty terminal/old/
 
 # Test files
+src/bettertk/terminaltk/sprites/spinners
 tmp-test
 
 # Not implemented yet
