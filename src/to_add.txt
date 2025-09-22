@@ -21,6 +21,7 @@ Editor:
 * Control-2 and Control-j don't remove selections
 * Control-m doesn't remove marks that are on empty lines
 * Double-Click and then drag doesn't extend selection
+* Adding a shebang to an unsaved file should switch to the correct plugin
 
 IPC:
 * Remove psutil dependency for checking if process exists

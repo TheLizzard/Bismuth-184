@@ -4,29 +4,31 @@ import tkinter as tk
 
 try:
     from .bettertk import BetterTk
-    from .terminaltk.sprites import creator
+    from .terminaltk.sprites.creator import SpriteCache, SPRITES_REMAPPING
 except ImportError:
     from bettertk import BetterTk
-    from terminaltk.sprites import creator
+    from terminaltk.sprites.creator import SpriteCache, SPRITES_REMAPPING
 
 
 FRAME_KWARGS = dict(bd=0, highlightthickness=0, bg="black")
 BUTTON_KWARGS = dict(fg="white", activeforeground="white", bg="black",
                      activebackground="black")
 
-ICONS = creator.SpritesCache(size=64, compute_size=256)
+ICONS:SpriteCache = SpriteCache(size=64, compute_size=256)
 
 
 class Popup(BetterTk):
     __slots__ = "root", "image", "tk_image", "block"
 
-    def __init__(self, master:tk.Misc, title:str, *, icon:str, center:bool=True,
-                 center_widget:tk.Misc=None, block:bool=True) -> Popup:
+    def __init__(self, master:tk.Misc|None, title:str, *, icon:str,
+                 center:bool=True, center_widget:tk.Misc=None,
+                 block:bool=True) -> Popup:
         if center_widget is not None:
             assert center, "No point in passing in center_widget if " \
                            "center is False"
         self.block:bool = block
         if master is None:
+            center:bool = False
             super().__init__(className=str(icon))
         else:
             super().__init__(master)
@@ -50,9 +52,7 @@ class Popup(BetterTk):
             super().after(1, self.center, base_widget)
 
     def get_image(self, icon_name:str) -> Image.Image:
-        icon:Image.Image|None = ICONS[icon_name]
-        assert icon is not None, f"Unknown icon_name: {icon_name!r}"
-        return icon
+        return ICONS[SPRITES_REMAPPING.get(icon_name,icon_name)]
 
     def _destroy(self) -> None:
         if self.block:
@@ -83,7 +83,7 @@ class Popup(BetterTk):
 class Tell(Popup):
     __slots__ = ()
 
-    def __init__(self, master:tk.Misc, title:str, message:str, *, icon:str,
+    def __init__(self, master:tk.Misc|None, title:str, message:str, *, icon:str,
                  center:bool=True, center_widget:tk.Misc=None, block:bool=True):
         super().__init__(master, title=title, icon=icon, center=center,
                          center_widget=center_widget, block=block)
@@ -110,7 +110,7 @@ class Tell(Popup):
 class YesNoQuestion(Popup):
     __slots__ = "result"
 
-    def __init__(self, master:tk.Misc, title:str, message:str, *, icon:str,
+    def __init__(self, master:tk.Misc|None, title:str, message:str, *, icon:str,
                  center:bool=True, center_widget:tk.Misc=None) -> YesNoQuestion:
         self.result:bool = None
         super().__init__(master, title=title, icon=icon, center=center,
@@ -152,16 +152,16 @@ class YesNoQuestion(Popup):
         return self.result
 
 
-def askyesno(master:tk.Misc, *args, **kwargs) -> bool|None:
+def askyesno(master:tk.Misc|None=None, *args, **kwargs) -> bool|None:
     return YesNoQuestion(master, *args, **kwargs).get()
 
-def tell(master:tk.Misc, *args, block:bool=True, **kwargs) -> None:
+def tell(master:tk.Misc|None=None, *args, block:bool=True, **kwargs) -> None:
     tell:Tell = Tell(master, *args, block=block, **kwargs)
     if block:
         tell.mainloop()
 
 def debug(text:str) -> None:
-    Tell(None, "Debug", text, icon="info", center=False, block=False)
+    Tell(None, title="Debug", message=text, icon="info", block=False)
 
 
 if __name__ == "__main__a":

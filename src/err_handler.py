@@ -240,8 +240,12 @@ def _setup_window(root, string:str) -> tuple[tk.Frame,tk.Text]:
 
 def _try_set_iconphoto(root:tk.Tk|BetterTk) -> HasErrorer:
     try:
-        from bettertk.terminaltk.sprites.creator import SpritesCache
-        sprite:Image.Image = SpritesCache(size=128)["error"] # warning
+        from bettertk.terminaltk.sprites.creator import SpriteCache
+        cache:SpriteCache = SpriteCache(size=128)
+        try:
+            sprite:Image.Image = cache["error"]
+        except KeyError:
+            sprite:Image.Image = cache["x-red"]
         root.iconphoto(False, sprite)
         return False
     except:

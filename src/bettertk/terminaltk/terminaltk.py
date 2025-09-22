@@ -9,10 +9,10 @@ import os
 
 
 try:
-    from .sprites.creator import init as create_sprites
+    from .sprites.creator import TkSpriteCache, SPRITES_REMAPPING
     from .terminal import Terminal, Event, kill_proc, close_all_ipcs
 except ImportError:
-    from sprites.creator import init as create_sprites
+    from sprites.creator import TkSpriteCache, SPRITES_REMAPPING
     from terminal import Terminal, Event, kill_proc, close_all_ipcs
 from bettertk import BetterTk
 
@@ -22,9 +22,6 @@ BKWARGS:dict = dict(activeforeground="white", activebackground="grey", bd=0,
                     highlightthickness=0)
 ICON:str = os.path.join(os.path.dirname(__file__), "sprites", "terminal.ico")
 if not os.path.exists(ICON): ICON:str = None
-
-SPRITES_NEEDED:set[str] = {"pause", "play", "stop", "close", "restart",
-                           "kill", "settings"}
 
 
 def tk_wait_for_map(widget:tk.Misc) -> None:
@@ -168,11 +165,8 @@ class TerminalTk(BetterTk):
         super().destroy()
 
     def setup_buttons(self) -> None:
-        self.sprites:dict[str,ImageTk.PhotoImage] = dict()
-        sprites = create_sprites(size=32, compute_size=128,
-                                 sprites_wanted=SPRITES_NEEDED)
-        for name, image in sprites.items():
-            self.sprites[name] = ImageTk.PhotoImage(image, master=self)
+        self.sprites:TkSpriteCache = TkSpriteCache(self, size=32,
+                                                   compute_size=128)
 
         frame = tk.Frame(self, bg="black", bd=0, highlightthickness=0)
         frame.pack(side="top", fill="x")
@@ -183,14 +177,14 @@ class TerminalTk(BetterTk):
         self.pause_button = tk.Button(frame, image=self.sprites["pause"],
                                       command=self._toggle_pause, **BKWARGS,
                                       width=70, text="Pause")
-        self.close_button = tk.Button(frame, image=self.sprites["close"],
+        self.close_button = tk.Button(frame, image=self.sprites["x-orange"],
                                       command=self._toggle_close, **BKWARGS,
                                       width=70, text="Close")
-        self.kill_button = tk.Button(frame, image=self.sprites["kill"],
+        self.kill_button = tk.Button(frame, image=self.sprites["io-red"],
                                      command=self._kill, **BKWARGS,
                                      width=70, text="Kill")
         self.settings_button = tk.Button(frame, command=self._settings,
-                                         image=self.sprites["settings"],
+                                         image=self.sprites["gear-white"],
                                          **BKWARGS)
         self.pause_button.grid(row=1, column=1)
         self.close_button.grid(row=1, column=2)
@@ -225,7 +219,7 @@ class TerminalTk(BetterTk):
         if not self.running(): return None
         self.kill_button.config(state="normal")
         self.pause_button.config(state="normal")
-        self.close_button.config(text="Close", image=self.sprites["close"])
+        self.close_button.config(text="Close", image=self.sprites["x-orange"])
 
     def _finished_proc(self, event:Event) -> None:
         if not self.running(): return None

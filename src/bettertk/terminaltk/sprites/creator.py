@@ -5,10 +5,19 @@ from time import perf_counter
 import tkinter as tk
 
 
-ALL_SPRITE_NAMES:set[str] = {"pause", "play", "stop", "close", "restart",
-                             "kill", "settings", "warning", "info", "error",
+ALL_SPRITE_NAMES:set[str] = {"pause", "play", "exclam-orange", "exclam-blue",
+                             "x-orange", "x-red", "restart", "warning",
+                             "io-red", "gear-white", "gear-white",
                              "spinner1", "spinner2", "spinner3", "spinner4",
                              "spinner5", "spinner6"}
+
+SPRITES_REMAPPING:dict[str:str] = {"stop":"exclam-orange",
+                                   "info":"exclam-blue",
+                                   "kill":"io-red",
+                                   "error":"x-red",
+                                   "close":"x-orange",
+                                   "settings":"gear-white"}
+RSPRITES_REMAPPING:dict[str:str] = {v:k for k,v in SPRITES_REMAPPING.items()}
 
 Colour:type = tuple[int,int,int]
 
@@ -264,10 +273,10 @@ def draw_play(a:int, b:int, c:int, d:int, size:int) -> DrawImage:
     #image.draw_triangle((size-a,size-b), (size-a,b), (size-c,size>>1))
     return image
 
-def draw_restart(r1, r2, d1, d2, l, s, br, size:int) -> DrawImage:
+def draw_restart(r1, r2, d1, d2, l, s, br, size, bg:Colour) -> DrawImage:
     r1, r2, s, br = r1/256*size, r2/256*size, s/256*size, br/256*size
     image:DrawImage = DrawImage(size)
-    image.draw_circle((size>>1,size>>1), br, colour=ORANGE)
+    image.draw_circle((size>>1,size>>1), br, colour=bg)
     image.draw_circumference((size>>1,size>>1), r1, r2, d2, 360-d1-d2)
     cx, cy = size>>1, size>>1
     x1, y1 = cx-(r1-s)*sin(d1), cy-(r1-s)*cos(d1)
@@ -283,59 +292,57 @@ def draw_restart(r1, r2, d1, d2, l, s, br, size:int) -> DrawImage:
     image.draw_triangle((x1,y1), (x2,y2), (x3,y3))
     return image
 
-def draw_close(r:int, w:int, br:int, size:int) -> DrawImage:
-    """ Same as "error" but with ORANGE instead of RED """
+def draw_x(r:int, w:int, br:int, size:int, bg:Colour) -> DrawImage:
     r, w, br = r/256*size, w/256*size, br/256*size
     image:DrawImage = DrawImage(size)
-    image.draw_circle((size>>1,size>>1), br, colour=ORANGE)
+    image.draw_circle((size>>1,size>>1), br, colour=bg)
     d = (size>>1) - r/sqrt(2)
     image.draw_rounded_line((d,d), (size-d,size-d), w)
     image.draw_rounded_line((size-d,d), (d,size-d), w)
     return image
 
-def draw_kill(r1, r2, d, y1, y2, w, br, size) -> DrawImage:
+def draw_io(r1, r2, d, y1, y2, w, br, size, bg:Colour) -> DrawImage:
     r1, r2, w, br = r1/256*size, r2/256*size, w/256*size, br/256*size
     y1, y2 = y1/256*size, y2/256*size
     image:DrawImage = DrawImage(size)
-    image.draw_circle((size>>1,size>>1), br, colour=RED)
+    image.draw_circle((size>>1,size>>1), br, colour=bg)
     image.draw_circumference((size>>1,size>>1), r1, r2, d, 360-2*d, colour=WHITE)
     image.draw_rounded_line((size>>1,y1), (size>>1,y2), w)
     return image
 
-def draw_settings(n, r1, r2, ir1, ir2, or1, or2, br, size, reverse=False) -> DrawImage:
+def draw_gear(n, r1, r2, ir1, ir2, or1, or2, br, size, bg:Colour, reverse=False) -> DrawImage:
     r1, r2, ir1, ir2 = r1/256*size, r2/256*size, ir1/256*size, ir2/256*size
     or1, or2, br = or1/256*size, or2/256*size, br/256*size
     image:DrawImage = DrawImage(size)
     centre = (size>>1,size>>1)
-    image.draw_circle(centre, br, colour=WHITE)
+    image.draw_circle(centre, br, colour=bg)
     image.draw_circle(centre, or2, colour=BLACK)
-    image.draw_circle(centre, or1, colour=WHITE)
+    image.draw_circle(centre, or1, colour=bg)
     image.draw_circle(centre, ir2, colour=BLACK)
-    image.draw_circle(centre, ir1, colour=WHITE)
+    image.draw_circle(centre, ir1, colour=bg)
     for i in range(n):
         if reverse:
             deg = (360/n*i+90)%360
         else:
             deg = (360/n*i-90)%360
         x, y = or2*cos(deg)+(size>>1), or2*sin(deg)+(size>>1)
-        image.draw_circle((x,y), r1, colour=WHITE)
+        image.draw_circle((x,y), r1, colour=bg)
         image.draw_circle((x,y), r2, colour=BLACK)
-        image.draw_circle((x,y), r1, colour=WHITE)
-    image.draw_circumference(centre, or2, br, 0, 360, colour=WHITE)
+        image.draw_circle((x,y), r1, colour=bg)
+    image.draw_circumference(centre, or2, br, 0, 360, colour=bg)
     image.draw_circumference(centre, br, br*2, 0, 360, colour=BLACK, alpha=0)
     return image
 
-def draw_stop(y1, y2, w, r, br, size) -> DrawImage:
-    """ Same as "info" but with ORANGE instead of BLUE """
+def draw_exclam(y1, y2, w, r, br, size, bg:Colour) -> DrawImage:
     w, r, br = w/256*size, r/256*size, br/256*size
     y1, y2 = y1/256*size, y2/256*size
     image:DrawImage = DrawImage(size)
-    image.draw_circle((size>>1,size>>1), br, colour=ORANGE)
+    image.draw_circle((size>>1,size>>1), br, colour=bg)
     image.draw_rounded_line((size>>1,y1), (size>>1,y2), w, colour=WHITE)
     image.draw_circle((size>>1,size-y1-r+w), r, colour=WHITE)
     return image
 
-def draw_warning(s, y1, y2, y3, w, size) -> DrawImage:
+def draw_warning(s, y1, y2, y3, w, size, bg:Colour) -> DrawImage:
     y1, y2, y3 = y1/256*size, y2/256*size, y3/256*size
     s, w = s/256*size, w/256*size
     image:DrawImage = DrawImage(size)
@@ -348,29 +355,9 @@ def draw_warning(s, y1, y2, y3, w, size) -> DrawImage:
     ly1 = y1+ty3+w/2
     ly2 = y2+ty3-w/2
 
-    image.draw_triangle((tx1,ty1), (tx2,ty2), (tx3,ty3), colour=DYELLOW)
+    image.draw_triangle((tx1,ty1), (tx2,ty2), (tx3,ty3), colour=bg)
     image.draw_rounded_line((size>>1,ly1), (size>>1,ly2), w, colour=BLACK)
     image.draw_circle((size>>1,y3+ty3+w/2), w/2, colour=BLACK)
-    return image
-
-def draw_info(y1, y2, w, r, br, size) -> DrawImage:
-    """ Same as "stop" but with BLUE instead of ORANGE """
-    w, r, br = w/256*size, r/256*size, br/256*size
-    y1, y2 = y1/256*size, y2/256*size
-    image:DrawImage = DrawImage(size)
-    image.draw_circle((size>>1,size>>1), br, colour=BLUE)
-    image.draw_rounded_line((size>>1,y1), (size>>1,y2), w, colour=WHITE)
-    image.draw_circle((size>>1,size-y1-r+w), r, colour=WHITE)
-    return image
-
-def draw_error(r:int, w:int, br:int, size:int) -> DrawImage:
-    """ Same as "close" but with RED instead of ORANGE """
-    r, w, br = r/256*size, w/256*size, br/256*size
-    image:DrawImage = DrawImage(size)
-    image.draw_circle((size>>1,size>>1), br, colour=RED)
-    d = (size>>1) - r/sqrt(2)
-    image.draw_rounded_line((d,d), (size-d,size-d), w)
-    image.draw_rounded_line((size-d,d), (d,size-d), w)
     return image
 
 def draw_test(size) -> DrawImage:
@@ -458,6 +445,7 @@ def draw_spinners(spinners_wanted:set[int], r:int, d:int, br:int,
 
 
 ImageType:type = Image.Image | list[Image.Image]
+TkImageType:type = ImageTk.PhotoImage | list[ImageTk.PhotoImage]
 
 def init(*, size:int, compute_size:int=None, crop:bool=True,
          sprites_wanted:set[str]=ALL_SPRITE_NAMES) -> dict[str:ImageType]:
@@ -468,24 +456,29 @@ def init(*, size:int, compute_size:int=None, crop:bool=True,
         sprites["pause"] = draw_pause(108, 88, 15, 100, size)
     if "play" in sprites_wanted:
         sprites["play"] = draw_play(95, 77, None, 100, size)
-    if "stop" in sprites_wanted:
-        sprites["stop"] = draw_stop(75, 135, 20, 15, 100, size)
-    if "close" in sprites_wanted:
-        sprites["close"] = draw_close(65, 15, 100, size)
-    if "close2" in sprites_wanted:
-        sprites["close2"] = draw_close2(65, 15, 100, size)
+    if "x-orange" in sprites_wanted:
+        sprites["x-orange"] = draw_x(65, 15, 100, size, bg=ORANGE)
+    # if "close2" in sprites_wanted:
+    #     sprites["close2"] = draw_close2(65, 15, 100, size)
     if "restart" in sprites_wanted:
-        sprites["restart"] = draw_restart(50, 65, 50, 40, None, 15, 100, size)
-    if "kill" in sprites_wanted:
-        sprites["kill"] = draw_kill(50, 65, 40, 65, 130, 15, 100, size)
-    if "settings" in sprites_wanted:
-        sprites["settings"] = draw_settings(6, 15, 30, 15, 30, 60, 75, 100, size)
+        sprites["restart"] = draw_restart(50, 65, 50, 40, None, 15, 100,
+                                          size, bg=ORANGE)
+    if "io-red" in sprites_wanted:
+        sprites["io-red"] = draw_io(50, 65, 40, 65, 130, 15, 100, size, bg=RED)
+    if "gear-white" in sprites_wanted:
+        sprites["gear-white"] = draw_gear(6, 15, 30, 15, 30, 60, 75, 100,
+                                          size, bg=WHITE)
     if "warning" in sprites_wanted:
-        sprites["warning"] = draw_warning(180, 62, 128, 144, 16, size)
-    if "info" in sprites_wanted:
-        sprites["info"] = draw_info(75, 135, 20, 15, 100, size)
-    if "error" in sprites_wanted:
-        sprites["error"] = draw_error(65, 15, 100, size)
+        sprites["warning"] = draw_warning(180, 62, 128, 144, 16,
+                                          size, bg=DYELLOW)
+    if "exclam-blue" in sprites_wanted:
+        sprites["exclam-blue"] = draw_exclam(75, 135, 20, 15, 100,
+                                             size, bg=BLUE)
+    if "exclam-orange" in sprites_wanted:
+        sprites["exclam-orange"] = draw_exclam(75, 135, 20, 15, 100,
+                                               size, bg=ORANGE)
+    if "x-red" in sprites_wanted:
+        sprites["x-red"] = draw_x(65, 15, 100, size, bg=RED)
     if any(name.startswith("spinner") for name in sprites_wanted):
         spinners_wanted:set[int] = set(int(name.removeprefix("spinner")) \
                                        for name in sprites_wanted \
@@ -506,39 +499,56 @@ def init(*, size:int, compute_size:int=None, crop:bool=True,
     return ret
 
 
-class SpritesCache:
-    __slots__ = "sprites", "size", "compute_size"
+class SpriteCache:
+    __slots__ = "_sprites", "size", "compute_size"
 
-    def __init__(self, *, size:int, compute_size:int=None) -> SpritesCache:
-        self.sprites:dict[str:Image.Image] = dict()
+    def __init__(self, *, size:int, compute_size:int=None) -> SpriteCache:
+        self._sprites:dict[str:Image.Image] = dict()
         self.compute_size:int = compute_size
         self.size:int = size
 
-    def __getitem__(self, key:str) -> ImageType|None:
-        if key not in ALL_SPRITE_NAMES:
-            return None
-        if key not in self.sprites:
-            self.sprites[key] = init(size=self.size, sprites_wanted={key},
-                                     compute_size=self.compute_size)[key]
-        return self.sprites[key]
+    def __getitem__(self, name:str) -> ImageType:
+        if name not in ALL_SPRITE_NAMES:
+            raise KeyError(f"Unknown sprite {name=!r}")
+        if name not in self._sprites:
+            self._sprites[name] = init(size=self.size, sprites_wanted={name},
+                                       compute_size=self.compute_size)[name]
+        return self._sprites[name]
+
+
+class TkSpriteCache:
+    __slots__ = "_master", "_sprites", "_tksprites"
+
+    def __init__(self, master:tk.Misc, *, size:int, compute_size:int=None):
+        assert isinstance(master, tk.Misc), "TypeError"
+        self._tksprites:dict[str:ImageTk.PhotoImage] = dict()
+        self._sprites:SpriteCache = SpriteCache(compute_size=compute_size,
+                                                size=size)
+        self._master:tk.Misc = master
+
+    def __getitem__(self, name:str) -> TkImageType:
+        if name not in self._tksprites:
+            self._tksprites[name] = ImageTk.PhotoImage(self._sprites[name],
+                                                       master=self._master)
+        return self._tksprites[name]
 
 
 if __name__ == "__main__":
     size:int = 256>>1
-    wanted:set[str] = {"info", "play", "close", "warning", "error", "kill"}
-    sprites:dict[str:Image.Image] = SpritesCache(size=size)
+    wanted:set[str] = {"exclam-blue", "play", "x-orange", "warning", "x-red",
+                       "io-red"}
 
     root = tk.Tk()
     root.geometry("+0+0")
     root.resizable(False, False)
+    sprites:TkSpriteCache = TkSpriteCache(root, size=size)
 
     start:float = perf_counter()
-    tksprites = {name:ImageTk.PhotoImage(sprites[name]) for name in wanted}
     print(f"[DEBUG]: Overall: {perf_counter()-start:.2f} seconds")
 
     labels = []
     for i, name in enumerate(wanted):
-        image = tksprites[name]
+        image = sprites[name]
         im = tk.Label(root, bd=0, highlightthickness=0, bg="black", image=image)
         im.grid(row=0, column=i)
         im.bind("<Button-1>", lambda e: print(e.x, e.y))
@@ -553,7 +563,7 @@ if __name__ == "__main__":
     size:int = 256>>1
     wanted:set[str] = {"spinner1", "spinner2", "spinner3", "spinner4",
                        "spinner5", "spinner6"}
-    sprites:dict[str:list[Image.Image]] = SpritesCache(size=size)
+    sprites:dict[str:list[Image.Image]] = SpriteCache(size=size)
 
     root = tk.Tk()
     root.geometry("+0+0")
