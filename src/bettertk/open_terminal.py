@@ -5,7 +5,7 @@ from terminaltk.terminaltk import TerminalTk
 
 
 assert len(sys.argv) != 1, "IndexError: sys.argv[1]"
-__name__:str = "RUN_FROM_COMMANDLINE_ARGS"
+# __name__:str = "RUN_FROM_COMMANDLINE_ARGS" # delme
 term:TerminalTk = TerminalTk(className="TerminalTk")
 if os.path.isdir(sys.argv[1]):
     folder:str = sys.argv[1]

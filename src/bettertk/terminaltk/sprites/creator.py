@@ -2,6 +2,7 @@ from __future__ import annotations
 from math import pi, sqrt, sin as _sin, cos as _cos, tan as _tan, atan as _atan
 from PIL import Image, ImageTk
 from time import perf_counter
+from typing import Callable
 import tkinter as tk
 
 
@@ -388,7 +389,7 @@ def draw_spinners(spinners_wanted:set[int], r:int, d:int, br:int,
     def line_spinner(spinner:int) -> None:
         # Helper for the spinners that are just lines
         _frames:list[Image.Image] = []
-        for dir in reversed("|/-\\|/-\\"):
+        for dir in reversed("|/-\\"):
             img_cpy:DrawImage = image.copy()
             x1, y2 = x2, y2 = (0, 0)
             if dir == "|":
@@ -411,7 +412,6 @@ def draw_spinners(spinners_wanted:set[int], r:int, d:int, br:int,
                 x2:int = (size>>1) + int(d*in_sqrt2)
                 y1:int = (size>>1) + int(d*in_sqrt2)
                 y2:int = (size>>1) - int(d*in_sqrt2)
-                pass
             img_cpy.draw_rounded_line((x1,y1), (x2,y2), r, colour=_SUB_COLOUR)
             _frames.append(img_cpy)
         sprites[f"spinner{spinner}"] = _frames
@@ -428,15 +428,15 @@ def draw_spinners(spinners_wanted:set[int], r:int, d:int, br:int,
                            [(0,0,0), (1,0,0), (1,1,0), (0,1,1), (0,0,1)])
         elif spinner == 3:
             circle_spinner(spinner,
-                           [(0,0,0), (1,0,0), (1,1,0), (1,1,1),
-                            (0,1,1), (0,0,1)])
+                           [(0,0,0), (1,0,0), (1,1,0),
+                            (1,1,1), (0,1,1), (0,0,1)])
         elif spinner == 4:
-            circle_spinner(spinner,
-                           [(0,0,0), (0,0,1), (0,1,1), (1,1,1),
-                            (0,1,1), (0,0,1)])
+            circle_spinner(spinner, [(0,0,0), (0,0,1), (0,1,1), (1,1,1)])
+            sprites["spinner4"].append(sprites["spinner4"][2])
+            sprites["spinner4"].append(sprites["spinner4"][1])
         elif spinner == 5:
-            circle_spinner(spinner,
-                           [(1,0,0), (0,1,0), (0,0,1), (0,1,0)])
+            circle_spinner(spinner, [(1,0,0), (0,1,0), (0,0,1)])
+            sprites["spinner5"].append(sprites["spinner5"][1])
         elif spinner == 6:
             line_spinner(spinner)
         else:
@@ -446,6 +446,7 @@ def draw_spinners(spinners_wanted:set[int], r:int, d:int, br:int,
 
 ImageType:type = Image.Image | list[Image.Image]
 TkImageType:type = ImageTk.PhotoImage | list[ImageTk.PhotoImage]
+DisplayImgType:type = Callable[ImageTk.PhotoImage,None]
 
 def init(*, size:int, compute_size:int=None, crop:bool=True,
          sprites_wanted:set[str]=ALL_SPRITE_NAMES) -> dict[str:ImageType]:
@@ -489,12 +490,12 @@ def init(*, size:int, compute_size:int=None, crop:bool=True,
         draws:DrawImage|list[DrawImage] = sprites[name]
         if not isinstance(draws, list):
             draws:list[DrawImage] = [draws]
-        imgs:list[Image.Image] = []
-        for draw in draws:
+        imgs:list[Image.Image] = [None]*len(draws)
+        for i, draw in enumerate(draws):
             if crop:
-                imgs.append(draw.crop_resize(show_size, inner_size))
+                imgs[i] = draw.crop_resize(show_size, inner_size)
             else:
-                imgs.append(draw.image)
+                imgs[i] = draw.image
         ret[name] = imgs if len(imgs)>1 else imgs[0]
     return ret
 
@@ -516,21 +517,64 @@ class SpriteCache:
         return self._sprites[name]
 
 
+class GifDisplay:
+    __slots__ = "delay", "_func", "_cache", "_afterid", "_curr"
+
+    def __init__(self, _func:DisplayImgType, delay:int, cache:TkSpriteCache):
+        self._curr:list[ImageTk.PhotoImage] = []
+        self._cache:TkSpriteCache = cache
+        self._func:DisplayImgType = _func
+        self._afterid:str|None = None
+        self.delay:int = delay
+
+    def change(self, name:str) -> GifDisplay:
+        self._curr:list[ImageTk.PhotoImage] = self._cache[name]
+        return self
+
+    def start(self) -> GifDisplay:
+        if self._afterid is not None: return None # Already running
+        assert len(self._curr), "No gif set"
+        self._next()
+        return self
+
+    def stop(self) -> GifDisplay:
+        if self._afterid is not None:
+            self._cache._master.after_cancel(self._afterid)
+            self._afterid:str|None = None
+        return self
+
+    def _next(self, i:int=0) -> None:
+        i %= len(self._curr)
+        self._func(self._curr[i])
+        self._afterid = self._cache._master.after(self.delay, self._next, i+1)
+
+
 class TkSpriteCache:
     __slots__ = "_master", "_sprites", "_tksprites"
 
     def __init__(self, master:tk.Misc, *, size:int, compute_size:int=None):
         assert isinstance(master, tk.Misc), "TypeError"
-        self._tksprites:dict[str:ImageTk.PhotoImage] = dict()
+        self._tksprites:dict[str:TkImageType] = dict()
         self._sprites:SpriteCache = SpriteCache(compute_size=compute_size,
                                                 size=size)
         self._master:tk.Misc = master
 
     def __getitem__(self, name:str) -> TkImageType:
         if name not in self._tksprites:
-            self._tksprites[name] = ImageTk.PhotoImage(self._sprites[name],
-                                                       master=self._master)
+            imgs:ImageType = self._sprites[name]
+            if not isinstance(imgs, list):
+                imgs:ImageType = [imgs]
+            tkimgs:TkImageType = [None]*len(imgs)
+            for i, img in enumerate(imgs):
+                tkimgs[i] = ImageTk.PhotoImage(img, master=self._master)
+            self._tksprites[name] = tkimgs if len(tkimgs) != 1 else tkimgs[0]
         return self._tksprites[name]
+
+    def display_gif(self, name:str, delay:int,
+                    display:DisplayImgType) -> GifDisplay:
+        gif_display:GifDisplay = GifDisplay(display, delay, self)
+        gif_display.change(name)
+        return gif_display
 
 
 if __name__ == "__main__":
@@ -563,36 +607,32 @@ if __name__ == "__main__":
     size:int = 256>>1
     wanted:set[str] = {"spinner1", "spinner2", "spinner3", "spinner4",
                        "spinner5", "spinner6"}
-    sprites:dict[str:list[Image.Image]] = SpriteCache(size=size)
 
     root = tk.Tk()
     root.geometry("+0+0")
     root.resizable(False, False)
-
-    def loop(label:tk.Label, imgs:list[ImageTk.PhotoImage], i:int=0) -> None:
-        label.config(image=imgs[i])
-        label.after(DELAY, loop, label, imgs, (i+1)%len(imgs))
+    sprites:TkSpriteCache = TkSpriteCache(root, size=size)
 
     def save_as_gif(name:str, filename:str) -> None:
-        frames:list[Image.Image] = sprites[name]
+        frames:list[Image.Image] = SpriteCache(size=size)[name]
         # If transparent: disposal=2
         # loop=0 means loop forever
         frames[0].save(filename, save_all=True, append_images=frames[1:],
                        duration=DELAY, loop=0, format="gif")
 
-    tkimgs:list[list[ImageTk.PhotoImage]] = []
     for i, name in enumerate(sorted(wanted)):
         start:float = perf_counter()
-        _tkimgs = [ImageTk.PhotoImage(img) for img in sprites[name]]
-        tkimgs.append(_tkimgs)
-        print(f"[DEBUG]: {name!r}: {perf_counter()-start:.2f} seconds")
 
         im = tk.Label(root, bd=0, highlightthickness=0, bg="black")
         im.grid(row=0, column=i)
         im.bind("<Button-1>", lambda e: print(e.x, e.y))
         label = tk.Label(root, text=name, bg="black", fg="white")
         label.grid(row=1, column=i, sticky="ew")
-        loop(im, tkimgs[-1])
+        set_image_callback = lambda img, im=im:im.config(image=img)
+        gif:GifDisplay = sprites.display_gif(name, DELAY, set_image_callback)
+        gif.start()
+
+        print(f"[DEBUG]: {name!r}: {perf_counter()-start:.2f} seconds")
 
         from os import path
         if path.exists("spinners/"):
