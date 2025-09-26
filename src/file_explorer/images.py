@@ -5,8 +5,15 @@ from glob import glob
 import tkinter as tk
 from os import path
 
-ICON_PATHS:list[str] = ["/usr/share/icons/Yaru/*/mimetypes",
-                        "/usr/share/icons/*/*/mimetypes"]
+ICON_PATHS:list[str] = [
+                         "/usr/share/icons/Yaru/*/mimetypes",
+                         "/usr/share/icons/*/*/mimetypes",
+                         # path.expanduser("~/.icons"),
+                         path.expanduser("~/.local/share/icons/*/*/mimetypes")
+                       ]
+
+# https://mimetype.io/all-types
+# TODO: Parse and use: /usr/share/mime/generic-icons
 
 
 def init(root:tk.Tk) -> None:
@@ -27,6 +34,14 @@ for icon_path in ICON_PATHS:
     _ICON_PATHS.extend(sorted(glob(icon_path)))
 
 
+def mimetype_from_shebang(shebang:str) -> str:
+    if "perl" in shebang:
+        return "application/x-perl"
+    if ("python" in shebang) or ("pypy" in shebang):
+        return "text/x-python"
+    if "sh" in shebang:
+        return "application/x-shellscript"
+
 _CACHE:dict[str:ImageTk.PhotoImage] = {}
 def get_sprite(master:tk.Misc, filepath:str) -> ImageTk.PhotoImage:
     # If in cache
@@ -34,6 +49,15 @@ def get_sprite(master:tk.Misc, filepath:str) -> ImageTk.PhotoImage:
         return _CACHE[filepath]
     # Get mimetype
     mimetype, _ = guess_type(filepath)
+    # If no mimetype, try looking at the shebang
+    if mimetype is None:
+        try:
+            with open(filepath, "r") as file:
+                if file.read(2) == "!#":
+                    shebang:str = file.readline()
+                    mimetype:str = mimetype_from_shebang(shebang)
+        except (UnicodeDecodeError, OSError):
+            pass
     # If no mimetype
     if mimetype is None:
         return BLANK
@@ -132,7 +156,7 @@ if __name__ == "__main__":
 
     y = HEIGHT
     for ext in EXTENSIONS:
-        tk_img = get_sprite("file." + ext)
+        tk_img = get_sprite(root, "file." + ext)
         canvas.create_image(20, y, image=tk_img)
         y += int(HEIGHT*2)
 

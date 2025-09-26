@@ -3,15 +3,15 @@ from PIL import ImageTk
 import tkinter as tk
 
 try:
-    from .bettertk import BetterTk
+    from . import BetterTk, make_scrolled
     from .terminaltk.sprites.creator import SpriteCache, SPRITES_REMAPPING
 except ImportError:
-    from bettertk import BetterTk
+    from __init__ import BetterTk, make_scrolled
     from terminaltk.sprites.creator import SpriteCache, SPRITES_REMAPPING
 
 
 FRAME_KWARGS = dict(bd=0, highlightthickness=0, bg="black")
-BUTTON_KWARGS = dict(fg="white", activeforeground="white", bg="black",
+BUTTON_KWARGS = dict(fg="white", bg="black", activeforeground="white",
                      activebackground="black")
 
 ICONS:SpriteCache = SpriteCache(size=64, compute_size=256)
@@ -22,7 +22,7 @@ class Popup(BetterTk):
 
     def __init__(self, master:tk.Misc|None, title:str, *, icon:str,
                  center:bool=True, center_widget:tk.Misc=None,
-                 block:bool=True) -> Popup:
+                 block:bool=True, iconphoto_default:bool=False) -> Popup:
         if center_widget is not None:
             assert center, "No point in passing in center_widget if " \
                            "center is False"
@@ -40,7 +40,7 @@ class Popup(BetterTk):
         super().topmost(False)
         self.image:Image.Image = self.get_image(icon)
         self.tk_image = ImageTk.PhotoImage(self.image, master=self)
-        self.root.iconphoto(False, self.tk_image)
+        self.root.iconphoto(iconphoto_default, self.tk_image)
         super().bind("<Escape>", lambda e: self._destroy())
         super().focus_set()
         try:
@@ -84,9 +84,11 @@ class Tell(Popup):
     __slots__ = ()
 
     def __init__(self, master:tk.Misc|None, title:str, message:str, *, icon:str,
-                 center:bool=True, center_widget:tk.Misc=None, block:bool=True):
+                 center:bool=True, center_widget:tk.Misc=None, block:bool=True,
+                 multiline:bool=False, iconphoto_default:bool=False) -> Tell:
         super().__init__(master, title=title, icon=icon, center=center,
-                         center_widget=center_widget, block=block)
+                         center_widget=center_widget, block=block,
+                         iconphoto_default=iconphoto_default)
         super().bind("<Return>", lambda e: self._destroy())
 
         left_frame = tk.Frame(self, **FRAME_KWARGS)
@@ -99,8 +101,23 @@ class Tell(Popup):
         icon.pack(side="left", padx=(15, 0))
         icon.create_image(0, 0, anchor="nw", image=self.tk_image)
 
-        text = tk.Label(right_frame, text=message, bg="black", fg="white")
-        text.pack(side="top", padx=15, pady=(15, 20))
+        if multiline:
+            text_frame:tk.Frame = tk.Frame(right_frame, bg="black", bd=0,
+                                           highlightthickness=0)
+            text_frame.pack(side="top", padx=15, pady=(15, 20))
+            text = tk.Text(text_frame, font=("mono",10), bg="black", fg="white",
+                           width=80, height=20, wrap="none")
+            text.insert("end", message)
+            text.config(state="disabled")
+            make_scrolled(text_frame, text, vscroll=True, hscroll=False)
+            text.focus_set()
+            def select_all(_:tk.Event) -> str:
+                text.tag_add("sel", "1.0", "end")
+                return "break"
+            text.bind("<Control-a>", select_all)
+        else:
+            text = tk.Label(right_frame, text=message, bg="black", fg="white")
+            text.pack(side="top", padx=15, pady=(15, 20))
 
         ok = tk.Button(right_frame, text="Ok", **BUTTON_KWARGS,
                        width=10, command=self._destroy)
@@ -111,10 +128,12 @@ class YesNoQuestion(Popup):
     __slots__ = "result"
 
     def __init__(self, master:tk.Misc|None, title:str, message:str, *, icon:str,
-                 center:bool=True, center_widget:tk.Misc=None) -> YesNoQuestion:
+                 center:bool=True, center_widget:tk.Misc=None,
+                 iconphoto_default:bool=False) -> YesNoQuestion:
         self.result:bool = None
         super().__init__(master, title=title, icon=icon, center=center,
-                         center_widget=center_widget, block=True)
+                         center_widget=center_widget, block=True,
+                         iconphoto_default=iconphoto_default)
         super().bind("<Return>", lambda e: self.yes_clicked())
 
         right_frame = tk.Frame(self, **FRAME_KWARGS)
@@ -152,7 +171,7 @@ class YesNoQuestion(Popup):
         return self.result
 
 
-def askyesno(master:tk.Misc|None=None, *args, **kwargs) -> bool|None:
+def askyesno(master:tk.Misc|None=None, *args:tuple, **kwargs:dict) -> bool|None:
     return YesNoQuestion(master, *args, **kwargs).get()
 
 def tell(master:tk.Misc|None=None, *args, block:bool=True, **kwargs) -> None:
@@ -160,8 +179,8 @@ def tell(master:tk.Misc|None=None, *args, block:bool=True, **kwargs) -> None:
     if block:
         tell.mainloop()
 
-def debug(text:str) -> None:
-    Tell(None, title="Debug", message=text, icon="info", block=False)
+def debug(text:str, block:bool=True, **kwargs:dict) -> None:
+    tell(title="Debug", message=text, icon="info", block=block, **kwargs)
 
 
 if __name__ == "__main__a":

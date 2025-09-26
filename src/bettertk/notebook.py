@@ -32,7 +32,8 @@ BUTTON1_TK_STATE:int = 256
 
 
 class TabNotch(tk.Canvas):
-    __slots__ = "text_id", "text", "page", "rrect_id", "width", "min_size"
+    __slots__ = "text_id", "text", "page", "rrect_id", "width", "min_size", \
+                "can_drag"
     PADX:int = 7
 
     def __init__(self, master:TabNotches, min_size:int=0,
@@ -42,6 +43,7 @@ class TabNotch(tk.Canvas):
         self.text_id:int = super().create_text((0,0), text="", anchor="nw",
                                                fill="white", font=font)
         self.min_size:int = min_size
+        self.can_drag:bool = True
         self.rrect_id:int = None
         self.width:int = 0
         self.text:str = None
@@ -93,29 +95,39 @@ class TabNotches(BetterFrame):
         super().__init__(notebook, bg=NOTCH_BG, hscroll=True, vscroll=False,
                          HScrollBarClass=BetterScrollBarHorizontal,
                          hscrolltop=True, scrollbar_kwargs={"thickness":4})
-        self.add_notch:TabNotch = TabNotch(self, font=self.font)
-        self.add_notch.grid(row=1, column=1)
-        self.add_notch.rename("+")
         self.h_scrollbar.hide:bool = HIDE_SCROLLBAR
         self.notches:list[TabNotch] = []
         self.notch_dragging:bool = None
+        self.add_notch:TabNotch = None
         self.min_size:int = min_size
         self.dragging:bool = False
+        self.enable_new_tab()
         height:int = self.add_notch.winfo_reqheight()
         super().resize(height=height)
         self.tmp_notch:tk.Frame = tk.Frame(self, bg=NOTCH_BG, height=height,
                                            highlightthickness=0, bd=0)
-
         make_bind_frame(self)
         self.bind("<ButtonPress-1>", self.start_dragging, add=True)
         self.bind_all("<B1-Motion>", self.drag, add=True)
         self.bind_all("<Motion>", self.drag, add=True)
         self.bind_all("<ButtonRelease-1>", self.end_dragging, add=True)
 
+    def disable_new_tab(self) -> None:
+        if self.add_notch is None: return None
+        self.add_notch.destroy()
+        self.add_notch:TabNotch = None
+
+    def enable_new_tab(self) -> None:
+        if self.add_notch is not None: return None
+        self.add_notch:TabNotch = TabNotch(self, font=self.font)
+        self.add_notch.grid(row=1, column=len(self.notches)+1)
+        self.add_notch.rename("+")
+
     def add(self) -> TabNotch:
         notch:TabNotch = TabNotch(self, min_size=self.min_size, font=self.font)
         notch.grid(row=1, column=len(self.notches))
-        self.add_notch.grid(row=1, column=len(self.notches)+1)
+        if self.add_notch is not None:
+            self.add_notch.grid(row=1, column=len(self.notches)+1)
         self.notches.append(notch)
         return notch
 
@@ -142,7 +154,9 @@ class TabNotches(BetterFrame):
         if event.widget == self.add_notch:
             return None
         self.notch_dragging:TabNotch = event.widget
-        self.dragx:int = event.x # event.x_root - event.widget.winfo_rootx()
+        if not self.notch_dragging.can_drag:
+            self.notch_dragging:TabNotch = None
+        self.dragx:int = event.x
         return "break"
 
     def end_dragging(self, event:tk.Event=None) -> str:
@@ -314,6 +328,12 @@ class Notebook(tk.Frame):
         self.bottom:tk.Frame = tk.Frame(self, **WIDGET_KWARGS, bg="black")
         self.bottom.pack(fill="both", expand=True)
 
+    def disable_new_tab(self) -> None:
+        self.notches.disable_new_tab()
+
+    def enable_new_tab(self) -> None:
+        self.notches.enable_new_tab()
+
     def tab_create(self) -> NotebookPage:
         notch:TabNotch = self.notches.add()
         notch.rename("Untitled")
@@ -432,10 +452,10 @@ if __name__ == "__main__":
     root.mainloop()
 
 
-if __name__ == "__main__a":
+if __name__ == "__main__":
     page_to_text = {}
 
-    def add_tab(_:tk.Event=None) -> None:
+    def add_tab(_:tk.Event=None) -> NotebookPage:
         """
         The + button is pressed. Feel free to not do anything here.
         """
@@ -446,6 +466,7 @@ if __name__ == "__main__a":
         page_to_text[page] = t
         page.rename(title=f"Tab number {len(notebook.pages)}")
         page.add_frame(t).focus()
+        return page
 
     def selected(_:tk.Event=None) -> None:
         """
@@ -455,7 +476,7 @@ if __name__ == "__main__a":
             return None
         page_to_text[notebook.curr_page].focus_set()
 
-    def on_try_close(page) -> Break:
+    def on_try_close(page:NotebookPage) -> Break:
         """
         Return True to stop the tab from being closed.
         """
@@ -486,6 +507,7 @@ if __name__ == "__main__a":
 
     root = tk.Tk()
     notebook = Notebook(root)
+    # notebook.disable_new_tab()
     notebook.pack(fill="both", expand=True)
     notebook.on_try_close = on_try_close
     notebook.bind("<<Tab-Switched>>", selected)
@@ -493,7 +515,8 @@ if __name__ == "__main__a":
     notebook.bind("<<Close-All>>", close_all)
 
     for i in range(5):
-        add_tab()
+        page:NotebookPage = add_tab()
+        page.notch.can_drag:bool = i == 2 # Disable dragging of 3rd tab
 
     nb, nts = notebook, notebook.notches
     root.mainloop()

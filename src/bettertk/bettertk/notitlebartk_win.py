@@ -112,12 +112,23 @@ class NoTitlebarTk:
 
         self._fullscreen:bool = False
 
-        for method_name in dir(self.root):
-            method = getattr(self.root, method_name)
-            if (method_name not in dir(self)) and (method_name[-2:] != "__"):
-                setattr(self, method_name, method)
+        dir_self:set[str] = set(dir(self))
+        for attribute_name in dir(self.root):
+            if (attribute_name[-2:] == "__") or (attribute_name in dir_self):
+                continue
+            attribute = getattr(self.root, attribute_name)
+            setattr(self, attribute_name, attribute)
 
         self._overrideredirect()
+
+    @property
+    def report_callback_exception(self) -> object:
+        return self.root.report_callback_exception
+
+    @report_callback_exception.setter
+    def report_callback_exception(self, new:object) -> None:
+        raise RuntimeError("Only set report_callback_exception using " \
+                           "tk.Tk.report_callback_exception = ···")
 
     def _overrideredirect(self) -> None:
         self.hwnd:int = get_handle(self.root)

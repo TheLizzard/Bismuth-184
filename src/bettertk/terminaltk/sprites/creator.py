@@ -6,11 +6,17 @@ from typing import Callable
 import tkinter as tk
 
 
-ALL_SPRITE_NAMES:set[str] = {"pause", "play", "exclam-orange", "exclam-blue",
-                             "x-orange", "x-red", "restart", "warning",
-                             "io-red", "gear-white", "gear-white",
+ALL_SPRITE_NAMES:set[str] = {"pause-green", "pause-black",
+                             "play-green", "play-black",
+                             "exclam-orange", "exclam-blue",
+                             "x-orange", "x-red",
+                             "restart",
+                             "warning",
+                             "io-red",
+                             "gear-white",
                              "spinner1", "spinner2", "spinner3", "spinner4",
-                             "spinner5", "spinner6"}
+                             "spinner5", "spinner6",
+                             "spinner6-black"}
 
 SPRITES_REMAPPING:dict[str:str] = {"stop":"exclam-orange",
                                    "info":"exclam-blue",
@@ -256,20 +262,20 @@ class DrawImage:
         return bool(c&1)
 
 
-def draw_pause(a:int, b:int, c:int, d:int, size:int) -> DrawImage:
+def draw_pause(a:int, b:int, c:int, d:int, size:int, bg:Colour) -> DrawImage:
     a, b, c, d = a/256*size, b/256*size, c/256*size, d/256*size
     image:DrawImage = DrawImage(size)
-    image.draw_circle((size>>1,size>>1), d, colour=DGREEN)
+    image.draw_circle((size>>1,size>>1), d, colour=bg)
     image.draw_rounded_line((a,b), (a,size-b), c, colour=WHITE)
     image.draw_rounded_line((size-a,b), (size-a,size-b), c, colour=WHITE)
     return image
 
-def draw_play(a:int, b:int, c:int, d:int, size:int) -> DrawImage:
+def draw_play(a:int, b:int, c:int, d:int, size:int, bg:Colour) -> DrawImage:
     if c is None:
         c:float = sqrt(3)/2*(256-2*b)+a
     a, b, c, d = a/256*size, b/256*size, c/256*size, d/256*size
     image:DrawImage = DrawImage(size)
-    image.draw_circle((size>>1,size>>1), d, colour=DGREEN)
+    image.draw_circle((size>>1,size>>1), d, colour=bg)
     image.draw_triangle((a,b), (a,size-b), (c,size>>1))
     #image.draw_triangle((size-a,size-b), (size-a,b), (size-c,size>>1))
     return image
@@ -371,9 +377,17 @@ def draw_test(size) -> DrawImage:
 def draw_addon() -> Image.Image: ...
 
 def draw_spinners(spinners_wanted:set[int], r:int, d:int, br:int,
-                  size:int) -> dict[str:list[Image.Image]]:
-    _MAIN_COLOUR:Colour = BLUE
+                  size:int, bg:Colour) -> dict[str:list[Image.Image]]:
+    _MAIN_COLOUR:Colour = bg
     _SUB_COLOUR:Colour = WHITE
+    def name() -> str:
+        if _MAIN_COLOUR == BLUE:
+            return f"spinner{spinner}"
+        elif _MAIN_COLOUR == BLACK:
+            return f"spinner{spinner}-black"
+        else:
+            raise NotImplementedError()
+
     def circle_spinner(spinner:int, frames:tuple[list[int]]) -> None:
         # Helper for the spinners that are just blinking circles
         _frames:list[Image.Image] = []
@@ -384,7 +398,7 @@ def draw_spinners(spinners_wanted:set[int], r:int, d:int, br:int,
                     x:int = (size>>1) - d*(pos-1)
                     img_cpy.draw_circle((x,size>>1), r, colour=_SUB_COLOUR)
             _frames.append(img_cpy)
-        sprites[f"spinner{spinner}"] = _frames
+        sprites[name()] = _frames
 
     def line_spinner(spinner:int) -> None:
         # Helper for the spinners that are just lines
@@ -414,7 +428,7 @@ def draw_spinners(spinners_wanted:set[int], r:int, d:int, br:int,
                 y2:int = (size>>1) - int(d*in_sqrt2)
             img_cpy.draw_rounded_line((x1,y1), (x2,y2), r, colour=_SUB_COLOUR)
             _frames.append(img_cpy)
-        sprites[f"spinner{spinner}"] = _frames
+        sprites[name()] = _frames
 
     r, d, br = r/256*size, d/256*size, br/256*size
     image:DrawImage = DrawImage(size)
@@ -432,11 +446,11 @@ def draw_spinners(spinners_wanted:set[int], r:int, d:int, br:int,
                             (1,1,1), (0,1,1), (0,0,1)])
         elif spinner == 4:
             circle_spinner(spinner, [(0,0,0), (0,0,1), (0,1,1), (1,1,1)])
-            sprites["spinner4"].append(sprites["spinner4"][2])
-            sprites["spinner4"].append(sprites["spinner4"][1])
+            sprites[name()].append(sprites[name()][2])
+            sprites[name()].append(sprites[name()][1])
         elif spinner == 5:
             circle_spinner(spinner, [(1,0,0), (0,1,0), (0,0,1)])
-            sprites["spinner5"].append(sprites["spinner5"][1])
+            sprites[name()].append(sprites[name()][1])
         elif spinner == 6:
             line_spinner(spinner)
         else:
@@ -453,10 +467,14 @@ def init(*, size:int, compute_size:int=None, crop:bool=True,
     size, show_size = (compute_size or size<<1), size
     inner_size:int = int(220/256*size)
     sprites:dict[str,DrawImage|list[DrawImage]] = dict()
-    if "pause" in sprites_wanted:
-        sprites["pause"] = draw_pause(108, 88, 15, 100, size)
-    if "play" in sprites_wanted:
-        sprites["play"] = draw_play(95, 77, None, 100, size)
+    if "pause-green" in sprites_wanted:
+        sprites["pause-green"] = draw_pause(108, 88, 15, 100, size, bg=DGREEN)
+    if "pause-black" in sprites_wanted:
+        sprites["pause-black"] = draw_pause(108, 88, 15, 100, size, bg=BLACK)
+    if "play-green" in sprites_wanted:
+        sprites["play-green"] = draw_play(95, 77, None, 100, size, bg=DGREEN)
+    if "play-black" in sprites_wanted:
+        sprites["play-black"] = draw_play(95, 77, None, 100, size, bg=BLACK)
     if "x-orange" in sprites_wanted:
         sprites["x-orange"] = draw_x(65, 15, 100, size, bg=ORANGE)
     # if "close2" in sprites_wanted:
@@ -481,10 +499,16 @@ def init(*, size:int, compute_size:int=None, crop:bool=True,
     if "x-red" in sprites_wanted:
         sprites["x-red"] = draw_x(65, 15, 100, size, bg=RED)
     if any(name.startswith("spinner") for name in sprites_wanted):
-        spinners_wanted:set[int] = set(int(name.removeprefix("spinner")) \
-                                       for name in sprites_wanted \
-                                       if name.startswith("spinner"))
-        sprites.update(draw_spinners(spinners_wanted, 25, 60, 100, size))
+        spinners_wanted:set[int] = set()
+        colours:set[Colour] = set()
+        for name in sprites_wanted:
+            number, *colour = name.removeprefix("spinner").split("-",1)
+            spinners_wanted.add(int(number))
+            if not colour: colour:list[str] = [""]
+            colours.add(BLACK if colour[0] == "black" else BLUE)
+        for colour in colours:
+            sprites.update(draw_spinners(spinners_wanted, 25, 60, 100, size,
+                                         bg=colour))
     ret:dict[str:ImageType] = dict()
     for name in sprites_wanted:
         draws:DrawImage|list[DrawImage] = sprites[name]
@@ -579,8 +603,8 @@ class TkSpriteCache:
 
 if __name__ == "__main__":
     size:int = 256>>1
-    wanted:set[str] = {"exclam-blue", "play", "x-orange", "warning", "x-red",
-                       "io-red"}
+    wanted:set[str] = {"exclam-blue", "play-green", "play-black",
+                       "x-orange", "warning", "x-red", "io-red"}
 
     root = tk.Tk()
     root.geometry("+0+0")
@@ -606,7 +630,7 @@ if __name__ == "__main__":
     DELAY:int = 850 # milliseconds
     size:int = 256>>1
     wanted:set[str] = {"spinner1", "spinner2", "spinner3", "spinner4",
-                       "spinner5", "spinner6"}
+                       "spinner5", "spinner6", "spinner6-black"}
 
     root = tk.Tk()
     root.geometry("+0+0")

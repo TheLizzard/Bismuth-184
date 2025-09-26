@@ -9,9 +9,9 @@ Editor:
 * Control-j and Control-l move the viewport to the end of the longest line
 * Unclosed bracket in `FindReplaceManager` with "whole word" fails text="a()\na(x)", search="a("
 * On Windows, the window grows horizontally each time the Bismuth-184 is opened
-* Pasting scrolls to the start of the line (typing also has this problem)
 * Tabs are counted as 1 character when pressing the arrows
 * Alt-quotes still inserts 2 quotes (both ' and ")
+* BetterText makes pasting scroll to the start of the line (typing also has this problem)
 * BetterText still has visual bugs when adding to a long line if a longer line exists
 * BetterText has problems when the longest line is only slighly longer than the text box (possibly because of the scrollbar)
 * Closing ] doesn't highlight correctly only when in string (only sometimes)

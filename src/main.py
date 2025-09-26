@@ -6,10 +6,9 @@ import tkinter as tk
 import sys
 import os
 
-for i in range(1, len(sys.argv)):
-    if sys.argv[i] == "--no-focus": continue
-    sys.argv[i] = os.path.abspath(sys.argv[i])
-os.chdir(os.path.dirname(__file__))
+
+OLD_CWD_PATH:str = os.getcwd()
+os.chdir(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
 
 DEBUG_TIME:bool = False
 if DEBUG_TIME:
@@ -406,7 +405,7 @@ if __name__ == "__main__":
         app.init()
         for path in sys.argv[1:]:
             if path == "--no-focus": continue
-            app.open(path)
+            app.open(os.path.join(OLD_CWD_PATH, path))
         return app
 
     def run(app:App) -> None:
@@ -436,9 +435,12 @@ if __name__ == "__main__":
                 else:
                     ipc.event_generate("focus", where="others")
                 for arg in args:
-                    ipc.event_generate("open", where="others", data=arg)
+                    path:str = os.path.join(OLD_CWD_PATH, arg)
+                    ipc.event_generate("open", where="others", data=path)
                 raise SystemExit()
 
+    import disable_io_errors
+    disable_io_errors.enable()
     from err_handler import RunManager
     manager:RunManager = RunManager()
     manager.register(force_singleton)

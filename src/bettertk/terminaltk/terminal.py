@@ -53,6 +53,8 @@ elif IS_UNIX:
                        "omitTranslation: popup-menu",
                        "allowWindowOps: true",
                        "bellOnReset: false",
+                       "eightBitInput: false",
+                       "metaSendsEscape: true",
                        # "ScrollBar: on",
                        # "xterm*sixelScrolling: on",
                        # f"xterm*scrollbar.thumb: {THUMB_SPRITE}",

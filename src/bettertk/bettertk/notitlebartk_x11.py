@@ -316,19 +316,27 @@ class NoTitlebarTk:
         self._maximised:bool = False
         self._cleanedup:bool = False
 
-        dir_self:list = dir(self)
+        dir_self:set[str] = set(dir(self))
         for attribute_name in dir(self.root):
-            if attribute_name[-2:] == "__":
+            if (attribute_name[-2:] == "__") or (attribute_name in dir_self):
                 continue
             attribute = getattr(self.root, attribute_name)
-            if attribute_name not in dir_self:
-                setattr(self, attribute_name, attribute)
+            setattr(self, attribute_name, attribute)
 
         self.display:DISPLAY = self._get_display(master)
         self.wait_for_func(True, self.root.winfo_ismapped)
         self.window:WINDOW = self._get_parent(self.root.winfo_id())
         self._overrideredirect()
         self.wait_for_func(True, self.root.winfo_ismapped)
+
+    @property
+    def report_callback_exception(self) -> object:
+        return self.root.report_callback_exception
+
+    @report_callback_exception.setter
+    def report_callback_exception(self, new:object) -> None:
+        raise RuntimeError("Only set report_callback_exception using " \
+                           "tk.Tk.report_callback_exception = ···")
 
     def make_non_clickable(self, topmost:bool=True, notaskbar:bool=True):
         # https://stackoverflow.com/a/50806584/11106801

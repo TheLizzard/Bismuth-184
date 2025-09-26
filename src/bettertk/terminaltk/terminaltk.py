@@ -174,7 +174,7 @@ class TerminalTk(BetterTk):
                             width=1, height=3)
         self.sep.pack(side="top", fill="x")
 
-        self.pause_button = tk.Button(frame, image=self.sprites["pause"],
+        self.pause_button = tk.Button(frame, image=self.sprites["pause-green"],
                                       command=self._toggle_pause, **BKWARGS,
                                       width=70, text="Pause")
         self.close_button = tk.Button(frame, image=self.sprites["x-orange"],
@@ -195,10 +195,12 @@ class TerminalTk(BetterTk):
     def _toggle_pause(self) -> None:
         if not self.running(): return None
         if self.pause_button.cget("text") == "Pause":
-            self.pause_button.config(text="Play", image=self.sprites["play"])
+            sprite:ImageTk.PhotoImage = self.sprites["play-green"]
+            self.pause_button.config(text="Play", image=sprite)
             self.send_event("pause")
         else:
-            self.pause_button.config(text="Pause", image=self.sprites["pause"])
+            sprite:ImageTk.PhotoImage = self.sprites["pause-green"]
+            self.pause_button.config(text="Pause", image=sprite)
             self.send_event("unpause")
 
     def _toggle_close(self) -> None:
@@ -223,7 +225,8 @@ class TerminalTk(BetterTk):
 
     def _finished_proc(self, event:Event) -> None:
         if not self.running(): return None
-        self.pause_button.config(text="Pause", image=self.sprites["pause"])
+        sprite:ImageTk.PhotoImage = self.sprites["pause-green"]
+        self.pause_button.config(text="Pause", image=sprite)
         self.kill_button.config(state="disabled")
         self.pause_button.config(state="disabled")
         self.close_button.config(image=self.sprites["restart"], text="Restart")

@@ -60,7 +60,7 @@ def make_pat() -> re.compile:
 
     sstring = r"'[^'\\\n]*(\\.[^'\\\n]*)*(?:'|\n|$)"
     dstring = r'"[^"\\\n]*(\\.[^"\\\n]*)*(?:"|\n|$)'
-    includestr = '(?<=include )\<[^\n>]*>'
+    includestr = '(?<=include )\\<[^\n>]*>'
     string = idleany("string", [sstring, dstring, includestr])
 
     reg:str = comment + "|" + include + "|" + string + "|" + kw + "|" + \
