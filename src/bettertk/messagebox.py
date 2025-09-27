@@ -11,8 +11,8 @@ except ImportError:
 
 
 FRAME_KWARGS = dict(bd=0, highlightthickness=0, bg="black")
-BUTTON_KWARGS = dict(fg="white", bg="black", activeforeground="white",
-                     activebackground="black")
+BUTTON_KWARGS = dict(activeforeground="white", activebackground="black",
+                     fg="white", bg="black", takefocus=True)
 
 ICONS:SpriteCache = SpriteCache(size=64, compute_size=256)
 
@@ -106,11 +106,10 @@ class Tell(Popup):
                                            highlightthickness=0)
             text_frame.pack(side="top", padx=15, pady=(15, 20))
             text = tk.Text(text_frame, font=("mono",10), bg="black", fg="white",
-                           width=80, height=20, wrap="none")
+                           width=80, height=20, wrap="none", takefocus=False)
             text.insert("end", message)
             text.config(state="disabled")
             make_scrolled(text_frame, text, vscroll=True, hscroll=False)
-            text.focus_set()
             def select_all(_:tk.Event) -> str:
                 text.tag_add("sel", "1.0", "end")
                 return "break"
@@ -119,9 +118,14 @@ class Tell(Popup):
             text = tk.Label(right_frame, text=message, bg="black", fg="white")
             text.pack(side="top", padx=15, pady=(15, 20))
 
-        ok = tk.Button(right_frame, text="Ok", **BUTTON_KWARGS,
-                       width=10, command=self._destroy)
+        ok = tk.Button(right_frame, text="Ok", **BUTTON_KWARGS, width=10,
+                       command=self._destroy)
         ok.pack(side="bottom", anchor="e", padx=(0, 15), pady=(0, 20))
+        ok.focus_set()
+
+        for widget in (self, ok):
+            for event in ("<Return>", "<KP_Enter>", "<Escape>"):
+                widget.bind(event, lambda e: self._destroy())
 
 
 class YesNoQuestion(Popup):
@@ -200,9 +204,7 @@ if __name__ == "__main__":
 
     msg:str = 'Are you sure you want to delete "Hi.txt"?'
     result = askyesno(root, title="Delete file?", message=msg, icon="warning")
-    print(result)
 
     if result:
         msg:str = 'You deleted "Hi.txt"?'
-        result = tell(root, title="Deleted file", message=msg, icon="info")
-        print(result)
+        tell(root, title="Deleted file", message=msg, icon="info")

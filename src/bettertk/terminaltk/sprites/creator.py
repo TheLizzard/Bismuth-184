@@ -8,8 +8,8 @@ import tkinter as tk
 
 ALL_SPRITE_NAMES:set[str] = {"pause-green", "pause-black",
                              "play-green", "play-black",
-                             "exclam-orange", "exclam-blue",
-                             "x-orange", "x-red",
+                             "exclam-red", "exclam-orange", "exclam-blue",
+                             "x-red", "x-orange",
                              "restart",
                              "warning",
                              "io-red",
@@ -496,6 +496,9 @@ def init(*, size:int, compute_size:int=None, crop:bool=True,
     if "exclam-orange" in sprites_wanted:
         sprites["exclam-orange"] = draw_exclam(75, 135, 20, 15, 100,
                                                size, bg=ORANGE)
+    if "exclam-red" in sprites_wanted:
+        sprites["exclam-red"] = draw_exclam(75, 135, 20, 15, 100,
+                                               size, bg=RED)
     if "x-red" in sprites_wanted:
         sprites["x-red"] = draw_x(65, 15, 100, size, bg=RED)
     if any(name.startswith("spinner") for name in sprites_wanted):
@@ -556,9 +559,9 @@ class GifDisplay:
         return self
 
     def start(self) -> GifDisplay:
-        if self._afterid is not None: return None # Already running
-        assert len(self._curr), "No gif set"
-        self._next()
+        if self._afterid is None:
+            assert len(self._curr), "No gif set"
+            self._next()
         return self
 
     def stop(self) -> GifDisplay:
