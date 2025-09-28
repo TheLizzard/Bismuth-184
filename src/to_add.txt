@@ -22,7 +22,6 @@ Editor:
 * Control-m doesn't remove marks that are on empty lines
 * Double-Click and then drag doesn't extend selection
 * Adding a shebang to an unsaved file should switch to the correct plugin
-* After closing the editor with a saved file open and then starting the editor should update the saved file's contents to match the filesystem
 
 IPC:
 * Remove psutil dependency for checking if process exists

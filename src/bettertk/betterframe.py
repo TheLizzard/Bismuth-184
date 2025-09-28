@@ -212,6 +212,7 @@ class BetterFrame(tk.Frame):
         self.pack_forget = self.master_frame.pack_forget
         self.grid_forget = self.master_frame.grid_forget
         self.place_forget = self.master_frame.place_forget
+        self.grid_remove = self.master_frame.grid_remove
 
     def get_x_offset(self) -> (int, int):
         """
@@ -296,11 +297,9 @@ class BetterFrame(tk.Frame):
         if width is not None:
             self.dummy_canvas.config(width=width)
         if fit == FIT_WIDTH:
-            super().update()
-            self.dummy_canvas.config(width=super().winfo_width())
+            self.dummy_canvas.config(width=super().winfo_reqwidth())
         if fit == FIT_HEIGHT:
-            super().update()
-            self.dummy_canvas.config(height=super().winfo_height())
+            self.dummy_canvas.config(height=super().winfo_reqheight())
     fit = resize
 
     def bind(self, sequence:str, callback, *args, **kwargs) -> tuple[str]:

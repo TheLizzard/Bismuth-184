@@ -130,7 +130,7 @@ class ProtoPlugin:
             state[rule.__class__.__name__] = rule.get_state()
         return state
 
-    def set_state(self, state:object) -> None:
+    def set_state(self, state:dict) -> None:
         assert isinstance(state, dict), "TypeError"
         for rule in self.rules:
             rule_name:str = rule.__class__.__name__

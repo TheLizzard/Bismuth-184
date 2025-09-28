@@ -201,17 +201,16 @@ class SaveLoadManager(Rule):
             allow:bool = askyesno(self.text, title="Huge file", icon="warning",
                                   message=msg, center=True,
                                   center_widget=self.text)
-            if not allow:
-                return False
+            if not allow: return False
         # Read the file
         with open(self.text.filepath, "rb") as file:
-            data:bytes = file.read()
+            data:bytes = file.read().rstrip(b"\r\n")
         # Make sure there are no illegal characters
         data:str|None = self._security(data, decode=True)
         if data is None: return False
         # Delete old
-        current_data:str = self.text.get("1.0", "end -1c")
-        if current_data.rstrip("\n") != data:
+        current_data:str = self.text.get("1.0", "end -1c").rstrip("\r\n")
+        if current_data != data:
             if self.text.compare("1.0", "!=", "end -1c"):
                 self.text.delete("1.0", "end")
             self.text.filesystem_data:str = data
@@ -255,6 +254,7 @@ class SaveLoadManager(Rule):
                         saved_data:str) -> None:
         self.text.filepath:str = filepath
         self.text.filesystem_data:str = saved_data
+        opened:bool = False
         # Check for merge conflict
         if self.text.filepath:
             if not self._can_read():
@@ -277,14 +277,16 @@ class SaveLoadManager(Rule):
                              center=True, icon="warning",
                              center_widget=self.text, block=False)
             else:
+                opened:bool = True
                 self._internal_open(reload=False)
         # Set the data
         data:str|None = self._security(data, decode=False)
         if data is None: return None
-        self.text.delete("1.0", "end")
-        self.text.insert("end", data, "program")
         self.text.event_generate("<<Clear-Separators>>")
-        self.text.event_generate("<<Opened-File>>")
+        if not opened:
+            self.text.delete("1.0", "end")
+            self.text.insert("end", data, "program")
+            self.text.event_generate("<<Opened-File>>")
         self._edit_modified(modified)
 
     def _security(self, data:bytes|str, *, decode:bool) -> str|None:
