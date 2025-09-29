@@ -1,40 +1,55 @@
 from __future__ import annotations
 from mimetypes import guess_type, guess_extension
+from collections import defaultdict
 from PIL import Image, ImageTk
 from glob import glob
 import tkinter as tk
 from os import path
 
+SELF_DIR:str = path.dirname(__file__)
+FALLBACK:str = path.join(SELF_DIR, "KDE-oxygen-icons", "16x16", "mimetypes")
+UNKNOWN_MIMETYPE:str = "application-x-zerosize"
+
+
 ICON_PATHS:list[str] = [
-                         "/usr/share/icons/Yaru/*/mimetypes",
-                         "/usr/share/icons/*/*/mimetypes",
+                         "/usr/share/icons/Yaru/16x16/mimetypes",
+                         "/usr/share/icons/*/16x16/mimetypes",
                          # path.expanduser("~/.icons"),
-                         path.expanduser("~/.local/share/icons/*/*/mimetypes")
+                         path.expanduser("~/.local/share/icons/*/*/mimetypes"),
+                         FALLBACK,
+                         path.join(SELF_DIR, "sprites"),
                        ]
 
-# https://mimetype.io/all-types
-# TODO: Parse and use: /usr/share/mime/generic-icons
+WIDTH:int = 16
+HEIGHT:int = 16
+MimeType:type = str
 
-
-def init(root:tk.Tk) -> None:
-    global TK_IMAGES, BLANK
-    TK_IMAGES = {}
-    for extension in EXTENSIONS:
-        imagepath = path.join(base_folder, f"sprites/.{extension}.png")
-        img:Image.Image = Image.open(imagepath)
-        img:Image.Image = img.resize((WIDTH,HEIGHT), Image.LANCZOS)
-        tk_image = ImageTk.PhotoImage(img, master=root)
-        TK_IMAGES[extension] = tk_image
-    TK_IMAGES["*"] = TK_IMAGES["star"]
-    TK_IMAGES[None] = TK_IMAGES["blank"]
-    BLANK = TK_IMAGES["star"]
 
 _ICON_PATHS:list[str] = []
 for icon_path in ICON_PATHS:
     _ICON_PATHS.extend(sorted(glob(icon_path)))
 
 
-def mimetype_from_shebang(shebang:str) -> str:
+# https://mimetype.io/all-types
+# TODO: Parse and use: /usr/share/mime/generic-icons
+
+
+_MIMETYPE_CACHE:dict[MimeType:str] = {}
+def _spritepath_from_mimetype(mimetype:MimeType) -> str:
+    imagename:str = mimetype.replace("/", "-") + ".png"
+    if mimetype not in _MIMETYPE_CACHE:
+        for imagepath in _ICON_PATHS:
+            spritepath:str = path.join(imagepath, imagename)
+            if not path.exists(spritepath): continue
+            _MIMETYPE_CACHE[mimetype] = spritepath
+            break
+        else:
+            _MIMETYPE_CACHE[mimetype] = _BLANK_SPRITEPATH
+    return _MIMETYPE_CACHE[mimetype]
+_BLANK_SPRITEPATH:str = _spritepath_from_mimetype(UNKNOWN_MIMETYPE)
+
+
+def mimetype_from_shebang(shebang:str) -> MimeType:
     if "perl" in shebang:
         return "application/x-perl"
     if ("python" in shebang) or ("pypy" in shebang):
@@ -42,11 +57,9 @@ def mimetype_from_shebang(shebang:str) -> str:
     if "sh" in shebang:
         return "application/x-shellscript"
 
-_CACHE:dict[str:ImageTk.PhotoImage] = {}
+_CACHE:dict[tk.Misc:dict[MimeType:ImageTk.PhotoImage]] = defaultdict(dict)
 def get_sprite(master:tk.Misc, filepath:str) -> ImageTk.PhotoImage:
-    # If in cache
-    if filepath in _CACHE:
-        return _CACHE[filepath]
+    cache:dict[str:ImageTk.PhotoImage] = _CACHE[master]
     # Get mimetype
     mimetype, _ = guess_type(filepath)
     # If no mimetype, try looking at the shebang
@@ -55,30 +68,20 @@ def get_sprite(master:tk.Misc, filepath:str) -> ImageTk.PhotoImage:
             with open(filepath, "r") as file:
                 if file.read(2) == "!#":
                     shebang:str = file.readline()
-                    mimetype:str = mimetype_from_shebang(shebang)
+                    mimetype:MimeType = mimetype_from_shebang(shebang)
         except (UnicodeDecodeError, OSError):
             pass
-    # If no mimetype
-    if mimetype is None:
-        return BLANK
-    imagename:str = mimetype.replace("/", "-") + ".png"
-    for imagepath in _ICON_PATHS:
-        fullpath:str = path.join(imagepath, imagename)
-        if not path.exists(fullpath):
-            continue
-        img:Image.Image = Image.open(fullpath)
-        img:Image.Image = img.resize((WIDTH,HEIGHT), Image.LANCZOS)
-        _CACHE[filepath] = ImageTk.PhotoImage(img, master=master)
-        break
-    else:
-        _CACHE[filepath] = BLANK
-    return _CACHE[filepath]
-
-BLANK:ImageTk.PhotoImage = None
-EXTENSIONS = ("py", "txt", "cpp", "folder", "rar", "star", "blank")
-base_folder:str = path.dirname(__file__)
-WIDTH:int = 16
-HEIGHT:int = 16
+    # Handle known mimetype
+    mimetype:MimeType = mimetype or UNKNOWN_MIMETYPE
+    # If in cache
+    if mimetype in cache: return cache[mimetype]
+    # Get spritepath
+    spritepath:str = _spritepath_from_mimetype(mimetype)
+    # Convert to tkinter image
+    img:Image.Image = Image.open(spritepath) \
+                           .resize((WIDTH,HEIGHT), Image.LANCZOS)
+    cache[mimetype] = ImageTk.PhotoImage(img, master=master)
+    return cache[mimetype]
 
 
 if __name__ == "__main__":
@@ -149,13 +152,11 @@ if __name__ == "__main__":
 
     root = MovableTk()
 
-    init(root)
-
     canvas = tk.Canvas(root, width=100, height=500, bg="black")
     canvas.pack()
 
     y = HEIGHT
-    for ext in EXTENSIONS:
+    for ext in ("blank", "py", "txt", "cpp", "hpp", "rar", "json"):
         tk_img = get_sprite(root, "file." + ext)
         canvas.create_image(20, y, image=tk_img)
         y += int(HEIGHT*2)

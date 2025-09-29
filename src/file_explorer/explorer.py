@@ -63,8 +63,6 @@ class Explorer:
         self.ggiver.start_move:Function[tk.Frame,list[tk.Frame]] = self.start_move
         self.ggiver.cancel_move:Function[None] = self.cancel_move
         self.ggiver.double_click:Function[tk.Frame,str] = self.double_click
-
-        images.init(self.master)
         self.update_loop()
 
     # Helpers
