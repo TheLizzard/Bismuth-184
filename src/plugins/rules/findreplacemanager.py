@@ -9,7 +9,6 @@ from .baserule import Rule, SHIFT, ALT, CTRL
 
 from ..baseplugin import BasePlugin
 from .undomanager import UndoManager
-from .wrapmanager import WrapManager
 from .jerrymanager import JerryManager
 from .colourmanager import ColourManager
 from .selectmanager import SelectManager
@@ -35,7 +34,6 @@ class MiniPlugin(BasePlugin):
 
     def __init__(self, *args:tuple) -> PythonPlugin:
         rules:list[Rule] = [
-                             WrapManager,
                              UndoManager,
                              JerryManager,
                              ColourManager,

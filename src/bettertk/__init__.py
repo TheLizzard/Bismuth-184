@@ -5,6 +5,7 @@ try:
     from .betterscrollbar import BetterScrollBarVertical, \
                                  BetterScrollBarHorizontal, \
                                  make_scrolled
+    from .terminaltk.sprites.creator import SpriteCache, TkSpriteCache
 except ImportError:
     from bettertk import *
     from betterframe import BetterFrame
@@ -12,6 +13,7 @@ except ImportError:
     from betterscrollbar import BetterScrollBarVertical, \
                                 BetterScrollBarHorizontal, \
                                 make_scrolled
+    from terminaltk.sprites.creator import SpriteCache, TkSpriteCache
 
 BetterScrollBarV:type = BetterScrollBarVertical
 BetterScrollBarH:type = BetterScrollBarHorizontal

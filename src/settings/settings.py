@@ -48,7 +48,7 @@ class Settings:
             with open(PATH, "w") as file:
                 file.write(json.dumps(self._settings, indent=4))
             return False
-        except (PermissionError,FileNotFoundError):
+        except (OSError, IOError):
             return True
 
     def update(self, **kwargs) -> None:

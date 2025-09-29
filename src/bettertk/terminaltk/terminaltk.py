@@ -184,7 +184,7 @@ class TerminalTk(BetterTk):
                                      command=self._kill, **BKWARGS,
                                      width=70, text="Kill")
         self.settings_button = tk.Button(frame, command=self._settings,
-                                         image=self.sprites["gear-white"],
+                                         image=self.sprites["gear-grey"],
                                          **BKWARGS)
         self.pause_button.grid(row=1, column=1)
         self.close_button.grid(row=1, column=2)

@@ -154,10 +154,9 @@ class ExpandedExplorer(Explorer):
         self.cwd:tk.Frame = None
         self.font:str = font
         super().__init__(master, font=font, monofont=monofont)
-        self._create_menu(font=font)
         self.ggiver.right_click:Function[tk.Frame,str] = self.right_click
-        self.bin_folder:str = self._find_empty_bin()
-        os.makedirs(self.bin_folder, exist_ok=True)
+        self.bin_folder:str|None = self._find_empty_bin()
+        self._create_menu(font=font)
         self.renaming:bool = False
         self.creating:bool = False
         self.cwd:tk.Frame = None
@@ -167,22 +166,27 @@ class ExpandedExplorer(Explorer):
         self.master.bind_all("<<Explorer-Report-CWD>>", self.report_cwd)
 
     # Bin
-    def _find_empty_bin(self) -> str:
-        i:int = 0
-        while True:
-            bin_folder:str = BIN_FOLDER.format(idx=i)
-            if not self.root.filesystem.exists(bin_folder):
-                break
-            if len(self.root.filesystem.listdir(bin_folder)[0]) == 0:
-                break
-            i += 1
-        return bin_folder
+    def _find_empty_bin(self) -> str|None:
+        try:
+            i:int = 0
+            while True:
+                bin_folder:str = BIN_FOLDER.format(idx=i)
+                if not self.root.filesystem.exists(bin_folder):
+                    break
+                if len(self.root.filesystem.listdir(bin_folder)[0]) == 0:
+                    break
+                i += 1
+            os.makedirs(bin_folder, exist_ok=True)
+            return bin_folder
+        except (IOError, OSError):
+            return None
 
     # Menu
     def _create_menu(self, font:str) -> None:
         self.menu:Menu = Menu(self.master)
         self.menu.add("Rename", self.rename, font=font)
-        self.menu.add("Delete", self.delete, font=font)
+        if self.bin_folder is not None:
+            self.menu.add("Delete", self.delete, font=font)
         self.menu.add_separator()
         self.menu.add("New file", self.newfile, font=font)
         self.menu.add("New folder", self.newfolder, font=font)
@@ -337,7 +341,7 @@ class ExpandedExplorer(Explorer):
         msg:str = f'Are you sure you want to delete "{frame.item.purename}"?'
         result:bool = askyesno(frame, title="Delete file?", message=msg,
                                icon="warning", center=True)
-        if result:
+        if result and (self.bin_folder is not None):
             target:str = self.root.filesystem.join(self.bin_folder,
                                                    frame.item.purename)
             result = self.root.filesystem.move(frame.item.fullpath, target)

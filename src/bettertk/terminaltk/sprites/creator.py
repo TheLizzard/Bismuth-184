@@ -13,7 +13,8 @@ ALL_SPRITE_NAMES:set[str] = {"pause-green", "pause-black",
                              "restart",
                              "warning",
                              "io-red",
-                             "gear-white",
+                             "plus-black", "plus-grey",
+                             "gear-white", "gear-grey",
                              "spinner1", "spinner2", "spinner3", "spinner4",
                              "spinner5", "spinner6",
                              "spinner6-black"}
@@ -39,6 +40,7 @@ DGREEN:Colour = (0,180,0)
 YELLOW:Colour = (255,255,0)
 ORANGE:Colour = (255,165,0)
 DYELLOW:Colour = (252,225,0)
+DGREY:Colour = (70,70,70)
 sin:Function[float,float] = lambda deg: _sin(deg/180*pi)
 cos:Function[float,float] = lambda deg: _cos(deg/180*pi)
 tan:Function[float,float] = lambda deg: _tan(deg/180*pi)
@@ -166,13 +168,15 @@ class DrawImage:
                 else:
                     # clockwise angle from top
                     fangle:float = (90+fatan(i-cx, j-cy))%360
-                if (d+Δd >= 360) and not ((fangle >= d) or (fangle <= (d+Δd)%360)):
+                temp:bool = (d+Δd >= 360) and not \
+                            ((fangle >= d) or (fangle <= (d+Δd)%360))
+                if temp:
                     continue
                 if (d+Δd < 360) and not (d <= fangle <= d+Δd):
                     continue
                 self.pix[i,j] = colour+(alpha,)
 
-    def draw_rectangle(self, x1, y1, x2, y2, *, colour=WHITE, alpha=255) -> None:
+    def draw_rectangle(self, x1, y1, x2, y2, *, colour=WHITE, alpha=255):
         for i in range(int(x1), int(x2+1)):
             for j in range(int(y1), int(y2+1)):
                 self.pix[i,j] = colour+(alpha,)
@@ -184,8 +188,10 @@ class DrawImage:
         y1, y2 = y15-w/2*cos(theta), y15+w/2*cos(theta)
         x3, x4 = x35+w/2*sin(theta), x35-w/2*sin(theta)
         y3, y4 = y35-w/2*cos(theta), y35+w/2*cos(theta)
-        self.draw_triangle((x1,y1), (x2,y2), (x3,y3), colour=colour, alpha=alpha)
-        self.draw_triangle((x2,y2), (x4,y4), (x3,y3), colour=colour, alpha=alpha)
+        self.draw_triangle((x1,y1), (x2,y2), (x3,y3), colour=colour,
+                           alpha=alpha)
+        self.draw_triangle((x2,y2), (x4,y4), (x3,y3), colour=colour,
+                           alpha=alpha)
         # self.draw_polygon((x1,y1), (x2,y2), (x4,y4), (x3,y3), colour=colour,
         #                   alpha=alpha)
 
@@ -270,6 +276,14 @@ def draw_pause(a:int, b:int, c:int, d:int, size:int, bg:Colour) -> DrawImage:
     image.draw_rounded_line((size-a,b), (size-a,size-b), c, colour=WHITE)
     return image
 
+def draw_plus(a:int, b:int, c:int, size:int, bg:Colour) -> DrawImage:
+    a, b, c = a/256*size, b/256*size, c/256*size
+    image:DrawImage = DrawImage(size)
+    image.draw_circle((size>>1,size>>1), c, colour=bg)
+    image.draw_rounded_line((size>>1,a), (size>>1,size-a), b, colour=WHITE)
+    image.draw_rounded_line((a,size>>1), (size-a,size>>1), b, colour=WHITE)
+    return image
+
 def draw_play(a:int, b:int, c:int, d:int, size:int, bg:Colour) -> DrawImage:
     if c is None:
         c:float = sqrt(3)/2*(256-2*b)+a
@@ -313,19 +327,20 @@ def draw_io(r1, r2, d, y1, y2, w, br, size, bg:Colour) -> DrawImage:
     y1, y2 = y1/256*size, y2/256*size
     image:DrawImage = DrawImage(size)
     image.draw_circle((size>>1,size>>1), br, colour=bg)
-    image.draw_circumference((size>>1,size>>1), r1, r2, d, 360-2*d, colour=WHITE)
+    image.draw_circumference((size>>1,size>>1), r1, r2, d, 360-2*d,
+                             colour=WHITE)
     image.draw_rounded_line((size>>1,y1), (size>>1,y2), w)
     return image
 
-def draw_gear(n, r1, r2, ir1, ir2, or1, or2, br, size, bg:Colour, reverse=False) -> DrawImage:
+def draw_gear(n, r1, r2, ir1, ir2, or1, or2, br, size, fg, bg, reverse=False):
     r1, r2, ir1, ir2 = r1/256*size, r2/256*size, ir1/256*size, ir2/256*size
     or1, or2, br = or1/256*size, or2/256*size, br/256*size
     image:DrawImage = DrawImage(size)
     centre = (size>>1,size>>1)
     image.draw_circle(centre, br, colour=bg)
-    image.draw_circle(centre, or2, colour=BLACK)
+    image.draw_circle(centre, or2, colour=fg)
     image.draw_circle(centre, or1, colour=bg)
-    image.draw_circle(centre, ir2, colour=BLACK)
+    image.draw_circle(centre, ir2, colour=fg)
     image.draw_circle(centre, ir1, colour=bg)
     for i in range(n):
         if reverse:
@@ -334,10 +349,10 @@ def draw_gear(n, r1, r2, ir1, ir2, or1, or2, br, size, bg:Colour, reverse=False)
             deg = (360/n*i-90)%360
         x, y = or2*cos(deg)+(size>>1), or2*sin(deg)+(size>>1)
         image.draw_circle((x,y), r1, colour=bg)
-        image.draw_circle((x,y), r2, colour=BLACK)
+        image.draw_circle((x,y), r2, colour=fg)
         image.draw_circle((x,y), r1, colour=bg)
     image.draw_circumference(centre, or2, br, 0, 360, colour=bg)
-    image.draw_circumference(centre, br, br*2, 0, 360, colour=BLACK, alpha=0)
+    image.draw_circumference(centre, br, br*2, 0, 360, colour=fg, alpha=0)
     return image
 
 def draw_exclam(y1, y2, w, r, br, size, bg:Colour) -> DrawImage:
@@ -467,6 +482,10 @@ def init(*, size:int, compute_size:int=None, crop:bool=True,
     size, show_size = (compute_size or size<<1), size
     inner_size:int = int(220/256*size)
     sprites:dict[str,DrawImage|list[DrawImage]] = dict()
+    if "plus-black" in sprites_wanted:
+        sprites["plus-black"] = draw_plus(88, 15, 100, size, bg=BLACK)
+    if "plus-grey" in sprites_wanted:
+        sprites["plus-grey"] = draw_plus(88, 15, 100, size, bg=DGREY)
     if "pause-green" in sprites_wanted:
         sprites["pause-green"] = draw_pause(108, 88, 15, 100, size, bg=DGREEN)
     if "pause-black" in sprites_wanted:
@@ -486,7 +505,10 @@ def init(*, size:int, compute_size:int=None, crop:bool=True,
         sprites["io-red"] = draw_io(50, 65, 40, 65, 130, 15, 100, size, bg=RED)
     if "gear-white" in sprites_wanted:
         sprites["gear-white"] = draw_gear(6, 15, 30, 15, 30, 60, 75, 100,
-                                          size, bg=WHITE)
+                                          size, fg=BLACK, bg=WHITE)
+    if "gear-grey" in sprites_wanted:
+        sprites["gear-grey"] = draw_gear(6, 15, 30, 15, 30, 60, 75, 100,
+                                         size, fg=WHITE, bg=DGREY)
     if "warning" in sprites_wanted:
         sprites["warning"] = draw_warning(180, 62, 128, 144, 16,
                                           size, bg=DYELLOW)
@@ -607,7 +629,8 @@ class TkSpriteCache:
 if __name__ == "__main__":
     size:int = 256>>1
     wanted:set[str] = {"exclam-blue", "play-green", "play-black",
-                       "x-orange", "warning", "x-red", "io-red"}
+                       "gear-white", "gear-grey", "warning",
+                       "x-red", "io-red", "plus-grey"}
 
     root = tk.Tk()
     root.geometry("+0+0")
@@ -618,7 +641,7 @@ if __name__ == "__main__":
     print(f"[DEBUG]: Overall: {perf_counter()-start:.2f} seconds")
 
     labels = []
-    for i, name in enumerate(wanted):
+    for i, name in enumerate(sorted(wanted)):
         image = sprites[name]
         im = tk.Label(root, bd=0, highlightthickness=0, bg="black", image=image)
         im.grid(row=0, column=i)

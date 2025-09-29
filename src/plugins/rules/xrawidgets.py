@@ -6,6 +6,7 @@ from .baserule import Rule
 from bettertk.menu import BetterMenu
 from bettertk.betterscrollbar import BetterScrollBarVertical, \
                                      BetterScrollBarHorizontal
+from bettertk import TkSpriteCache
 
 
 class SingletonMeta(type):
@@ -19,20 +20,37 @@ class SingletonMeta(type):
 
 
 class BarManager(Rule, metaclass=SingletonMeta):
-    __slots__ = "label", "text"
-    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("reparentmanager",True)]
+    __slots__ = "frame", "label", "text", "sprites"
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("reparentmanager",True),
+                                                 ("settingsmanager",False)]
 
     FORMAT:str = "Ln: {line} Col: {column}"
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> BarManager:
         super().__init__(plugin, text, ons=("<<Insert-Moved>>",))
-        self.label:tk.Label = tk.Label(plugin.master, text="", bg="black",
-                                       fg="white", anchor="e")
+        # Frame
+        self.frame:tk.Frame = tk.Frame(plugin.master, highlightthickness=0,
+                                       bd=0, bg="black")
+        self.frame.grid_columnconfigure(tuple(range(3,6)), weight=1)
+        # Bottom bar label
+        self.label:tk.Label = tk.Label(self.frame, fg="white", bg="black",
+                                       justify="right", anchor="e")
+        self.label.grid(row=1, column=10, padx=(0,10), sticky="e")
+        # Settings button
+        self.sprites:TkSpriteCache = TkSpriteCache(text, size=16)
+        settings_btn:tk.Label = tk.Button(self.frame, relief="flat", bd=0,
+                                          bg="black", highlightthickness=0,
+                                          image=self.sprites["gear-grey"],
+                                          command=self.open_settings,
+                                          activeforeground="white",
+                                          activebackground="dark grey")
+        settings_btn.grid(row=1, column=9, padx=(0,5), sticky="e")
         self.text:tk.Text = text
 
     def attach(self) -> None:
         super().attach()
-        self.text.add_widget(self.label, row=4, padx=10)
+        self.text.add_widget(self.frame, row=4, sticky="ew")
+        self.do("<insert-moved>", self.text.index("insert"))
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
         idx:str = self.text.index("insert")
@@ -44,12 +62,15 @@ class BarManager(Rule, metaclass=SingletonMeta):
         line, column = idx.split(".")
         self.label.config(text=self.FORMAT.format(line=line, column=column))
 
+    def open_settings(self) -> None:
+        self.text.event_generate("<<Open-Settings>>")
+
 
 class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
     __slots__ = "text", "parent", "prev_end", "sidebar_text"
-    REQUESTED_LIBRARIES:tuple[str] = "reparentmanager", "scrollbarmanager"
     REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("reparentmanager",True),
                                                  ("scrollbarmanager",True)]
+    PADX:int = 4
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> BarManager:
         evs:tuple[str] = (
@@ -68,6 +89,11 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
         self.parent:tk.Misc = plugin.master
         LineNumbers.init_widgets(self)
 
+        self.separator:tk.Canvas = tk.Canvas(plugin.master, bg="black", bd=0,
+                                             highlightthickness=0, height=1,
+                                             width=1+self.PADX)
+        self.separator.create_line(0,0,0,10000, fill="white", width=1)
+
         bounce:tuple[str] = (
                               "<MouseWheel>", "<FocusIn>",
                               # Redirect all of these events to the tk.Text
@@ -79,6 +105,7 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
             better_on:str = on.removeprefix("<").removesuffix(">").lower()
             func = lambda e, bon=better_on, on=on: self.bounce(e, bon, on)
             self.sidebar_text.bind(on, func)
+            self.separator.bind(on, func)
         for on in ("<Enter>", "<Leave>"):
             self.sidebar_text.bind(on, lambda e: "break")
 
@@ -89,6 +116,7 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
     def attach(self) -> None:
         super().attach()
         self.text.add_widget(self.sidebar_text, column=-2)
+        self.text.add_widget(self.separator, column=-1, sticky="ns")
         self.sidebar_text.config(bg=self.text.cget("bg"),
                                  fg=self.text.cget("fg"))
         self.sidebar_text.tag_remove("umark", "1.0", "end")

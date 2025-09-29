@@ -7,6 +7,7 @@ from .rules.selectmanager import SelectManager
 from .rules.bracketmanager import BracketManager
 from .rules.shortcutmanager import RemoveShortcuts
 from .rules.reparentmanager import ReparentManager
+from .rules.settingsmanager import SettingsManager
 from .rules.clipboardmanager import ClipboardManager
 from .rules.seeinsertmanager import SeeInsertManager
 from .rules.controlijklmanager import ControlIJKLManager
@@ -23,14 +24,15 @@ COMMON_RULES:list[Rule] = [
                             SelectManager,
                             BracketManager,
                             RemoveShortcuts,
+                            SettingsManager,
                             ClipboardManager,
                             SeeInsertManager,
                             ControlIJKLManager,
                             FindReplaceManager,
                             InsertDeleteManager,
                             # Other widgets:
-                            ReparentManager,
                             ScrollbarManager,
+                            ReparentManager,
                             LineManager,
                             BarManager,
                             # MenuManager,
