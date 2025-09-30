@@ -129,6 +129,7 @@ class RunManager:
 
     def exec(self) -> None:
         def _format_args(args:object) -> tuple[object]:
+            if args is None: return ()
             return tuple(args) if isinstance(args, tuple|list) else (args,)
 
         assert not self.started_exec, "You already called .exec()"
