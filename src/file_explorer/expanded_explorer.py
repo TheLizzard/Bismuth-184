@@ -1,7 +1,7 @@
 from __future__ import annotations
 from subprocess import Popen, DEVNULL
+from sys import executable, stderr
 from threading import Thread
-from sys import stderr
 import tkinter as tk
 import os
 
@@ -13,22 +13,30 @@ except ImportError:
     from base_explorer import NEW_ITEM_NAME, MAX_ITEMS_ITENT
 from bettertk import BetterTk, IS_UNIX, IS_WINDOWS
 from bettertk.messagebox import askyesno, tell
+import bettertk
 
 
 if IS_UNIX:
-    OPEN_IN_EXPLORER:str = 'nautilus "{path}"'
-    OPEN_DEFAULT:str = 'xdg-open "{path}"'
-    OPEN_GIT:str = "git gui"
+    OPEN_IN_EXPLORER:list[str] = ["nautilus", "{path}"]
+    OPEN_DEFAULT:str = ["xdg-open", "{path}"]
+    OPEN_GIT:str = ["git", "gui"]
+    DETACH_PROC_KWARGS:dict = dict(start_new_session=True)
 elif IS_WINDOWS:
-    OPEN_IN_EXPLORER:str = 'explorer "{path}"'
+    OPEN_IN_EXPLORER:str = ["explorer", "{path}"]
     OPEN_DEFAULT:str = None
     OPEN_GIT:str = None
+    from subprocess import DETACHED_PROCESS
+    DETACH_PROC_KWARGS:dict = dict(creation_flags=DETACHED_PROCESS)
 else:
     OPEN_IN_EXPLORER:str = None
     OPEN_DEFAULT:str = None
     OPEN_GIT:str = None
     sys.stderr.write("Unknown OS, can't open files/folders in real explorer.\n")
-OPEN_IN_TERMINAL:str = 'python3 bettertk/open_terminal.py "{path}"'
+    DETACH_PROC_KWARGS:dict = dict()
+USR_HOME_PATH:str = os.path.expanduser("~")
+TERMINAL_PATH:str = os.path.join(os.path.dirname(bettertk.__file__),
+                                 "open_terminal.py")
+OPEN_IN_TERMINAL:str = [executable, TERMINAL_PATH, "{path}"]
 
 
 BKWARGS:dict = dict(activeforeground="white", activebackground="grey", bd=0,
@@ -370,28 +378,31 @@ class ExpandedExplorer(Explorer):
         self.rename()
 
     # Open in ...
+    def _start_proc(self, cmd:list[str], *, _cwd:str=None,
+                    **kwargs:dict[str:str]) -> None:
+        def reap_zombies() -> None:
+            """ Not calling proc.wait() creates zombies so this reaps them. """
+            proc.wait()
+
+        copied_cmd:list[str] = [arg.format(**kwargs) for arg in cmd]
+        _cwd:str = _cwd or USR_HOME_PATH
+        proc:Popen = Popen(copied_cmd, shell=False, cwd=_cwd, stdin=DEVNULL,
+                           stdout=DEVNULL, stderr=DEVNULL, **DETACH_PROC_KWARGS)
+        Thread(target=reap_zombies, daemon=True).start()
+
     def open_in_explorer(self) -> None:
         if OPEN_IN_EXPLORER:
-            cmd:str = OPEN_IN_EXPLORER.format(path=self.selected.item.fullpath)
-            proc:Popen = Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL,
-                               stdin=DEVNULL)
-            self._no_zombie(proc)
+            self._start_proc(OPEN_IN_EXPLORER, path=self.selected.item.fullpath)
         self.changing:tk.Frame = None
 
     def open_in_terminal(self) -> None:
         if OPEN_IN_TERMINAL:
-            cmd:str = OPEN_IN_TERMINAL.format(path=self.selected.item.fullpath)
-            proc:Popen = Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL,
-                               stdin=DEVNULL)
-            self._no_zombie(proc)
+            self._start_proc(OPEN_IN_TERMINAL, path=self.selected.item.fullpath)
         self.changing:tk.Frame = None
 
     def open_item(self) -> None:
         if OPEN_DEFAULT:
-            cmd:str = OPEN_DEFAULT.format(path=self.selected.item.fullpath)
-            proc:Popen = Popen(cmd, shell=True, stdout=DEVNULL, stderr=DEVNULL,
-                               stdin=DEVNULL)
-            self._no_zombie(proc)
+            self._start_proc(OPEN_DEFAULT, path=self.selected.item.fullpath)
         self.changing:tk.Frame = None
 
     def open_in_git(self) -> None:
@@ -399,10 +410,8 @@ class ExpandedExplorer(Explorer):
             fs:FileSystem = self.changing.item.root.filesystem
             git_path:str = fs.join(self.changing.item.fullpath, ".git")
             if fs.exists(git_path) and fs.isfolder(git_path):
-                proc:Popen = Popen(OPEN_GIT, shell=True, stdout=DEVNULL,
-                                   stderr=DEVNULL, stdin=DEVNULL,
-                                   cwd=fs.dirname(git_path))
-                self._no_zombie(proc)
+                self._start_proc(OPEN_GIT, path=self.selected.item.fullpath,
+                                 _cwd=fs.dirname(git_path))
         self.changing:tk.Frame = None
 
     # Copy path
@@ -410,14 +419,6 @@ class ExpandedExplorer(Explorer):
         self.master.clipboard_clear()
         self.master.clipboard_append(self.selected.item.fullpath)
         self.changing:tk.Frame = None
-
-    def _no_zombie(self, proc:Popen) -> None:
-        """
-        Not calling proc.wait() creates zombies so this reaps them.
-        """
-        def inner() -> None:
-            proc.wait()
-        Thread(target=inner, daemon=True).start()
 
 
 if __name__ == "__main__":
