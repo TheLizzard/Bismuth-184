@@ -42,6 +42,7 @@ SELECTED_COLOUR:str = "dark orange"
 AUTO_UPDATE:bool = True
 
 PATH:str = os.path.abspath(os.path.dirname(__file__))
+_shown_sprite_error:bool = False
 
 
 class Explorer:
@@ -75,6 +76,17 @@ class Explorer:
             return frame
         raise NotImplementedError(f"What is {frame.item}?")
 
+    def _get_sprite(self, path:str) -> tk.PhotoImage:
+        try:
+            return images.get_sprite(self.master, path)
+        except Exception as error:
+            if hasattr(tk, "report_full_exception"):
+                global _shown_sprite_error
+                if not _shown_sprite_error:
+                    _shown_sprite_error = True
+                    tk.report_full_exception(self.master, error)
+            return images.get_sprite(self.master, "")
+
     def _get_shown_children(self, frame:tk.Frame, *, withself:bool):
         iterator = frame.item.recurse_children(withself=withself,
                                                only_shown=True)
@@ -105,8 +117,7 @@ class Explorer:
         return self.selected
 
     def fix_icon(self, frame:tk.Frame) -> None:
-        image:tk.PhotoImage = images.get_sprite(self.master,
-                                                frame.item.fullpath)
+        image:tk.PhotoImage = self._get_sprite(frame.item.fullpath)
         frame.icon.itemconfig(frame.icon.id, image=image)
 
     def recolour_frame(self, frame:tk.Frame, bg:str) -> None:
@@ -195,7 +206,7 @@ class Explorer:
         self.fix_indentation(frame)
 
         if isfile(item):
-            tk_icon = images.get_sprite(self.master, item.fullpath)
+            tk_icon = self._get_sprite(item.fullpath)
             icon = tk.Canvas(frame, bg="black", bd=0, highlightthickness=0,
                              width=tk_icon.width(), height=tk_icon.height())
             icon.id:int = icon.create_image(0, 0, anchor="nw", image=tk_icon)

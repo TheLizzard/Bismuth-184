@@ -7,17 +7,17 @@ import tkinter as tk
 from os import path
 
 SELF_DIR:str = path.dirname(__file__)
-FALLBACK:str = path.join(SELF_DIR, "KDE-oxygen-icons", "16x16", "mimetypes")
 UNKNOWN_MIMETYPE:str = "application-x-zerosize"
+SYMLINK_FOLLOWS:int = 16 # max levels of symlink to follow (can be 0)
 
 
 ICON_PATHS:list[str] = [
-                         "/usr/share/icons/Yaru/16x16/mimetypes",
-                         "/usr/share/icons/*/16x16/mimetypes",
-                         # path.expanduser("~/.icons"),
-                         path.expanduser("~/.local/share/icons/*/*/mimetypes"),
-                         FALLBACK,
-                         path.join(SELF_DIR, "sprites"),
+             "/usr/share/icons/Yaru/16x16/mimetypes",
+             "/usr/share/icons/*/16x16/mimetypes",
+             # path.expanduser("~/.icons"), # don't know how they are sorted
+             path.expanduser("~/.local/share/icons/*/*/mimetypes"),
+             path.join(SELF_DIR, "KDE-oxygen-icons", "16x16", "mimetypes"),
+             path.join(SELF_DIR, "sprites"),
                        ]
 
 WIDTH:int = 16
@@ -77,13 +77,25 @@ def get_sprite(master:tk.Misc, filepath:str) -> ImageTk.PhotoImage:
     if mimetype in cache: return cache[mimetype]
     # Get spritepath
     spritepath:str = _spritepath_from_mimetype(mimetype)
+    # Check if spritepath is a symlink that the filesystem refuses to resolve
+    for _ in range(SYMLINK_FOLLOWS):
+        with open(spritepath, "rb") as file:
+            # Check if it starts with magic value
+            if file.read(len(b"IntxLNK\x01")) != b"IntxLNK\x01":
+                break
+            # Decode the rest as UTF-16
+            try:
+                newpath:str = file.read().decode("utf-16")
+            except UnicodeDecodeError:
+                break
+            spritepath:str = path.join(path.dirname(spritepath), newpath)
+    else:
+        if SYMLINK_FOLLOWS:
+            raise RuntimeError("Symbolic links too deep to resolve")
     # Convert to tkinter image
-    try:
-        img:Image.Image = Image.open(spritepath) \
-                               .resize((WIDTH,HEIGHT), Image.LANCZOS)
-        tkimg:ImageTk.PhotoImage = ImageTk.PhotoImage(img, master=master)
-    except UnidentifiedImageError:
-        tkimg:ImageTk.PhotoImage = get_sprite(master, "")
+    img:Image.Image = Image.open(spritepath) \
+                           .resize((WIDTH,HEIGHT), Image.LANCZOS)
+    tkimg:ImageTk.PhotoImage = ImageTk.PhotoImage(img, master=master)
     cache[mimetype] = tkimg
     return cache[mimetype]
 
