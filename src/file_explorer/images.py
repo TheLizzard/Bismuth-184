@@ -1,7 +1,7 @@
 from __future__ import annotations
+from PIL import Image, ImageTk, UnidentifiedImageError
 from mimetypes import guess_type, guess_extension
 from collections import defaultdict
-from PIL import Image, ImageTk
 from glob import glob
 import tkinter as tk
 from os import path
@@ -66,7 +66,7 @@ def get_sprite(master:tk.Misc, filepath:str) -> ImageTk.PhotoImage:
     if mimetype is None:
         try:
             with open(filepath, "r") as file:
-                if file.read(2) == "!#":
+                if file.read(2) == "#!":
                     shebang:str = file.readline()
                     mimetype:MimeType = mimetype_from_shebang(shebang)
         except (UnicodeDecodeError, OSError):
@@ -78,9 +78,13 @@ def get_sprite(master:tk.Misc, filepath:str) -> ImageTk.PhotoImage:
     # Get spritepath
     spritepath:str = _spritepath_from_mimetype(mimetype)
     # Convert to tkinter image
-    img:Image.Image = Image.open(spritepath) \
-                           .resize((WIDTH,HEIGHT), Image.LANCZOS)
-    cache[mimetype] = ImageTk.PhotoImage(img, master=master)
+    try:
+        img:Image.Image = Image.open(spritepath) \
+                               .resize((WIDTH,HEIGHT), Image.LANCZOS)
+        tkimg:ImageTk.PhotoImage = ImageTk.PhotoImage(img, master=master)
+    except UnidentifiedImageError:
+        tkimg:ImageTk.PhotoImage = get_sprite(master, "")
+    cache[mimetype] = tkimg
     return cache[mimetype]
 
 

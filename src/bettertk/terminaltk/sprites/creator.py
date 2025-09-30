@@ -10,7 +10,7 @@ ALL_SPRITE_NAMES:set[str] = {"pause-green", "pause-black",
                              "play-green", "play-black",
                              "exclam-red", "exclam-orange", "exclam-blue",
                              "x-red", "x-orange",
-                             "restart",
+                             "restart", "restart-blue", "restart-black",
                              "warning",
                              "io-red",
                              "plus-black", "plus-grey",
@@ -501,6 +501,12 @@ def init(*, size:int, compute_size:int=None, crop:bool=True,
     if "restart" in sprites_wanted:
         sprites["restart"] = draw_restart(50, 65, 50, 40, None, 15, 100,
                                           size, bg=ORANGE)
+    if "restart-blue" in sprites_wanted:
+        sprites["restart-blue"] = draw_restart(50, 65, 50, 40, None, 15, 100,
+                                               size, bg=BLUE)
+    if "restart-black" in sprites_wanted:
+        sprites["restart-black"] = draw_restart(50, 65, 50, 40, None, 15, 100,
+                                                size, bg=BLACK)
     if "io-red" in sprites_wanted:
         sprites["io-red"] = draw_io(50, 65, 40, 65, 130, 15, 100, size, bg=RED)
     if "gear-white" in sprites_wanted:
@@ -628,9 +634,12 @@ class TkSpriteCache:
 
 if __name__ == "__main__":
     size:int = 256>>1
-    wanted:set[str] = {"exclam-blue", "play-green", "play-black",
-                       "gear-white", "gear-grey", "warning",
-                       "x-red", "io-red", "plus-grey"}
+    wanted:set[str] = {"exclam-blue",
+                       "gear-white", "gear-grey",
+                       "warning",
+                       "x-red",
+                       "plus-grey",
+                       "restart-blue", "restart-black"}
 
     root = tk.Tk()
     root.geometry("+0+0")
