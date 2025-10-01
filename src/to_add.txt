@@ -22,7 +22,6 @@ Editor:
 * Control-m doesn't remove marks that are on empty lines
 * Double-Click and then drag doesn't extend selection
 * Adding a shebang to an unsaved file should switch to the correct plugin
-* If there is a double quote in the filename, my program crashes
 
 IPC:
 * Remove psutil dependency for checking if process exists
@@ -50,7 +49,6 @@ File Explorer:
 * Add a tooltip to all top level folders to show their full path
 * Deleting a top level folder causes problems
 * Deleting an item fails if another file with same name has been deleted
-* Deleting files takes too long to show in GUI
 * Removing a folder doesn't remove it from being cwd
 
 BetterTk Window:

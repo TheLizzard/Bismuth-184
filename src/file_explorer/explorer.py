@@ -147,7 +147,7 @@ class Explorer:
             print("[DEBUG]: Updating")
         if not soft:
             self.root.update() # Don't remove (root is BaseExplorer)
-            self._update_remove_dead()
+        self._update_remove_dead()
         for item, show in self.root.recurse_children(withself=False):
             assert not item.idx.deleted, "SanityCheck"
             # create_frame must check if the frame already exists
