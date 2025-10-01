@@ -18,25 +18,31 @@ import bettertk
 
 if IS_UNIX:
     OPEN_IN_EXPLORER:list[str] = ["nautilus", "{path}"]
-    OPEN_DEFAULT:str = ["xdg-open", "{path}"]
-    OPEN_GIT:str = ["git", "gui"]
+    OPEN_DEFAULT:list[str] = ["xdg-open", "{path}"]
+    SAFE_GIT:list[str] = ["git", "config", "--global", "--add",
+                          "safe.directory", "{path}"]
+    OPEN_GIT:list[str] = ["git", "gui"]
     DETACH_PROC_KWARGS:dict = dict(start_new_session=True)
 elif IS_WINDOWS:
-    OPEN_IN_EXPLORER:str = ["explorer", "{path}"]
-    OPEN_DEFAULT:str = None
-    OPEN_GIT:str = None
+    OPEN_IN_EXPLORER:list[str] = ["explorer", "{path}"]
+    OPEN_DEFAULT:list[str] = None
+    SAFE_GIT:list[str] = None
+    OPEN_GIT:list[str] = None
     from subprocess import DETACHED_PROCESS
     DETACH_PROC_KWARGS:dict = dict(creation_flags=DETACHED_PROCESS)
 else:
-    OPEN_IN_EXPLORER:str = None
-    OPEN_DEFAULT:str = None
-    OPEN_GIT:str = None
-    sys.stderr.write("Unknown OS, can't open files/folders in real explorer.\n")
+    OPEN_IN_EXPLORER:list[str] = None
+    OPEN_DEFAULT:list[str] = None
+    SAFE_GIT:list[str] = None
+    OPEN_GIT:list[str] = None
     DETACH_PROC_KWARGS:dict = dict()
-USR_HOME_PATH:str = os.path.expanduser("~")
-TERMINAL_PATH:str = os.path.join(os.path.dirname(bettertk.__file__),
-                                 "open_terminal.py")
-OPEN_IN_TERMINAL:str = [executable, TERMINAL_PATH, "{path}"]
+    sys.stderr.write("Unknown OS, can't open files/folders in real explorer.\n")
+
+OPEN_IN_TERMINAL:list[str] = [
+                      executable,
+                      f"{os.path.dirname(bettertk.__file__)}/open_terminal.py",
+                      "{path}"
+                             ]
 
 
 BKWARGS:dict = dict(activeforeground="white", activebackground="grey", bd=0,
@@ -389,7 +395,7 @@ class ExpandedExplorer(Explorer):
             proc.wait()
 
         copied_cmd:list[str] = [arg.format(**kwargs) for arg in cmd]
-        _cwd:str = _cwd or USR_HOME_PATH
+        _cwd:str = _cwd or os.path.expanduser("~")
         proc:Popen = Popen(copied_cmd, shell=False, cwd=_cwd, stdin=DEVNULL,
                            stdout=DEVNULL, stderr=DEVNULL, **DETACH_PROC_KWARGS)
         Thread(target=reap_zombies, daemon=True).start()
@@ -414,8 +420,10 @@ class ExpandedExplorer(Explorer):
             fs:FileSystem = self.changing.item.root.filesystem
             git_path:str = fs.join(self.changing.item.fullpath, ".git")
             if fs.exists(git_path) and fs.isfolder(git_path):
-                self._start_proc(OPEN_GIT, path=self.selected.item.fullpath,
-                                 _cwd=fs.dirname(git_path))
+                # This creates duplicates which can make .gitconfig very big
+                #   and prob slow down git quite a bit
+                # self._start_proc(SAFE_GIT, path=self.selected.item.fullpath)
+                self._start_proc(OPEN_GIT, _cwd=fs.dirname(git_path))
         self.changing:tk.Frame = None
 
     # Copy path

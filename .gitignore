@@ -159,3 +159,6 @@ src/bettertk/terminaltk/sprites/old_creator.py
 # Error logs
 src/bettertk/terminaltk/err_tb.txt
 src/error_logs
+
+# Old files
+src/bettertk/betterframe.old.py

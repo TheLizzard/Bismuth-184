@@ -71,7 +71,7 @@ def get_full_traceback(err:Exception) -> Traceback:
     return main_traceback
 
 def report_full_exception(widget:tk.Widget, err:BaseException) -> None:
-    widget._root().report_callback_exception(type(err), err,
+    widget._root().report_callback_exception(widget, type(err), err,
                                              get_full_traceback(err))
 tk.report_full_exception = report_full_exception
 
@@ -99,8 +99,8 @@ class RunManager:
     __slots__ = "funcs", "started_exec"
 
     def __init__(self) -> None:
-        tk.Tk.report_callback_exception = partial(self.report_exc,
-                                                  critical=False)
+        tk.Tk.report_callback_exception = lambda root, *args: \
+                                      self.report_exc(*args, critical=False)
         self.funcs:list[tuple[Callable,bool]] = []
         self.started_exec:bool = False
 

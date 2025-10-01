@@ -258,7 +258,10 @@ class App:
         self.root.update_idletasks()
 
         added, expanded = self._get_explorer_state()
-        true_explorer_frame:tk.Frame = self.explorer_frame.master_frame
+        if hasattr(self.explorer_frame, "outter"):
+            true_explorer_frame:tk.Frame = self.explorer_frame.outter
+        else:
+            true_explorer_frame:tk.Frame = self.explorer_frame.master_frame
         curr_text:BetterText = self.page_to_text(self.notebook.curr_page)
         curr_text_path:str = None if curr_text is None else curr_text.filepath
         # Update settings.explorer

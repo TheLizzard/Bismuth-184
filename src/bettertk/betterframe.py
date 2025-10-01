@@ -2,10 +2,6 @@ from __future__ import annotations
 import tkinter as tk
 
 
-FIT_WIDTH = "fit_width"
-FIT_HEIGHT = "fit_height"
-
-
 # .bind on this frame binds to all its children
 class BindFrame(tk.Frame):
     """
@@ -30,24 +26,24 @@ class BindFrame(tk.Frame):
     __slots__ = ()
 
     def bind(self, seq:str, func:Function, add:bool=False) -> str:
+        self_name:str = self._w
         def wrapper(event:tk.Event) -> str:
             if isinstance(event.widget, str):
                 return ""
-            ewidget:str = event.widget._w
-            swidget:str = self._w
-            if not ewidget.startswith(swidget):
+            widget_name:str = event.widget._w
+            if not widget_name.startswith(self_name):
                 return ""
-            if "toplevel" in ewidget.removeprefix(swidget):
+            if "toplevel" in widget_name.removeprefix(self_name):
                 return ""
             return func(event)
-        self.bind_all(seq, wrapper, add=add)
+        return self.bind_all(seq, wrapper, add=add)
 
 def make_bind_frame(frame:tk.Frame) -> None:
     frame.bind = lambda *args, **kwargs: BindFrame.bind(frame, *args, **kwargs)
 
 
 # A canvas that implements all of the scrollbar stuff by moving all of
-# the items. Useless for now.
+# the items. Unused - deprecated.
 class BetterCanvas(tk.Canvas):
     __slots__ = "deltax", "deltay", "xscrollcommand", "yscrollcommand", \
                 "scrollregion"
@@ -103,7 +99,7 @@ class BetterCanvas(tk.Canvas):
 
     def set_first_y(self, first:float) -> None:
         old_first, _ = self.yview()
-        number = (first - old_first) * (self.scrollregion[3] - self.scrollregion[1])
+        number = (first-old_first) * (self.scrollregion[3]-self.scrollregion[1])
         self.yview_scroll(int(number), "units", scale=False)
 
     def _yview(self) -> (float, float):
@@ -142,99 +138,117 @@ class BetterCanvas(tk.Canvas):
 class BetterFrame(tk.Frame):
     """
     Also known as `ScrollableFrame`
-    There is no way to scroll <tkinter.Frame> so we are
-    going to create a canvas and place the frame there.
-    Scrolling the canvas will give the illusion of scrolling
-    the frame
     Partly taken from:
-        https://blog.tecladocode.com/tkinter-scrollable-frames/
+        https://blog.tecladocode.com/tkinter-scrollable-frames
         https://stackoverflow.com/a/17457843/11106801
+        https://web.archive.org/web/20170514022131id_/
+                http://tkinter.unpythonic.net/wiki/VerticalScrolledFrame
+        https://stackoverflow.com/a/59663408
 
-    master_frame---------------------------------------------------------
-    | dummy_canvas-----------------------------------------  y_scroll--  |
-    | | self---------------------------------------------  | |         | |
-    | | |                                                | | |         | |
-    | | |                                                | | |         | |
-    | | |                                                | | |         | |
+    outter---------------------------------------------------------------
+    | canvas-----------------------------------------------  y_scroll--  |
+    | | inner--------------------------------------------  | |         | |
+    | | | self-----------------------------------------  | | |         | |
+    | | | |                                            | | | |         | |
+    | | | |                                            | | | |         | |
+    | | |  --------------------------------------------  | | |         | |
     | |  ------------------------------------------------  | |         | |
     |  ----------------------------------------------------   ---------  |
     | x_scroll---------------------------------------------              |
     | |                                                    |             |
     |  ----------------------------------------------------              |
      --------------------------------------------------------------------
+
+    Outter: The outter frame holds everything in a neat package.
+    Canvas: The canvas is one of the 2 widgets that can be scrolled in tkinter
+    Inner:  Holds self and inforces minsize using grid_*configure()
+    Self:   Holds all of the widgets you want to scroll
+
+    Notes:
+        * Setting the width/height using config/__init__ will freeze the
+            width/height respectively
+        * By default this widget's size is determined the same way as a
+            tk.Label in the direction where there is a scroll bar. In the
+            direction without scrollbar, this widget tries to expand.
+
+    TODO:
+        Overwrite in `.config` and `.configure`
+            width, height, bd, highlightthickness, bg, background, borderwidth
+            relief
     """
+
     def __init__(self, master=None, scroll_speed:int=2, hscroll:bool=False,
-                 vscroll:bool=True, bd:int=0, scrollbar_kwargs={},
-                 hscrolltop:bool=False, bg="#f0f0ed",
+                 vscroll:bool=True, bd:int=0, scrollbar_kwargs:dict={},
+                 hscrolltop:bool=False, bg:str="#f0f0ed",
+                 highlightthickness:int=0,
                  HScrollBarClass=tk.Scrollbar, VScrollBarClass=tk.Scrollbar,
                  **kwargs):
         assert isinstance(scroll_speed, int), "`scroll_speed` must be an int"
-        self.scroll_speed = scroll_speed
-
-        self.master_frame = tk.Frame(master, bd=bd, bg=bg)
-        self.master_frame.grid_rowconfigure(1, weight=1)
-        self.master_frame.grid_columnconfigure(1, weight=1)
-        self.dummy_canvas = tk.Canvas(self.master_frame, highlightthickness=0,
-                                      bd=0, bg=bg, **kwargs)
-        super().__init__(self.dummy_canvas, bg=bg)
-
+        self.scroll_speed:int = scroll_speed
+        # Create outter frame
+        self.outter:tk.Frame = tk.Frame(master, bd=bd, bg=bg,
+                                        highlightthickness=highlightthickness)
+        self.outter.grid_rowconfigure(1, weight=1)
+        self.outter.grid_columnconfigure(1, weight=1)
+        # Create canvas
+        self.canvas:tk.Canvas = tk.Canvas(self.outter, highlightthickness=0,
+                                          bd=0, **kwargs)
+        self.canvas.grid(row=1, column=1, sticky="news")
+        # Create inner frame and put inside canvas
+        self.inner:tk.Frame = tk.Frame(self.canvas, bd=bd, highlightthickness=0)
+        self.id:int = self.canvas.create_window((0,0), window=self.inner,
+                                                anchor="nw")
+        self.inner.grid_columnconfigure(1, weight=1)
+        self.inner.grid_rowconfigure(1, weight=1)
+        # Put self inside inner frame
+        super().__init__(self.inner, bg=bg, bd=0, highlightthickness=0)
+        super().grid(row=1, column=1, sticky="news")
         # Create the 2 scrollbars
+        self.v_scrollbar = self.h_scrollbar = None
         if vscroll:
-            self.v_scrollbar = VScrollBarClass(self.master_frame,
+            self.v_scrollbar = VScrollBarClass(self.outter,
                                                orient="vertical",
-                                               command=self.dummy_canvas.yview,
+                                               command=self.canvas.yview,
                                                **scrollbar_kwargs)
             self.v_scrollbar.grid(row=1, column=2, sticky="news")
-            self.dummy_canvas.configure(yscrollcommand=self.v_scrollbar.set)
+            self.canvas.config(yscrollcommand=self.v_scrollbar.set)
         if hscroll:
-            self.h_scrollbar = HScrollBarClass(self.master_frame,
+            self.h_scrollbar = HScrollBarClass(self.outter,
                                                orient="horizontal",
-                                               command=self.dummy_canvas.xview,
+                                               command=self.canvas.xview,
                                                **scrollbar_kwargs)
             self.h_scrollbar.grid(row=2*(1-hscrolltop), column=1, sticky="news")
-            self.dummy_canvas.configure(xscrollcommand=self.h_scrollbar.set)
-
+            self.canvas.config(xscrollcommand=self.h_scrollbar.set)
         # Bind to the mousewheel scrolling
-        self.dummy_canvas.bind_all("<MouseWheel>", self._scroll_windows,
-                                   add=True)
-        self.dummy_canvas.bind_all("<Button-4>", self._scroll_linux, add=True)
-        self.dummy_canvas.bind_all("<Button-5>", self._scroll_linux, add=True)
-        self.bind("<Configure>", self._scrollbar_scrolling, add=True)
+        self.canvas.bind_all("<MouseWheel>", self._scroll_windows, add=True)
+        self.canvas.bind_all("<Button-4>", self._scroll_linux, add=True)
+        self.canvas.bind_all("<Button-5>", self._scroll_linux, add=True)
+        # Copy all of the geometry manager methods from outter
+        for manager in ("pack", "grid", "place"):
+            for attr in dir(tk.Frame):
+                if manager in attr:
+                    setattr(self, attr, getattr(self.outter, attr))
+        # Bind so we can resize canvas and inner frame
+        super().bind("<Configure>", self._inner_resized, add=True)
+        self.canvas.bind("<Configure>", self._outter_resized, add=True)
 
-        # Place `self` inside `dummy_canvas`
-        self.dummy_canvas.create_window((0, 0), window=self, anchor="nw")
-        # Place `dummy_canvas` inside `master_frame`
-        self.dummy_canvas.grid(row=1, column=1, sticky="news")
-
-        self.pack = self.master_frame.pack
-        self.grid = self.master_frame.grid
-        self.place = self.master_frame.place
-        self.pack_forget = self.master_frame.pack_forget
-        self.grid_forget = self.master_frame.grid_forget
-        self.place_forget = self.master_frame.place_forget
-        self.grid_remove = self.master_frame.grid_remove
-
-    def get_x_offset(self) -> (int, int):
+    def get_x_offset(self) -> tuple[int,int]:
         """
         Returns the real x value of the (0, 0) coordinate.
         """
-        low, high = self.dummy_canvas.xview()
-        x1, _, x2, _ = self.dummy_canvas.cget("scrollregion").split(" ")
+        low, high = self.canvas.xview()
+        x1, _, x2, _ = self.canvas.cget("scrollregion").split(" ")
         x1, x2 = int(x1), int(x2)
-        low = int(x1 + (x2 - x1)*float(low))
-        high = int(x1 + (x2 - x1)*float(high))
-        return low, high
+        return tuple(int(x1 + (x2-x1)*float(i)) for i in (low,high))
 
-    def get_y_offset(self) -> (int, int):
+    def get_y_offset(self) -> tuple[int,int]:
         """
         Returns the real y value of the (0, 0) coordinate.
         """
-        low, high = self.dummy_canvas.yview()
-        _, y1, _, y2 = self.dummy_canvas.cget("scrollregion").split(" ")
+        low, high = self.canvas.yview()
+        _, y1, _, y2 = self.canvas.cget("scrollregion").split(" ")
         y1, y2 = int(y1), int(y2)
-        low = int(y1 + (y2 - y1)*float(low))
-        high = int(y1 + (y2 - y1)*float(high))
-        return low, high
+        return tuple(int(y1 + (y2-y1)*float(i)) for i in (low,high))
 
     def framex(self, x:int) -> int:
         """
@@ -249,63 +263,76 @@ class BetterFrame(tk.Frame):
         return y + self.get_y_offset()[0]
 
     def _scroll_windows(self, event:tk.Event) -> None:
-        if not self.check_mouse_over_self(event):
+        if not self._check_mouse_over_self(event):
             return None
         assert event.delta != 0, "On Windows, `event.delta` should never be 0"
         steps = int(-event.delta/abs(event.delta)*self.scroll_speed)
         if event.state&1:
-            self.dummy_canvas.xview_scroll(steps, "units")
+            self.canvas.xview_scroll(steps, "units")
         else:
-            self.dummy_canvas.yview_scroll(steps, "units")
+            self.canvas.yview_scroll(steps, "units")
 
     def _scroll_linux(self, event:tk.Event) -> None:
-        if not self.check_mouse_over_self(event):
+        if not self._check_mouse_over_self(event):
             return None
         steps:int = self.scroll_speed
         if event.num == 4:
             steps *= -1
         if event.state&1:
-            self.dummy_canvas.xview_scroll(steps, "units")
+            self.canvas.xview_scroll(steps, "units")
         else:
-            self.dummy_canvas.yview_scroll(steps, "units")
+            self.canvas.yview_scroll(steps, "units")
 
-    def check_mouse_over_self(self, event:tk.Event) -> bool:
-        return str(event.widget).startswith(str(self.master_frame))
+    def _check_mouse_over_self(self, event:tk.Event) -> bool:
+        return str(event.widget).startswith(str(self.outter))
 
-    def _scrollbar_scrolling(self, event:tk.Event) -> None:
-        region = list(self.dummy_canvas.bbox("all"))
-        region[2] = max(self.dummy_canvas.winfo_width(), region[2])
-        region[3] = max(self.dummy_canvas.winfo_height(), region[3])
-        self.dummy_canvas.configure(scrollregion=region)
+    def _inner_resized(self, _:tk.Event=None) -> None:
+        region = list(self.canvas.bbox("all"))
+        region[2] = max(self.canvas.winfo_width(), region[2])
+        region[3] = max(self.canvas.winfo_height(), region[3])
+        self.canvas.config(scrollregion=region)
+        mod:dict = dict()
+        if self.h_scrollbar is None:
+            width:int = super().winfo_reqwidth()
+            cwidth:int = self.canvas.winfo_width()
+            if cwidth != width:
+                mod["width"] = width
+        if self.v_scrollbar is None:
+            height:int = super().winfo_reqheight()
+            cheight:int = self.canvas.winfo_height()
+            if cheight != height:
+                mod["height"] = height
+        if mod:
+            self.canvas.config(**mod)
 
-    def resize(self, fit:str=None, height:int=None, width:int=None) -> None:
-        """
-        Resizes the frame to fit the widgets inside. You must either
-        specify (the `fit`) or (the `height` or/and the `width`) parameter.
-        Parameters:
-            fit:str       `fit` can be either `FIT_WIDTH` or `FIT_HEIGHT`.
-                          `FIT_WIDTH` makes sure that the frame's width can
-                           fit all of the widgets. `FIT_HEIGHT` is simmilar
-            height:int     specifies the height of the frame in pixels
-            width:int      specifies the width of the frame in pixels
-        To do:
-            ALWAYS_FIT_WIDTH
-            ALWAYS_FIT_HEIGHT
-        """
-        if height is not None:
-            self.dummy_canvas.config(height=height)
-        if width is not None:
-            self.dummy_canvas.config(width=width)
-        if fit == FIT_WIDTH:
-            self.dummy_canvas.config(width=super().winfo_reqwidth())
-        if fit == FIT_HEIGHT:
-            self.dummy_canvas.config(height=super().winfo_reqheight())
-    fit = resize
+    def _outter_resized(self, _:tk.Event=None) -> None:
+        mod:dict = dict()
+        super().update_idletasks()
+        width:int = super().winfo_reqwidth()
+        height:int = super().winfo_reqheight()
+        cwidth:int = self.canvas.winfo_width()
+        cheight:int = self.canvas.winfo_height()
 
-    def bind(self, sequence:str, callback, *args, **kwargs) -> tuple[str]:
-        b1:str = self.master_frame.bind(sequence, callback, *args, **kwargs)
-        b2:str = self.dummy_canvas.bind(sequence, callback, *args, **kwargs)
-        b3:str = super().bind(sequence, callback, *args, **kwargs)
+        if self.h_scrollbar is None:
+            if width != cwidth:
+                mod["width"] = cwidth
+        elif width < cwidth:
+            self.inner.grid_columnconfigure(1, minsize=cwidth)
+
+        if self.v_scrollbar is None:
+            if height != cheight:
+                mod["height"] = cheight
+        elif height < cheight:
+            self.inner.grid_rowconfigure(1, minsize=cheight)
+
+        if mod:
+            self.canvas.itemconfigure(self.id, **mod)
+
+    def bind(self, sequence:str, callback:Callable[tk.Event,str|None],
+             add:bool=None) -> tuple[str,str,str]:
+        b1:str = self.outter.bind(sequence, callback, add=add)
+        b2:str = self.canvas.bind(sequence, callback, add=add)
+        b3:str = super().bind(sequence, callback, add=add)
         return b1, b2, b3
 
 
@@ -313,13 +340,10 @@ class BetterFrame(tk.Frame):
 if __name__ == "__main__":
     root = tk.Tk()
     frame = BetterFrame(root, width=300, height=200, hscroll=True, vscroll=True)
-    frame.pack()
+    frame.pack(fill="both", expand=True)
 
-    # Add the widgets in the main diagonal to see the horizontal and
-    # vertical scrolling
     for i in range(51):
-        label = tk.Label(frame, text=i, anchor="w")
-        label.grid(row=i, column=i)
+        tk.Label(frame, text=i, anchor="w").grid(row=i, column=i)
 
     root.mainloop()
 
@@ -327,21 +351,15 @@ if __name__ == "__main__":
 # Example 2
 if __name__ == "__main__":
     root = tk.Tk()
+
     frame = BetterFrame(root, height=200, hscroll=False, vscroll=True)
-    frame.pack()
+    frame.pack(fill="both", expand=True)
 
-    for i in range(51):
-        label = tk.Label(frame, text=f"Label number {i}")
-        label.pack(anchor="w")
-
-    # Force the frame to resize to fit all of the widgets:
-    frame.resize(FIT_WIDTH)
-
-    frame2 = BetterFrame(root, height=200, hscroll=False, vscroll=True)
-    frame2.pack()
-    for i in range(51):
-        label = tk.Label(frame2, text=f"Label numberr {i}")
-        label.pack(anchor="w")
-    frame2.resize(FIT_WIDTH)
+    def add():
+        for i in range(5):
+            label = tk.Label(frame, text=f"Label number {i}", bg="cyan")
+            label.pack(anchor="w", fill="x")
+    tk.Button(frame, text="Add widgets", command=add).pack(fill="x")
+    frame.config(bg="cyan")
 
     root.mainloop()

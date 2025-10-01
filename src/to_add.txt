@@ -44,7 +44,6 @@ Notebook:
 
 File Explorer:
 * Special characters brake the UI a bit
-* Make the frame inside the `dummy_canvas` expand to fill the canvas' width/height in `BetterFrame`. This problem also appears in `Notebook`
 * Save exec path on close?
 * Add a tooltip to all top level folders to show their full path
 * Deleting a top level folder causes problems

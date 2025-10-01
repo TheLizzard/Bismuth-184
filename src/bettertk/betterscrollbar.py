@@ -158,6 +158,9 @@ class BaseBetterScrollBar(tk.Canvas):
         Redraw the thumb using:
           self._p0, self._p1, self._width, and self._height
         """
+        raise NotImplementedError("Overwrite this method or use " \
+                                  "BetterScrollBarHorizontal or " \
+                                  "BetterScrollBarVertical instead")
 
 
 class BetterScrollBarHorizontal(BaseBetterScrollBar):

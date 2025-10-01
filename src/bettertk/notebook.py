@@ -25,7 +25,7 @@ def round_rectangle(self:tk.Canvas, x1:int, y1:int, x2:int, y2:int, radius:int,
 tk.Canvas.create_round_rectangle = round_rectangle
 
 
-WIDGET_KWARGS:dict = dict(highlightthickness=0, bd=0, takefocus=False)
+WIDGET_KWARGS:dict = dict(bd=0, highlightthickness=0, takefocus=False)
 NOTCH_BG:str = "#444444"
 NOT_DRAG_DIST:int = 10
 BUTTON1_TK_STATE:int = 256
@@ -38,8 +38,7 @@ class TabNotch(tk.Canvas):
 
     def __init__(self, master:TabNotches, min_size:int=0,
                  font:str="TkTextFont") -> TabNotch:
-        super().__init__(master, **WIDGET_KWARGS, height=1, width=1,
-                         bg=NOTCH_BG)
+        super().__init__(master, **WIDGET_KWARGS, bg=NOTCH_BG)
         self.text_id:int = super().create_text((0,0), text="", anchor="nw",
                                                fill="white", font=font)
         self.min_size:int = min_size
@@ -103,7 +102,10 @@ class TabNotches(BetterFrame):
         self.dragging:bool = False
         self.enable_new_tab()
         height:int = self.add_notch.winfo_reqheight()
-        super().resize(height=height)
+        if hasattr(self, "resize"):
+            super().resize(height=height)
+        else:
+            super().config(height=height)
         self.tmp_notch:tk.Frame = tk.Frame(self, bg=NOTCH_BG, height=height,
                                            highlightthickness=0, bd=0)
         make_bind_frame(self)
@@ -519,4 +521,5 @@ if __name__ == "__main__":
         page.notch.can_drag:bool = i == 2 # Disable dragging of 3rd tab
 
     nb, nts = notebook, notebook.notches
+    root.bind_all("<Button-3>", lambda e: print(e.widget._w))
     root.mainloop()
