@@ -48,6 +48,7 @@ OPEN_IN_TERMINAL:list[str] = [
 BKWARGS:dict = dict(activeforeground="white", activebackground="grey", bd=0,
                     bg="black", relief="flat", fg="white", justify="left",
                     highlightthickness=0, anchor="nw", padx="2m", pady="1m")
+CANCEL_DELAY:int = 300 # milliseconds after mouse not over menu means cancel
 MENU_BD:int = 2
 MENU_SEP_PADY:int = "1m"
 MENU_SEP_HEIGHT:int = 2
@@ -67,7 +68,8 @@ def chain(*funcs:tuple[Function[None]]) -> Function[None]:
 
 
 class Menu:
-    __slots__ = "root", "master", "children", "shown", "frame", "on_cancel"
+    __slots__ = "root", "master", "children", "shown", "frame", "on_cancel", \
+                "_popup_master_root", "_hide_id", "_bindings"
 
     def __init__(self, master:tk.Misc) -> Menu:
         self.master:tk.Misc = master
@@ -75,6 +77,9 @@ class Menu:
         self.root.config(bg="grey")
         self.root.withdraw()
         self.shown:bool = False
+        self._hide_id:str|None = None
+        self._bindings:list[str] = []
+        self._popup_master_root:tk.Tk = None
         self.frame:tk.Frame = tk.Frame(self.root, bg="black", bd=0,
                                        highlightthickness=0)
         self.frame.pack(fill="both", expand=True, padx=MENU_BD, pady=MENU_BD)
@@ -83,36 +88,10 @@ class Menu:
         self.master.bind_all("<Button-1>", self.cancel, add=True)
         self.master.bind_all("<<CancelAll>>", self.cancel, add=True)
         self.on_cancel:Function[None] = lambda: None
+        self.root.bind("<Enter>", self._cursor_enter)
+        self.root.bind("<Leave>", self._cursor_leave)
 
-    def _ischild(self, widget:tk.Misc) -> bool:
-        if isinstance(widget, str):
-            # This happens when the widget is destroyed
-            #   but the bind_all still activates
-            return False
-        while widget:
-            if widget == self.root:
-                return True
-            widget:tk.Misc = widget.master
-        return False
-
-    def hide(self, *, cancelled:bool=False) -> str|None:
-        if not self.shown:
-            return None
-        self.shown:bool = False
-        # Explorer items should be selectable but never focusable
-        # self.master.focus_set()
-        self.root.withdraw()
-        if cancelled:
-            self.on_cancel()
-
-    def cancel(self, event:tk.Event=None) -> None:
-        if not self.shown:
-            return None
-        if event and (event.keysym != "Escape"):
-            if self._ischild(event.widget):
-                return None
-        self.hide(cancelled=True)
-
+    # Add/Remove elements from popup
     def add(self, text:str, command:Function, **kwargs:dict) -> int:
         command:Function = chain(self.hide, command)
         widget:tk.Button = tk.Button(self.frame, command=command, text=text,
@@ -128,18 +107,21 @@ class Menu:
         self.children.append(widget)
         return len(self.children)-1
 
+    def pop(self) -> None:
+        self.children.pop(-1).destroy()
+
     def config(self, id:int, **kwargs) -> None:
         if "command" in kwargs:
             kwargs["command"] = chain(self.hide, kwargs.pop("command"))
         self.children[id].config(**kwargs)
 
-    def pop(self) -> None:
-        self.children.pop(-1).destroy()
-
+    # Show popup
     def popup(self, widget:tk.Misc, pos:tuple[int,int]=None) -> None:
+        # Move window to position
         self.root.geometry("+{}+{}".format(*(pos or widget.winfo_pointerxy())))
         if self.shown:
             return None
+        # Show popup
         self.shown:bool = True
         self.root.deiconify()
         self.remove_titlebar()
@@ -148,6 +130,14 @@ class Menu:
         # but not x11
         self.root.update_idletasks()
         self.root.geometry("")
+        # Unbind close popup on mouse leave from last popup master root
+        if self._bindings:
+            self.hide(cancelled=False)
+        # Bind close popup on mouse leave
+        self._popup_master_root:tk.Tk = self._get_root_from_widget(widget)
+        b1 = self._popup_master_root.bind("<Enter>", self._cursor_enter, True)
+        b2 = self._popup_master_root.bind("<Leave>", self._cursor_leave, True)
+        self._bindings.extend((b1, b2))
 
     def remove_titlebar(self) -> None:
         if IS_UNIX:
@@ -156,6 +146,60 @@ class Menu:
             self.root.overrideredirect(True)
         else:
             raise NotImplementedError("UnrecognisedOS")
+
+    def _get_root_from_widget(self, widget:tk.Misc) -> tk.Tk:
+        """
+        Get the `tk.Tk` master of `widget` so that we can check when/if
+          the mouse leaves that window
+        """
+        while widget.master:
+            widget:tk.Misc = widget.master
+        return widget
+
+    def _cursor_leave(self, event:tk.Event=None) -> None:
+        """
+        On cursor leave, start a timer to hide the popup. If _cursor_enter
+          is called while the timer is still going, we will cancel the
+          hide popup function call
+        """
+        if self.shown and (not self._hide_id):
+            self._hide_id:str|None = self.root.after(CANCEL_DELAY, self.cancel)
+
+    def _cursor_enter(self, event:tk.Event=None) -> None:
+        """
+        On cursor enter, cancel the hide popup function call.
+        """
+        if self.shown and self._hide_id:
+            self.root.after_cancel(self._hide_id)
+            self._hide_id:str|None = None
+
+    # Hide popup
+    def hide(self, *, cancelled:bool=False) -> str|None:
+        if not self.shown:
+            return None
+        self.shown:bool = False
+        if self._bindings:
+            self._popup_master_root.unbind("<Enter>", self._bindings[0])
+            self._popup_master_root.unbind("<Leave>", self._bindings[1])
+            self._bindings.clear()
+        # Explorer items should be selectable but never focusable
+        # self.master.focus_set()
+        self.root.withdraw()
+        if cancelled:
+            self.on_cancel()
+
+    def cancel(self, event:tk.Event=None) -> None:
+        if not self.shown:
+            return None
+        if event and (event.keysym != "Escape"):
+            if self._ischild(event.widget):
+                return None
+        self.hide(cancelled=True)
+
+    def _ischild(self, widget:tk.Misc) -> bool:
+        if isinstance(widget, tk.Misc):
+            return self.root._w in widget._w
+        return False
 
 
 class ExpandedExplorer(Explorer):
@@ -466,3 +510,5 @@ if __name__ == "__main__":
     f.pack(fill="both", expand=True)
     e = ExpandedExplorer(f)
     e.add("test/") # Note doesn't add anything if folder doesn't exist
+
+    root.mainloop()

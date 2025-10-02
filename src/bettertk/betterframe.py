@@ -137,6 +137,13 @@ class BetterCanvas(tk.Canvas):
             self.deltay += pixels
 
 
+GEOMETRY_MANAGER_METHODS:list[str] = [
+    "pack", "pack_configure", "pack_forget",
+    "grid", "grid_anchor", "grid_bbox", "grid_configure", "grid_forget",
+    "grid_remove",
+    "place", "place_configure", "place_forget",
+                                     ]
+
 class BetterFrame(tk.Frame):
     """
     Also known as `ScrollableFrame`
@@ -228,10 +235,8 @@ class BetterFrame(tk.Frame):
         self.canvas.bind_children("<Button-4>", self._scroll_linux, add=True)
         self.canvas.bind_children("<Button-5>", self._scroll_linux, add=True)
         # Copy all of the geometry manager methods from outter
-        for manager in ("pack", "grid", "place"):
-            for attr in dir(tk.Frame):
-                if manager in attr:
-                    setattr(self, attr, getattr(self.outter, attr))
+        for attr in GEOMETRY_MANAGER_METHODS:
+            setattr(self, attr, getattr(self.outter, attr))
         # Copy xview and yview from canvas
         self.xview = self.canvas.xview
         self.yview = self.canvas.yview
@@ -268,6 +273,18 @@ class BetterFrame(tk.Frame):
         Same as `tk.Canvas.canvasy(y)` but for this frame.
         """
         return y + self.get_y_offset()[0]
+
+    def xview(self, *args:tuple) -> object:
+        """
+        The same as the canvas xview
+        """
+        return self.canvas.xview(*args)
+
+    def yview(self, *args:tuple) -> object:
+        """
+        The same as the canvas yview
+        """
+        return self.canvas.yview(*args)
 
     def _scroll_windows(self, event:tk.Event) -> None:
         assert event.delta != 0, "On Windows, `event.delta` should never be 0"

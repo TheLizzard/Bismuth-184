@@ -43,15 +43,19 @@ class TabNotch(tk.Canvas):
                                                fill="white", font=font)
         self.min_size:int = min_size
         self.can_drag:bool = True
+        self.focused:bool = False
         self.rrect_id:int = None
         self.width:int = 0
         self.text:str = None
-        super().bind("<Button-1>", lambda e: master.clicked(self), add=True)
-        super().bind("<Button-2>", lambda e: master.close(self), add=True)
+        super().bind("<Button-1>", lambda e: master._clicked(self), add=True)
+        super().bind("<Button-2>", lambda e: master._close(self), add=True)
 
     def rename(self, text:str) -> None:
         if self.text == text:
             return None
+        self.master._renaming(self, lambda: self._rename(text))
+
+    def _rename(self, text:str) -> None:
         self.text:str = text
         super().itemconfig(self.text_id, text=text)
         x1, y1, x2, y2 = super().bbox(self.text_id)
@@ -63,9 +67,11 @@ class TabNotch(tk.Canvas):
         super().config(width=width+2*self.PADX, height=2*height)
         self.width:int = width+2*self.PADX
         if self.rrect_id is not None:
-            self.tell_focused()
+            self.tell_focused(force_redraw=True)
 
-    def tell_focused(self) -> None:
+    def tell_focused(self, *, force_redraw:bool=False) -> None:
+        if self.focused and (not force_redraw):
+            return None
         if self.rrect_id is not None:
             super().delete(self.rrect_id)
         x1, y1, x2, y2 = super().bbox(self.text_id)
@@ -76,10 +82,12 @@ class TabNotch(tk.Canvas):
                                                            radius=25,
                                                            fill="black")
         super().tag_lower(self.rrect_id)
+        self.focused:bool = True
 
     def tell_unfocused(self) -> None:
         if self.rrect_id is not None:
             super().delete(self.rrect_id)
+            self.focused:bool = False
 
 
 class TabNotches(BetterFrame):
@@ -110,10 +118,10 @@ class TabNotches(BetterFrame):
         self.tmp_notch:tk.Frame = tk.Frame(self, bg=NOTCH_BG, height=height,
                                            highlightthickness=0, bd=0)
         make_bind_frame(self)
-        self.bind("<ButtonPress-1>", self.start_dragging, add=True)
-        self.bind_all("<B1-Motion>", self.drag, add=True)
-        self.bind_all("<Motion>", self.drag, add=True)
-        self.bind_all("<ButtonRelease-1>", self.end_dragging, add=True)
+        self.bind("<ButtonPress-1>", self._start_dragging, add=True)
+        self.bind_all("<B1-Motion>", self._drag, add=True)
+        self.bind_all("<Motion>", self._drag, add=True)
+        self.bind_all("<ButtonRelease-1>", self._end_dragging, add=True)
 
     def disable_new_tab(self) -> None:
         if self.add_notch is None: return None
@@ -134,13 +142,13 @@ class TabNotches(BetterFrame):
         self.notches.append(notch)
         return notch
 
-    def clicked(self, notch:TabNotch) -> None:
+    def _clicked(self, notch:TabNotch) -> None:
         if notch == self.add_notch:
             self.notebook.event_generate("<<Tab-Create>>")
         else:
             notch.page.focus()
 
-    def close(self, notch:TabNotch) -> None:
+    def _close(self, notch:TabNotch) -> None:
         if notch != self.add_notch:
             notch.page.close()
 
@@ -151,7 +159,7 @@ class TabNotches(BetterFrame):
         for i in range(idx, len(self.notches)):
             self.notches[i].grid(row=1, column=i)
 
-    def start_dragging(self, event:tk.Event) -> None:
+    def _start_dragging(self, event:tk.Event) -> None:
         if not isinstance(event.widget, TabNotch):
             return None
         if event.widget == self.add_notch:
@@ -162,7 +170,7 @@ class TabNotches(BetterFrame):
         self.dragx:int = event.x
         return "break"
 
-    def end_dragging(self, event:tk.Event=None) -> str:
+    def _end_dragging(self, event:tk.Event=None) -> str:
         if self.notch_dragging is None:
             return None
         if self.dragging:
@@ -173,17 +181,17 @@ class TabNotches(BetterFrame):
         self.dragging:bool = False
         return "break"
 
-    def drag(self, event:tk.Event) -> str:
+    def _drag(self, event:tk.Event) -> str:
         if self.notch_dragging is None:
             return None
         if not (event.state & BUTTON1_TK_STATE):
-            self.end_dragging()
+            self._end_dragging()
             return None
         if not self.dragging:
             if abs(event.x-self.dragx) < NOT_DRAG_DIST:
                 return None
             self.dragging:bool = True
-            self.tmp_notch.x:int = self.get_start_x(self.notch_dragging)
+            self.tmp_notch.x:int = self._get_start_x(self.notch_dragging)
             width:int = self.notch_dragging.winfo_width()
             self.tmp_notch.width=width
             self.tmp_notch.config(width=width)
@@ -195,13 +203,13 @@ class TabNotches(BetterFrame):
             self.notches[idx] = self.tmp_notch
 
         x:int = event.x_root - super().winfo_rootx()
-        delta:int = self.calculate_idx_delta(x-self.dragx)
+        delta:int = self._calculate_idx_delta(x-self.dragx)
         if delta != 0:
             self._reshiffle(delta)
         self.notch_dragging.place(x=x-self.dragx, y=0)
         return "break"
 
-    def get_start_x(self, notch:TabNotch) -> int:
+    def _get_start_x(self, notch:TabNotch) -> int:
         total:int = 0
         for n in self.notches:
             if n == notch:
@@ -209,7 +217,7 @@ class TabNotches(BetterFrame):
             total += n.width
         raise RuntimeError("InternalError: Notch not in self.notches???")
 
-    def calculate_idx_delta(self, notch_start:int) -> int:
+    def _calculate_idx_delta(self, notch_start:int) -> int:
         if self.tmp_notch.winfo_x() < self.notch_dragging.winfo_x():
             # dragging =>
             if self.tmp_notch == self.notches[-1]:
@@ -235,15 +243,49 @@ class TabNotches(BetterFrame):
     def _reshiffle(self, delta:int) -> None:
         idx:int = self.tmp_notch.idx
         self.tmp_notch.idx += delta
-        self.swap(self.notches, idx, idx+delta)
+        self._swap(self.notches, idx, idx+delta)
         self.tmp_notch.x += self.notches[idx].width * delta
         for i in (idx, idx+delta):
             self.notches[i].grid(row=1, column=i)
         self.on_reshuffle(idx, idx+delta)
 
     @staticmethod
-    def swap(array:list, idxa:int, idxb:int):
+    def _swap(array:list, idxa:int, idxb:int):
         array[idxa], array[idxb] = array[idxb], array[idxa]
+
+    def see(self, idx:int) -> None:
+        assert isinstance(idx, int), "TypeError"
+        # If idx == len(self.notches): see(add_button_notch)
+        assert 0 <= idx <= len(self.notches), "ValueError"
+        # Get information
+        super().update_idletasks()
+        full_width:int = super().winfo_width()
+        curr_low, curr_high = super().xview()
+        curr_low, curr_high = float(curr_low), float(curr_high)
+        # Calculate the minx and maxx of the notch
+        minx:int = 0
+        for i in range(idx):
+            minx += self.notches[i].width
+        if idx == len(self.notches):
+            maxx:int = full_width
+        else:
+            maxx:int = minx + self.notches[idx].width
+        # Calculate the target_low and target_high
+        target_low, target_high = minx/full_width, maxx/full_width
+        if curr_low > target_low:
+            super().xview("moveto", str(target_low))
+        if curr_high < target_high:
+            # Since moveto sets the min and not the max, we have to
+            #   calculate the min for maxx as the max
+            viewport_width:float = full_width * (curr_high-curr_low)
+            target_high_low:float = (maxx-viewport_width) / full_width
+            super().xview("moveto", str(target_high_low))
+
+    def _renaming(self, notch:TabNotch, rename:Callable) -> None:
+        curr_high:float = float(super().xview()[1])
+        rename()
+        if curr_high > 0.999:
+            self.see(len(self.notches))
 
 
 CONTROL_T:bool = False
@@ -403,7 +445,7 @@ class Notebook(tk.Frame):
     def update_pages_list(self, idxa:int, idxb:int) -> None:
         # TabNotches._reshuffle shuffled the pages so now we have to
         #  update self.pages
-        self.notches.swap(self.pages, idxa, idxb)
+        self.notches._swap(self.pages, idxa, idxb)
 
     def control_numbers(self, event:tk.Event) -> str:
         number:str = getattr(event, "keysym", None)
@@ -421,30 +463,10 @@ class Notebook(tk.Frame):
         return "break"
 
     def see(self, page:NotebookPage) -> None:
-        # Get information
-        super().update_idletasks()
-        full_width:int = self.notches.winfo_width()
-        curr_low, curr_high = self.notches.xview()
-        curr_low, curr_high = float(curr_low), float(curr_high)
-        # Calculate the minx and maxx of the notch
-        minx = maxx = 0
-        for p, n in zip(self.pages, self.notches.notches):
-            maxx += n.width
-            if p == page: break
-            minx += n.width
-        if page == self.pages[-1]:
-            # If the last notch, also show the "+"
-            maxx:int = full_width
-        # Calculate the target_low and target_high
-        target_low, target_high = minx/full_width, maxx/full_width
-        if curr_low > target_low:
-            self.notches.xview("moveto", str(target_low))
-        if curr_high < target_high:
-            # Since moveto sets the min and not the max, we have to
-            #   calculate the min for maxx as the max
-            viewport_width:float = full_width * (curr_high-curr_low)
-            target_high_low:float = (maxx-viewport_width) / full_width
-            self.notches.xview("moveto", str(target_high_low))
+        assert page in self.pages, "Page not in self.pages?"
+        idx:int = self.pages.index(page)
+        see_add:bool = idx == len(self.pages)-1
+        self.notches.see(idx+see_add)
 
 
 if __name__ == "__main__":

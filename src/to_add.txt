@@ -38,8 +38,6 @@ Terminal:
 Notebook:
 * Control-t, Control-w, Control-Shift-w don't work when no tabs are open
 * Special characters (eg. \n) in the tab notches brake the UI a bit
-* Clicking on the "+" should scroll to the end
-* Control-Tab/Control-Shift-Tab should scroll the tab notches
 * Control-Shift-T?
 
 File Explorer:
