@@ -103,6 +103,7 @@ class TabNotches(BetterFrame):
         self.enable_new_tab()
         height:int = self.add_notch.winfo_reqheight()
         if hasattr(self, "resize"):
+            # Unimplemented - depricated
             super().resize(height=height)
         else:
             super().config(height=height)
@@ -420,16 +421,30 @@ class Notebook(tk.Frame):
         return "break"
 
     def see(self, page:NotebookPage) -> None:
-        minx:int = 0
-        maxx:int = 0
+        # Get information
+        super().update_idletasks()
+        full_width:int = self.notches.winfo_width()
+        curr_low, curr_high = self.notches.xview()
+        curr_low, curr_high = float(curr_low), float(curr_high)
+        # Calculate the minx and maxx of the notch
+        minx = maxx = 0
         for p, n in zip(self.pages, self.notches.notches):
             maxx += n.width
-            if p == page:
-                break
-            else:
-                minx += n.width
-        full_width:int = sum(n.width for n in self.notches.notches)
-        print("Implement BetterFrame.xscroll_to", minx, maxx, full_width)
+            if p == page: break
+            minx += n.width
+        if page == self.pages[-1]:
+            # If the last notch, also show the "+"
+            maxx:int = full_width
+        # Calculate the target_low and target_high
+        target_low, target_high = minx/full_width, maxx/full_width
+        if curr_low > target_low:
+            self.notches.xview("moveto", str(target_low))
+        if curr_high < target_high:
+            # Since moveto sets the min and not the max, we have to
+            #   calculate the min for maxx as the max
+            viewport_width:float = full_width * (curr_high-curr_low)
+            target_high_low:float = (maxx-viewport_width) / full_width
+            self.notches.xview("moveto", str(target_high_low))
 
 
 if __name__ == "__main__":

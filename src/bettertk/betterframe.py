@@ -28,18 +28,20 @@ class BindFrame(tk.Frame):
     def bind(self, seq:str, func:Function, add:bool=False) -> str:
         self_name:str = self._w
         def wrapper(event:tk.Event) -> str:
-            if isinstance(event.widget, str):
-                return ""
-            widget_name:str = event.widget._w
-            if not widget_name.startswith(self_name):
-                return ""
-            if "toplevel" in widget_name.removeprefix(self_name):
-                return ""
-            return func(event)
+            widget:tk.Misc|str|None = event.widget # might be a str
+            while True:
+                if not isinstance(widget, tk.Misc):
+                    return ""
+                if widget == self:
+                    return func(event)
+                if isinstance(widget, tk.Toplevel|tk.Tk):
+                    return ""
+                widget:tk.Misc|None = widget.master
         return self.bind_all(seq, wrapper, add=add)
 
-def make_bind_frame(frame:tk.Frame) -> None:
-    frame.bind = lambda *args, **kwargs: BindFrame.bind(frame, *args, **kwargs)
+def make_bind_frame(frame:tk.Frame, *, method:str="bind") -> None:
+    func = lambda *args, **kwargs: BindFrame.bind(frame, *args, **kwargs)
+    setattr(frame, method, func)
 
 
 # A canvas that implements all of the scrollbar stuff by moving all of
@@ -160,7 +162,7 @@ class BetterFrame(tk.Frame):
      --------------------------------------------------------------------
 
     Outter: The outter frame holds everything in a neat package.
-    Canvas: The canvas is one of the 2 widgets that can be scrolled in tkinter
+    Canvas: The canvas is one of the 3 widgets that can be scrolled in tkinter
     Inner:  Holds self and inforces minsize using grid_*configure()
     Self:   Holds all of the widgets you want to scroll
 
@@ -220,14 +222,19 @@ class BetterFrame(tk.Frame):
             self.h_scrollbar.grid(row=2*(1-hscrolltop), column=1, sticky="news")
             self.canvas.config(xscrollcommand=self.h_scrollbar.set)
         # Bind to the mousewheel scrolling
-        self.canvas.bind_all("<MouseWheel>", self._scroll_windows, add=True)
-        self.canvas.bind_all("<Button-4>", self._scroll_linux, add=True)
-        self.canvas.bind_all("<Button-5>", self._scroll_linux, add=True)
+        make_bind_frame(self.canvas, method="bind_children")
+        self.canvas.bind_children("<MouseWheel>", self._scroll_windows,
+                                  add=True)
+        self.canvas.bind_children("<Button-4>", self._scroll_linux, add=True)
+        self.canvas.bind_children("<Button-5>", self._scroll_linux, add=True)
         # Copy all of the geometry manager methods from outter
         for manager in ("pack", "grid", "place"):
             for attr in dir(tk.Frame):
                 if manager in attr:
                     setattr(self, attr, getattr(self.outter, attr))
+        # Copy xview and yview from canvas
+        self.xview = self.canvas.xview
+        self.yview = self.canvas.yview
         # Bind so we can resize canvas and inner frame
         super().bind("<Configure>", self._inner_resized, add=True)
         self.canvas.bind("<Configure>", self._outter_resized, add=True)
@@ -263,8 +270,6 @@ class BetterFrame(tk.Frame):
         return y + self.get_y_offset()[0]
 
     def _scroll_windows(self, event:tk.Event) -> None:
-        if not self._check_mouse_over_self(event):
-            return None
         assert event.delta != 0, "On Windows, `event.delta` should never be 0"
         steps = int(-event.delta/abs(event.delta)*self.scroll_speed)
         if event.state&1:
@@ -273,8 +278,6 @@ class BetterFrame(tk.Frame):
             self.canvas.yview_scroll(steps, "units")
 
     def _scroll_linux(self, event:tk.Event) -> None:
-        if not self._check_mouse_over_self(event):
-            return None
         steps:int = self.scroll_speed
         if event.num == 4:
             steps *= -1
@@ -284,6 +287,7 @@ class BetterFrame(tk.Frame):
             self.canvas.yview_scroll(steps, "units")
 
     def _check_mouse_over_self(self, event:tk.Event) -> bool:
+        # Unused - depricated
         return str(event.widget).startswith(str(self.outter))
 
     def _inner_resized(self, _:tk.Event=None) -> None:
@@ -306,8 +310,8 @@ class BetterFrame(tk.Frame):
             self.canvas.config(**mod)
 
     def _outter_resized(self, _:tk.Event=None) -> None:
-        mod:dict = dict()
         super().update_idletasks()
+        mod:dict = dict()
         width:int = super().winfo_reqwidth()
         height:int = super().winfo_reqheight()
         cwidth:int = self.canvas.winfo_width()

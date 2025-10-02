@@ -261,6 +261,7 @@ class App:
         if hasattr(self.explorer_frame, "outter"):
             true_explorer_frame:tk.Frame = self.explorer_frame.outter
         else:
+            # Unimplemented - depricated
             true_explorer_frame:tk.Frame = self.explorer_frame.master_frame
         curr_text:BetterText = self.page_to_text(self.notebook.curr_page)
         curr_text_path:str = None if curr_text is None else curr_text.filepath

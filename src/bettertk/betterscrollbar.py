@@ -48,15 +48,18 @@ class BaseBetterScrollBar(tk.Canvas):
         """
         On config, intercept:
                               can_hide
-                              _thumb_colour
-                              _active_thumb_colour
+                              thumb_colour
+                              active_thumb_colour
         """
         if len(kwargs) == 0:
             return super().config()
         self._thumb_colour:str = kwargs.pop("thumb_colour", self._thumb_colour)
-        self._active_thumb_colour:str = kwargs.pop("_active_thumb_colour",
+        self._active_thumb_colour:str = kwargs.pop("active_thumb_colour",
                                                    self._active_thumb_colour)
+        self._command = kwargs.pop("command", self._command)
         self.hide:str = kwargs.pop("can_hide", self.hide)
+        if kwargs:
+            raise KeyError(f"Unknown arguments: {set(kwargs.keys())}")
     configure = config
 
     def _reset_thumb_colour(self, event:tk.Event=None) -> None:
