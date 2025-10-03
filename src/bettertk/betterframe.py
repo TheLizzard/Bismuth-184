@@ -143,6 +143,7 @@ GEOMETRY_MANAGER_METHODS:list[str] = [
     "grid_remove",
     "place", "place_configure", "place_forget",
                                      ]
+Size:type = tuple[int,int]
 
 class BetterFrame(tk.Frame):
     """
@@ -240,9 +241,14 @@ class BetterFrame(tk.Frame):
         # Copy xview and yview from canvas
         self.xview = self.canvas.xview
         self.yview = self.canvas.yview
+        # Size information
+        self._size:Size = (1,1)
+        self._reqsize:Size = (1,1)
         # Bind so we can resize canvas and inner frame
         super().bind("<Configure>", self._inner_resized, add=True)
         self.canvas.bind("<Configure>", self._outter_resized, add=True)
+        # Initial resize (I have no idea why it's needed)
+        self.after(1, self._inner_resized)
 
     def get_x_offset(self) -> tuple[int,int]:
         """
@@ -308,46 +314,41 @@ class BetterFrame(tk.Frame):
         return str(event.widget).startswith(str(self.outter))
 
     def _inner_resized(self, _:tk.Event=None) -> None:
-        region = list(self.canvas.bbox("all"))
-        region[2] = max(self.canvas.winfo_width(), region[2])
-        region[3] = max(self.canvas.winfo_height(), region[3])
-        self.canvas.config(scrollregion=region)
-        mod:dict = dict()
+        """
+        Self's width/height are inner's reqwidth/reqheight, Therefore, we
+          call canvas.config with the changed reqwidth/reqheight/scrollregion
+          to change the canvas's reqwidth/reqheight. That is so that the
+          canvas may expand its master.
+        All of this is in the direction we are not being scrolled
+        """
+        super().update_idletasks() # Needed to stop size oscillations
+        old_reqsize, self._reqsize = self._reqsize, (super().winfo_reqwidth(),
+                                                     super().winfo_reqheight())
+        # print("reqsize:", old_reqsize, "=>", self._reqsize)
+        kwargs:dict[str:int] = dict()
         if self.h_scrollbar is None:
-            width:int = super().winfo_reqwidth()
-            cwidth:int = self.canvas.winfo_width()
-            if cwidth != width:
-                mod["width"] = width
+            if old_reqsize[0] != self._reqsize[0]:
+                kwargs["width"] = self._reqsize[0]
         if self.v_scrollbar is None:
-            height:int = super().winfo_reqheight()
-            cheight:int = self.canvas.winfo_height()
-            if cheight != height:
-                mod["height"] = height
-        if mod:
-            self.canvas.config(**mod)
+            if old_reqsize[1] != self._reqsize[1]:
+                kwargs["height"] = self._reqsize[1]
 
-    def _outter_resized(self, _:tk.Event=None) -> None:
-        super().update_idletasks()
-        mod:dict = dict()
-        width:int = super().winfo_reqwidth()
-        height:int = super().winfo_reqheight()
-        cwidth:int = self.canvas.winfo_width()
-        cheight:int = self.canvas.winfo_height()
+        w:int = max(self._size[0], self._reqsize[0])
+        h:int = max(self._size[1], self._reqsize[1])
+        self.canvas.config(scrollregion=[0,0,w,h], **kwargs)
 
-        if self.h_scrollbar is None:
-            if width != cwidth:
-                mod["width"] = cwidth
-        elif width < cwidth:
-            self.inner.grid_columnconfigure(1, minsize=cwidth)
-
-        if self.v_scrollbar is None:
-            if height != cheight:
-                mod["height"] = cheight
-        elif height < cheight:
-            self.inner.grid_rowconfigure(1, minsize=cheight)
-
-        if mod:
-            self.canvas.itemconfigure(self.id, **mod)
+    def _outter_resized(self, event:tk.Event) -> None:
+        """
+        The canvas' width/height should become our width/height. We
+          call grid_*configure(minsize=·) to make sure inner always
+          expands to fill canvas.
+        """
+        old_size, self._size = self._size, (event.width,event.height)
+        # print("size:", old_size, "=>", self._size)
+        if self._size[0] != old_size[0]:
+            self.inner.grid_columnconfigure(1, minsize=self._size[0])
+        if self._size[1] != old_size[1]:
+            self.inner.grid_rowconfigure(1, minsize=self._size[1])
 
     def bind(self, sequence:str, callback:Callable[tk.Event,str|None],
              add:bool=None) -> tuple[str,str,str]:
@@ -358,7 +359,7 @@ class BetterFrame(tk.Frame):
 
 
 # Example 1
-if __name__ == "__main__":
+if __name__ == "__main__a":
     root = tk.Tk()
     frame = BetterFrame(root, width=300, height=200, hscroll=True, vscroll=True)
     frame.pack(fill="both", expand=True)
@@ -376,10 +377,13 @@ if __name__ == "__main__":
     frame = BetterFrame(root, height=200, hscroll=False, vscroll=True)
     frame.pack(fill="both", expand=True)
 
+    i:int = 0
     def add():
-        for i in range(5):
+        global i
+        for _ in range(5):
             label = tk.Label(frame, text=f"Label number {i}", bg="cyan")
             label.pack(anchor="w", fill="x")
+            i += 1
     tk.Button(frame, text="Add widgets", command=add).pack(fill="x")
     frame.config(bg="cyan")
 

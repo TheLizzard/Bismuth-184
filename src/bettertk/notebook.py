@@ -38,7 +38,8 @@ class TabNotch(tk.Canvas):
 
     def __init__(self, master:TabNotches, min_size:int=0,
                  font:str="TkTextFont") -> TabNotch:
-        super().__init__(master, **WIDGET_KWARGS, bg=NOTCH_BG)
+        super().__init__(master, **WIDGET_KWARGS, bg=NOTCH_BG, width=1,
+                         height=1)
         self.text_id:int = super().create_text((0,0), text="", anchor="nw",
                                                fill="white", font=font)
         self.min_size:int = min_size
@@ -94,15 +95,16 @@ class TabNotches(BetterFrame):
     __slots__ = "add_notch", "min_size", "notebook", "notches", "tmp_notch", \
                 "notch_dragging", "dragging", "dragx", "on_reshuffle", "font"
 
-    def __init__(self, notebook:Notebook, min_size:int=0,
+    def __init__(self, notebook:Notebook, min_size:int=0, scrolled:bool=True,
                  font:str="TkTextFont") -> TabNotches:
         self.font:str|Font = font
         self.on_reshuffle:Function[None] = lambda: None
         self.notebook:Notebook = notebook
-        super().__init__(notebook, bg=NOTCH_BG, hscroll=True, vscroll=False,
+        super().__init__(notebook, bg=NOTCH_BG, hscroll=scrolled, vscroll=False,
                          HScrollBarClass=BetterScrollBarHorizontal,
                          hscrolltop=True, scrollbar_kwargs={"thickness":4})
-        self.h_scrollbar.hide:bool = HIDE_SCROLLBAR
+        if scrolled:
+            self.h_scrollbar.hide:bool = HIDE_SCROLLBAR
         self.notches:list[TabNotch] = []
         self.notch_dragging:bool = None
         self.add_notch:TabNotch = None
@@ -192,9 +194,8 @@ class TabNotches(BetterFrame):
                 return None
             self.dragging:bool = True
             self.tmp_notch.x:int = self._get_start_x(self.notch_dragging)
-            width:int = self.notch_dragging.winfo_width()
-            self.tmp_notch.width=width
-            self.tmp_notch.config(width=width)
+            self.tmp_notch.width:int = self.notch_dragging.winfo_width()
+            self.tmp_notch.config(width=self.tmp_notch.width)
             idx:int = self.notches.index(self.notch_dragging)
             self.tmp_notch.page = self.notch_dragging.page
             self.tmp_notch.grid(row=1, column=idx)
@@ -360,14 +361,14 @@ class Notebook(tk.Frame):
                 "on_try_close"
 
     def __init__(self, master:tk.Misc, min_tab_notch_size:int=0,
-                 font:str="TkTextFont") -> Notebook:
+                 font:str="TkTextFont", scrolled:bool=True) -> Notebook:
         self.pages:list[NotebookPage] = []
         self.curr_page:NotebookPage = None
         self.on_try_close:Function[NotebookPage,Break] = lambda page: False
 
         super().__init__(master, **WIDGET_KWARGS, bg="black")
         self.notches:TabNotches = TabNotches(self, min_tab_notch_size,
-                                             font=font)
+                                             font=font, scrolled=scrolled)
         self.notches.pack(fill="both")
         self.notches.on_reshuffle = self.update_pages_list
         self.bottom:tk.Frame = tk.Frame(self, **WIDGET_KWARGS, bg="black")
@@ -392,18 +393,19 @@ class Notebook(tk.Frame):
         for notch in self.notches.notches:
             yield notch.page
 
-    def _tab_switch_to(self, page:NotebookPage) -> None:
+    def _tab_switch_to(self, page:NotebookPage|None) -> None:
         if page == self.curr_page:
             return None
         if self.curr_page is not None:
             self.curr_page.notch.tell_unfocused()
             self.curr_page.frame.pack_forget()
-        if page is not None:
+        if page:
             page.frame.pack(fill="both", expand=True)
             page.notch.tell_focused()
         self.curr_page:NotebookPage = page
         super().event_generate("<<Tab-Switched>>")
-        self.see(self.curr_page)
+        if page:
+            self.see(self.curr_page)
 
     def switch_prev_tab(self, event:tk.Event=None) -> str:
         page:NotebookPage = self._switch_next_prev_tab(strides=-1, default=-1)
