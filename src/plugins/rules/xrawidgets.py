@@ -58,6 +58,9 @@ class BarManager(Rule, metaclass=SingletonMeta):
             return False
         return idx, True
 
+    def destroy(self) -> None:
+        self.frame.destroy()
+
     def do(self, on:str, idx:str) -> Break:
         line, column = idx.split(".")
         self.label.config(text=self.FORMAT.format(line=line, column=column))
@@ -133,6 +136,10 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
             umark_line:int = event.data
         return umark_line, True
 
+    def destroy(self) -> None:
+        self.separator.destroy()
+        self.sidebar_text.destroy()
+
     def do(self, on:str, umark_line:int) -> Break:
         if on in ("<y-scroll>", "<reloaded-file>"):
             self.sidebar_text.yview("moveto", self.text.yview()[0])
@@ -205,6 +212,11 @@ class ScrollbarManager(Rule, metaclass=SingletonMeta):
             self.widget.config(xscrollcommand=self.old_xscrollcommand)
         self.widget.config(yscrollcommand=self.old_yscrollcommand)
 
+    def destroy(self) -> None:
+        self.yscrollbar.destroy()
+        if self.HORIZONTAL_BAR:
+            self.xscrollbar.destroy()
+
     def yset(self, low:str, high:str) -> None:
         self.widget.event_generate("<<Y-Scroll>>")
         self.yscrollbar.set(low, high)
@@ -264,3 +276,6 @@ class MenuManager(Rule, metaclass=SingletonMeta):
     def attach(self) -> None:
         super().attach()
         self.widget.add_widget(self.menu, row=-5, column=-5, columnspan=10)
+
+    def destroy(self) -> None:
+        self.menu.destroy()

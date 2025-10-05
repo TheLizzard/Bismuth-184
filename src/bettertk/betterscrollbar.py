@@ -9,7 +9,7 @@ class BaseBetterScrollBar(tk.Canvas):
     __slots__ = "_thumb_colour", "_active_thumb_colour", "_thumb_colour", \
                 "_command", "_thumb", "_mouse_pressed", "_p0", "_p1", \
                 "_grid_kwargs", "_shown", "hide", "_offset", "_height", \
-                "_width", "_height", "_high", "_low"
+                "_width", "_height", "_high", "_low", "_destroyed"
 
     def __init__(self, master:tk.Misc, thickness:int=12, can_hide:bool=False,
                  thumb_colour:str="#555555", active_thumb_colour:str="#777777",
@@ -24,6 +24,7 @@ class BaseBetterScrollBar(tk.Canvas):
         self._mouse_pressed:bool = False
         # Hide/Show
         self._grid_kwargs:dict = None
+        self._destroyed:bool = False
         self._shown:bool = True
         self.hide:bool = False
         self._offset:int = 0
@@ -107,8 +108,13 @@ class BaseBetterScrollBar(tk.Canvas):
         """
         Re-calculates and redraws the thumb
         """
+        if self._destroyed: return None
         self._recalculate()
         self._redraw()
+
+    def destroy(self) -> None:
+        self._destroyed:bool = True
+        super().destroy()
 
     def set(self, low:str, high:str) -> None:
         low, high = float(low), float(high)

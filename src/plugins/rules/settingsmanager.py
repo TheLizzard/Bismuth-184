@@ -22,6 +22,10 @@ class SettingsManager(Rule, metaclass=SingletonMeta):
         self.text.add_setting = self.add_setting
         self.text.get_setting = self.get_setting
 
+    def destroy(self) -> None:
+        if self.settings_open:
+            self.root.destroy()
+
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
         return True
 

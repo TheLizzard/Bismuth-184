@@ -384,6 +384,8 @@ class BetterText(tk.Text):
         expose so we have to calculate it based on the fractions from
         `Text.xview`
         """
+        xview:tuple[str]|None = super().xview()
+        if not xview: return x
         low, _ = super().xview()
         # Use the first fraction from `xview()` to calculate the base x offset
         #   of the viewport

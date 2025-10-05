@@ -104,16 +104,13 @@ class App:
         rem.grid(row=1, column=3, sticky="news")
         left_frame.grid_rowconfigure(3, weight=1)
         left_frame.grid_columnconfigure((1, 3), weight=1)
-        self.explorer_frame = BetterFrame(left_frame, hscroll=True,
-                                          vscroll=True, bg="black",
+        self.explorer_frame = BetterFrame(left_frame, bg="black",
                                      HScrollBarClass=BetterScrollBarHorizontal,
                                      VScrollBarClass=BetterScrollBarVertical,
-                                     scroll_speed=1)
+                                     scroll_speed=1, hscroll=True, vscroll=True)
         self.explorer_frame.grid(row=3, column=1, columnspan=3, sticky="news")
-        if settings.explorer.hide_h_scroll:
-            self.explorer_frame.h_scrollbar.hide:bool = True
-        if settings.explorer.hide_v_scroll:
-            self.explorer_frame.v_scrollbar.hide:bool = True
+        self.explorer_frame.config(hide_hscroll=settings.explorer.hide_h_scroll,
+                                   hide_vscroll=settings.explorer.hide_v_scroll)
         VirtualEvents(self.explorer_frame) # Must be before the BindFrame
         make_bind_frame(self.explorer_frame)
         self.explorer = ExpandedExplorer(self.explorer_frame,
@@ -153,9 +150,10 @@ class App:
         raise KeyError("InternalError")
 
     # Tab management
-    def new_tab(self) -> BetterText:
+    def new_tab(self, *, focus:bool=True) -> BetterText:
         page:NotebookPage = self.notebook.tab_create()
-        text:BetterText = TextClass(page.frame, highlightthickness=0, bd=0,
+        page.page_frame.config(bg="black") # Less eye burning
+        text:BetterText = TextClass(page.page_frame, highlightthickness=0, bd=0,
                                     font=settings.editor.font)
         text.plugin:Plugin = None
         if isinstance(text, BetterText):
@@ -165,9 +163,10 @@ class App:
         text.inserted_default:bool = False
         text.filepath:str = ""
         self.text_to_page[text] = page
-        page.focus()
         self.plugin_manage(text)
-        text.focus_set()
+        if focus:
+            page.focus()
+            text.focus_force()
         text.bind("<<Saved-File>>", self.maybe_change_plugin, add=True)
         text.bind("<<Opened-File>>", self.maybe_change_plugin, add=True)
         text.bind("<<Modified-Change>>", self.rename_tab, add=True)
@@ -193,7 +192,7 @@ class App:
                 if old is not None:
                     old.detach()
                 # Attach the new
-                Plugin(self.text_to_page[text].frame, text).attach()
+                Plugin(self.text_to_page[text].page_frame, text).attach()
                 return None
 
     def change_selected_tab(self, event:tk.Event=None) -> None:
@@ -331,8 +330,9 @@ class App:
         return opened
 
     def _set_notebook_state(self, opened:list[tuple]) -> None:
-        for plugin_state in opened:
-            text:BetterText = self.new_tab()
+        for i, plugin_state in enumerate(opened):
+            last:bool = opened[-1] is plugin_state
+            text:BetterText = self.new_tab(focus=last)
             text.inserted_default:bool = True
             try:
                 text.plugin.set_state(plugin_state)

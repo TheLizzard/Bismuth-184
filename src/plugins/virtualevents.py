@@ -29,14 +29,18 @@ class VirtualEvent:
 class _VirtualEvents:
     __slots__ = "widget", "virtual_events", "paused", \
                 "old_bind", "old_unbind", "old_event_generate", \
-                "old_bind_all", "old_unbind_all"
+                "old_bind_all", "old_unbind_all", "old_destroy", \
+                "_destroyed"
 
     def __init__(self, widget:tk.Misc) -> None:
         assert not getattr(widget, "virtual_events", None), "InternalError"
         self.widget:tk.Misc = widget
         self.virtual_events:dict[str,list[tuple[Function,bool]]] = dict()
+        self._destroyed:bool = False
         self.paused:bool = False
 
+        self.old_destroy = self.widget.destroy
+        self.widget.destroy = self.destroy
         self.old_event_generate = self.widget.event_generate
         self.widget.event_generate = self.send
         self.old_bind = self.widget.bind
@@ -90,7 +94,7 @@ class _VirtualEvents:
                 return "handled" if handled else ""
         # If [the event is not virtual or no event handlers are bound to that
         #   event] and drop is True, use the old `event_generate`
-        if drop:
+        if drop and not self._destroyed:
             return self.old_event_generate(event_name, **kwargs)
 
     def bind(self, event_name:str, func, *, add=False, all:bool=False) -> str:
@@ -157,6 +161,10 @@ class _VirtualEvents:
             if new_ret == "handled":
                 ret:str = "handled"
         return ret
+
+    def destroy(self) -> None:
+        self._destroyed:bool = True
+        self.old_destroy()
 
 
 _vir_events:dict[widget:tk.Misc:_VirtualEvents] = {}

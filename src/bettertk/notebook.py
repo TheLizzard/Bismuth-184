@@ -26,105 +26,212 @@ tk.Canvas.create_round_rectangle = round_rectangle
 
 
 WIDGET_KWARGS:dict = dict(bd=0, highlightthickness=0, takefocus=False)
-NOTCH_BG:str = "#444444"
+DEFAULT_NOTCH_BG:str = "#444444"
 NOT_DRAG_DIST:int = 10
 BUTTON1_TK_STATE:int = 256
+TAB_NOTCH_OPTIONS:list[str] = [
+                                "font", "text", "can_drag", "bg", "fg",
+                                "focused_fg", "focused_bg", "min_width",
+                                "padx",
+                              ]
 
 
 class TabNotch(tk.Canvas):
-    __slots__ = "text_id", "text", "page", "rrect_id", "width", "min_size", \
-                "can_drag"
-    PADX:int = 7
+    """
+    Options:
+        text, font, min_width, can_drag, padx,
+        bg, background, fg, focused_foreground,
+        focused_bg, focused_background, focused_fg, focused_foreground
+    """
 
-    def __init__(self, master:TabNotches, min_size:int=0,
-                 font:str="TkTextFont") -> TabNotch:
-        super().__init__(master, **WIDGET_KWARGS, bg=NOTCH_BG, width=1,
-                         height=1)
-        self.text_id:int = super().create_text((0,0), text="", anchor="nw",
-                                               fill="white", font=font)
-        self.min_size:int = min_size
-        self.can_drag:bool = True
-        self.focused:bool = False
-        self.rrect_id:int = None
-        self.width:int = 0
-        self.text:str = None
-        super().bind("<Button-1>", lambda e: master._clicked(self), add=True)
-        super().bind("<Button-2>", lambda e: master._close(self), add=True)
+    __slots__ = "_text_id", "_text", "_rrect_id", "_width", "_min_width", \
+                "_focused_bg", "_focused_fg", "_fg", "_can_drag", "_focused", \
+                "_padx"
 
-    def rename(self, text:str) -> None:
-        if self.text == text:
-            return None
-        self.master._renaming(self, lambda: self._rename(text))
+    def __init__(self, notches:TabNotches, **kwargs:dict) -> TabNotch:
+        super().__init__(notches, bg=DEFAULT_NOTCH_BG, width=1, height=1,
+                         **WIDGET_KWARGS)
+        self._text_id:int = super().create_text((0,0), text="", anchor="nw",
+                                                fill="white", font="TkTextFont")
+        self._focused_bg:str = "black"
+        self._focused_fg:str = "white"
+        self._min_width:int = 0
+        self._can_drag:bool = True
+        self._focused:bool = False
+        self._rrect_id:int = None
+        self._fg:str = "white"
+        self._height:int = 0
+        self._width:int = 0
+        self._text:str = ""
+        self._padx:int = 7
+        super().bind("<Button-1>", lambda e: notches._clicked(self), add=True)
+        super().bind("<Button-2>", lambda e: notches._close(self), add=True)
+        self.config(**kwargs)
 
-    def _rename(self, text:str) -> None:
-        self.text:str = text
-        super().itemconfig(self.text_id, text=text)
-        x1, y1, x2, y2 = super().bbox(self.text_id)
-        text_width:int = x2-x1
-        width:int = max(self.min_size, text_width)
-        height:int = y2-y1
-        text_x:int = self.PADX + (width-text_width)//2
-        super().moveto(self.text_id, text_x, height/2)
-        super().config(width=width+2*self.PADX, height=2*height)
-        self.width:int = width+2*self.PADX
-        if self.rrect_id is not None:
-            self.tell_focused(force_redraw=True)
+    # Focus
+    def focus(self) -> None:
+        if self._focused: return None
+        self._focused:bool = True
+        self._redraw_focus()
+        super().itemconfig(self._text_id, fill=self._focused_fg)
 
-    def tell_focused(self, *, force_redraw:bool=False) -> None:
-        if self.focused and (not force_redraw):
-            return None
-        if self.rrect_id is not None:
-            super().delete(self.rrect_id)
-        x1, y1, x2, y2 = super().bbox(self.text_id)
-        width:int = max(self.min_size, x2-x1)
-        height:int = y2-y1
-        points:tuple[int] = (0, 0, width+2*self.PADX, 3*height)
-        self.rrect_id:int = super().create_round_rectangle(*points,
-                                                           radius=25,
-                                                           fill="black")
-        super().tag_lower(self.rrect_id)
-        self.focused:bool = True
+    def unfocus(self) -> None:
+        if not self._focused: return None
+        self._focused:bool = False
+        if self._rrect_id is not None:
+            super().delete(self._rrect_id)
+        super().itemconfig(self._text_id, fill=self._fg)
 
-    def tell_unfocused(self) -> None:
-        if self.rrect_id is not None:
-            super().delete(self.rrect_id)
-            self.focused:bool = False
+    @property
+    def focused(self) -> bool:
+        return self._focused
+
+    # Override config/configure/cget
+    def config(self, **kwargs:dict[str:object]) -> dict[str:object]|None:
+        # Return the options
+        if not kwargs:
+            return {option:self.cget(option) for option in TAB_NOTCH_OPTIONS}
+        # Font
+        if "font" in kwargs:
+            super().itemconfig(self._text_id, font=kwargs.pop("font"))
+            self._redraw_text()
+        # Background
+        if ("bg" in kwargs) or ("background" in kwargs):
+            bg:str = kwargs.pop("bg", kwargs.pop("background", None))
+            super().config(bg=bg)
+        # Focused Background
+        if ("focused_bg" in kwargs) or ("focused_background" in kwargs):
+            bg:str = kwargs.pop("focused_background",
+                                kwargs.pop("focused_bg", None))
+            if bg != self._focused_bg:
+                self._focused_bg:str = bg
+                self._redraw_focus()
+        # Foreground
+        if ("fg" in kwargs) or ("foreground" in kwargs):
+            fg:str = kwargs.pop("fg", kwargs.pop("foreground", None))
+            if fg != self._fg:
+                self._fg:str = fg
+                if not self._focused:
+                    super().itemconfig(self._text_id, fill=fg)
+        # Focused foreground
+        if ("focused_fg" in kwargs) or ("focused_foreground" in kwargs):
+            fg:str = kwargs.pop("focused_foreground",
+                                kwargs.pop("focused_fg", None))
+            if fg != self._focused_fg:
+                self._focused_fg:str = fg
+                if self._focused:
+                    super().itemconfig(self._text_id, fill=fg)
+        # Text
+        if "text" in kwargs:
+            text:str = kwargs.pop("text")
+            if self._text != text:
+                self._text:str = text
+                self._redraw_text()
+        # Minimum notch size
+        if "min_width" in kwargs:
+            min_width:int = kwargs.pop("min_width")
+            assert isinstance(min_width, int), "min_width must be an int"
+            if self._min_width != min_width:
+                self._min_width:int = min_width
+                self._redraw_text()
+        # Can drag
+        if "can_drag" in kwargs:
+            self._can_drag:bool = kwargs.pop("can_drag")
+            assert isinstance(self._can_drag, bool), "can_drag must be a bool"
+        # padx
+        if "padx" in kwargs:
+            self._padx:bool = kwargs.pop("padx")
+            assert isinstance(self._padx, int), "padx must be an int"
+            self._redraw_text()
+        # Unknown options
+        for arg in kwargs:
+            raise tk._tkinter.TclError(f'unknown option "{arg}"')
+
+    def cget(self, key:str) -> object:
+        if key == "font":
+            return super().itemcget(self._text_id, "font")
+        if key == "bg":
+            return super().cget("bg")
+        if key == "focused_bg":
+            return self._focused_bg
+        if key == "fg":
+            return self._fg
+        if key == "focused_fg":
+            return self._focused_fg
+        if key == "text":
+            return self._text
+        if key == "min_width":
+            return self._min_width
+        if key == "can_drag":
+            return self._can_drag
+        if key == "width":
+            return self._width
+        if key == "height":
+            return self._height
+        if key == "padx":
+            return self._padx
+        raise tk._tkinter.TclError(f'unknown option "{key}"')
+
+    # Helpers
+    def _rename_text_helper(self) -> None:
+        self.itemconfig(self._text_id, text=self._text)
+        x1, y1, x2, y2 = super().bbox(self._text_id)
+        text_width:int = x2 - x1
+        self._height:int = y2 - y1
+        self._width:int = max(self._min_width, text_width) + 2*self._padx
+        text_x:int = (self._width-text_width)//2
+        super().moveto(self._text_id, text_x, self._height/2)
+        super().config(width=self._width, height=2*self._height)
+        if self._rrect_id is not None:
+            self._redraw_focus()
+
+    # Redraw functions
+    def _redraw_text(self) -> None:
+        self.master._renaming(self, self._rename_text_helper)
+
+    def _redraw_focus(self) -> None:
+        if not self.focused: return None
+        if self._rrect_id is not None:
+            super().delete(self._rrect_id)
+        pts:tuple[int] = (0, 0, self._width, 3*self._height)
+        id:int = super().create_round_rectangle(*pts, radius=25,
+                                                fill=self._focused_bg)
+        self._rrect_id:int = id
+        super().tag_lower(self._rrect_id)
 
 
 class TabNotches(BetterFrame):
-    __slots__ = "add_notch", "min_size", "notebook", "notches", "tmp_notch", \
-                "notch_dragging", "dragging", "dragx", "on_reshuffle", "font"
+    __slots__ = "add_notch", "_min_width", "notebook", "notches", \
+                "_tmp_notch", "_tmp_notch_info", "_notch_dragging", \
+                "dragging", "dragx", "_notches_kwargs"
 
-    def __init__(self, notebook:Notebook, min_size:int=0, scrolled:bool=True,
-                 font:str="TkTextFont") -> TabNotches:
-        self.font:str|Font = font
-        self.on_reshuffle:Function[None] = lambda: None
+    def __init__(self, notebook:Notebook, scrolled:bool=True,
+                 **kwargs:dict[str:object]) -> TabNotches:
+        self._notches_kwargs:dict[str:object] = kwargs
         self.notebook:Notebook = notebook
-        super().__init__(notebook, bg=NOTCH_BG, hscroll=scrolled, vscroll=False,
+        super().__init__(notebook, bg=DEFAULT_NOTCH_BG, hscroll=scrolled,
                          HScrollBarClass=BetterScrollBarHorizontal,
-                         hscrolltop=True, scrollbar_kwargs={"thickness":4})
-        if scrolled:
-            self.h_scrollbar.hide:bool = HIDE_SCROLLBAR
-        self.notches:list[TabNotch] = []
-        self.notch_dragging:bool = None
+                         hscrolltop=True, scrollbar_kwargs={"thickness":4},
+                         hide_hscroll=HIDE_SCROLLBAR)
+        self.pages:list[NotebookPage|TabNotch] = []
+        self.curr_page:NotebookPage = None
+        self._page_dragging:bool = None
         self.add_notch:TabNotch = None
-        self.min_size:int = min_size
         self.dragging:bool = False
+        # Create add notch
         self.enable_new_tab()
-        height:int = self.add_notch.winfo_reqheight()
-        if hasattr(self, "resize"):
-            # Unimplemented - depricated
-            super().resize(height=height)
-        else:
-            super().config(height=height)
-        self.tmp_notch:tk.Frame = tk.Frame(self, bg=NOTCH_BG, height=height,
-                                           highlightthickness=0, bd=0)
+        # super().config(height=self.add_notch.winfo_reqheight())
+        # Temp tab notch
+        fg:str = kwargs.get("fg", DEFAULT_NOTCH_BG)
+        self._tmp_notch:TabNotch = TabNotch(self, **{**kwargs, "fg":fg})
+        # Make bindings
         make_bind_frame(self)
         self.bind("<ButtonPress-1>", self._start_dragging, add=True)
         self.bind_all("<B1-Motion>", self._drag, add=True)
         self.bind_all("<Motion>", self._drag, add=True)
         self.bind_all("<ButtonRelease-1>", self._end_dragging, add=True)
 
+    # Enable/disable add tab notch
     def disable_new_tab(self) -> None:
         if self.add_notch is None: return None
         self.add_notch.destroy()
@@ -132,132 +239,35 @@ class TabNotches(BetterFrame):
 
     def enable_new_tab(self) -> None:
         if self.add_notch is not None: return None
-        self.add_notch:TabNotch = TabNotch(self, font=self.font)
-        self.add_notch.grid(row=1, column=len(self.notches)+1)
-        self.add_notch.rename("+")
+        kwargs:dict[str:object] = {**self._notches_kwargs, "min_width":0}
+        self.add_notch:TabNotch = TabNotch(self, text="+", **kwargs)
+        self.add_notch.grid(row=1, column=len(self.pages)+1)
 
-    def add(self) -> TabNotch:
-        notch:TabNotch = TabNotch(self, min_size=self.min_size, font=self.font)
-        notch.grid(row=1, column=len(self.notches))
+    # Add a new page
+    def add(self, page_frame:tk.Frame, notebook:Notebook) -> NotebookPage:
+        page:NotebookPage = NotebookPage(notebook=notebook, notches=self,
+                                         page_frame=page_frame,
+                                         **self._notches_kwargs)
+        page.grid(row=1, column=len(self.pages))
         if self.add_notch is not None:
-            self.add_notch.grid(row=1, column=len(self.notches)+1)
-        self.notches.append(notch)
-        return notch
+            self.add_notch.grid(row=1, column=len(self.pages)+1)
+        self.pages.append(page)
+        return page
 
-    def _clicked(self, notch:TabNotch) -> None:
-        if notch == self.add_notch:
-            self.notebook.event_generate("<<Tab-Create>>")
-        else:
-            notch.page.focus()
+    # Remove a page
+    def remove(self, page:NotebookPage) -> None:
+        assert page in self.pages, "InternalError"
+        idx:int = self.pages.index(page)
+        self.pages.pop(idx)
+        for i in range(idx, len(self.pages)):
+            self.pages[i].grid(row=1, column=i)
 
-    def _close(self, notch:TabNotch) -> None:
-        if notch != self.add_notch:
-            notch.page.close()
-
-    def remove(self, notch:TabNotch) -> None:
-        assert notch in self.notches, "InternalError"
-        idx:int = self.notches.index(notch)
-        self.notches.pop(idx)
-        for i in range(idx, len(self.notches)):
-            self.notches[i].grid(row=1, column=i)
-
-    def _start_dragging(self, event:tk.Event) -> None:
-        if not isinstance(event.widget, TabNotch):
-            return None
-        if event.widget == self.add_notch:
-            return None
-        self.notch_dragging:TabNotch = event.widget
-        if not self.notch_dragging.can_drag:
-            self.notch_dragging:TabNotch = None
-        self.dragx:int = event.x
-        return "break"
-
-    def _end_dragging(self, event:tk.Event=None) -> str:
-        if self.notch_dragging is None:
-            return None
-        if self.dragging:
-            self.tmp_notch.grid_forget()
-            self.notch_dragging.grid(row=1, column=self.tmp_notch.idx)
-            self.notches[self.tmp_notch.idx] = self.notch_dragging
-        self.notch_dragging:TabNotch = None
-        self.dragging:bool = False
-        return "break"
-
-    def _drag(self, event:tk.Event) -> str:
-        if self.notch_dragging is None:
-            return None
-        if not (event.state & BUTTON1_TK_STATE):
-            self._end_dragging()
-            return None
-        if not self.dragging:
-            if abs(event.x-self.dragx) < NOT_DRAG_DIST:
-                return None
-            self.dragging:bool = True
-            self.tmp_notch.x:int = self._get_start_x(self.notch_dragging)
-            self.tmp_notch.width:int = self.notch_dragging.winfo_width()
-            self.tmp_notch.config(width=self.tmp_notch.width)
-            idx:int = self.notches.index(self.notch_dragging)
-            self.tmp_notch.page = self.notch_dragging.page
-            self.tmp_notch.grid(row=1, column=idx)
-            self.tmp_notch.idx:int = idx
-            tk.Misc.lift(self.notch_dragging)
-            self.notches[idx] = self.tmp_notch
-
-        x:int = event.x_root - super().winfo_rootx()
-        delta:int = self._calculate_idx_delta(x-self.dragx)
-        if delta != 0:
-            self._reshiffle(delta)
-        self.notch_dragging.place(x=x-self.dragx, y=0)
-        return "break"
-
-    def _get_start_x(self, notch:TabNotch) -> int:
-        total:int = 0
-        for n in self.notches:
-            if n == notch:
-                return total
-            total += n.width
-        raise RuntimeError("InternalError: Notch not in self.notches???")
-
-    def _calculate_idx_delta(self, notch_start:int) -> int:
-        if self.tmp_notch.winfo_x() < self.notch_dragging.winfo_x():
-            # dragging =>
-            if self.tmp_notch == self.notches[-1]:
-                return 0
-            next_notch:TabNotch = self.notches[self.tmp_notch.idx+1]
-            notch_end:int = notch_start + self.notch_dragging.width
-            next_notch_start:int = self.tmp_notch.x + self.tmp_notch.width
-            if notch_end > next_notch_start+next_notch.width/2:
-                return +1
-            else:
-                return 0
-        else:
-            # dragging <=
-            if self.tmp_notch == self.notches[0]:
-                return 0
-            prev_notch:TabNotch = self.notches[self.tmp_notch.idx-1]
-            prev_notch_half:int = self.tmp_notch.x - prev_notch.width/2
-            if notch_start < prev_notch_half:
-                return -1
-            else:
-                return 0
-
-    def _reshiffle(self, delta:int) -> None:
-        idx:int = self.tmp_notch.idx
-        self.tmp_notch.idx += delta
-        self._swap(self.notches, idx, idx+delta)
-        self.tmp_notch.x += self.notches[idx].width * delta
-        for i in (idx, idx+delta):
-            self.notches[i].grid(row=1, column=i)
-        self.on_reshuffle(idx, idx+delta)
-
-    @staticmethod
-    def _swap(array:list, idxa:int, idxb:int):
-        array[idxa], array[idxb] = array[idxb], array[idxa]
-
-    def see(self, idx:int) -> None:
-        assert isinstance(idx, int), "TypeError"
-        # If idx == len(self.notches): see(add_button_notch)
-        assert 0 <= idx <= len(self.notches), "ValueError"
+    # See a specific page
+    def see(self, page:NotebookPage) -> None:
+        assert isinstance(page, NotebookPage), "TypeError"
+        assert page in self.pages, "Page not in self.pages?"
+        idx:int = self.pages.index(page)
+        see_add:bool = idx == len(self.pages)-1
         # Get information
         super().update_idletasks()
         full_width:int = super().winfo_width()
@@ -266,11 +276,10 @@ class TabNotches(BetterFrame):
         # Calculate the minx and maxx of the notch
         minx:int = 0
         for i in range(idx):
-            minx += self.notches[i].width
-        if idx == len(self.notches):
+            minx += self.pages[i].cget("width")
+        maxx:int = minx + self.pages[idx].cget("width")
+        if see_add:
             maxx:int = full_width
-        else:
-            maxx:int = minx + self.notches[idx].width
         # Calculate the target_low and target_high
         target_low, target_high = minx/full_width, maxx/full_width
         if curr_low > target_low:
@@ -282,11 +291,178 @@ class TabNotches(BetterFrame):
             target_high_low:float = (maxx-viewport_width) / full_width
             super().xview("moveto", str(target_high_low))
 
+    # Iterate over all of the pages
+    def iter_pages(self) -> Iterator[NotebookPage]:
+        for page in self.pages:
+            yield page
+
+    @property
+    def number_of_pages(self) -> int:
+        return len(self.pages)
+
+    # Focus methods
+    def focus_page(self, page:NotebookPage|None) -> None:
+        if page == self.curr_page:
+            return None
+        if self.curr_page is not None:
+            self.curr_page.unfocus()
+            self.curr_page.disappear()
+        if page:
+            page.appear()
+            TabNotch.focus(page) # Ewww
+        self.curr_page:NotebookPage = page
+        self.notebook.event_generate("<<Tab-Switched>>")
+        if page:
+            self.see(self.curr_page)
+
+    def focus_prev(self) -> None:
+        page:NotebookPage = self._switch_next_prev_tab(strides=-1, default=-1)
+        if page == self.curr_page:
+            page:NotebookPage = None
+        self.focus_page(page)
+
+    def focus_next(self) -> None:
+        page:NotebookPage = self._switch_next_prev_tab(strides=+1, default=0)
+        if page == self.curr_page:
+            page:NotebookPage = None
+        self.focus_page(page)
+
+    def focus_idx(self, idx:int) -> None:
+        self.pages[idx].focus()
+
+    # Destroy tab
+    def page_destroy(self, page:NotebookPage) -> None:
+        if self.notebook.on_try_close(page):
+            return None
+        if self.curr_page == page:
+            if self.pages[0] == page:
+                self.focus_next()
+            else:
+                self.focus_prev()
+        assert self.curr_page != page, "SanityCheck"
+        assert self.curr_page in self.pages+[None], "SanityCheck"
+        page._close()
+        self.pages.remove(page)
+
+    def _switch_next_prev_tab(self, strides:int, default:int) -> NotebookPage:
+        if self.curr_page is None:
+            if len(self.pages) == 0:
+                return None
+            return self.pages[default]
+        else:
+            idx:int = self.pages.index(self.curr_page) + strides
+            return self.pages[idx%len(self.pages)]
+
+    def _clicked(self, notch_or_page:TabNotch|NotebookPage) -> None:
+        if notch_or_page == self.add_notch:
+            self.notebook.event_generate("<<Tab-Create>>")
+        else:
+            notch_or_page.focus()
+
+    def _close(self, notch_or_page:TabNotch|Notebookpage) -> None:
+        if notch_or_page != self.add_notch:
+            notch_or_page.close()
+
+    def _start_dragging(self, event:tk.Event) -> None:
+        if not isinstance(event.widget, NotebookPage): return None
+        self._page_dragging:NotebookPage = event.widget
+        if not self._page_dragging.cget("can_drag"):
+            self._page_dragging:NotebookPage = None
+        self.dragx:int = event.x
+        return "break"
+
+    def _end_dragging(self, event:tk.Event=None) -> str:
+        if self._page_dragging is None:
+            return None
+        if self.dragging:
+            self._tmp_notch.grid_forget()
+            idx:int = self._tmp_notch_info["idx"]
+            self._page_dragging.grid(row=1, column=idx)
+            self.pages[idx] = self._page_dragging
+        self._page_dragging:NotebookPage = None
+        self.dragging:bool = False
+        return "break"
+
+    def _drag(self, event:tk.Event) -> str:
+        if self._page_dragging is None:
+            return None
+        if not (event.state & BUTTON1_TK_STATE):
+            self._end_dragging()
+            return None
+        if not self.dragging:
+            if abs(event.x-self.dragx) < NOT_DRAG_DIST:
+                return None
+            self.dragging:bool = True
+            # Config temp notch
+            self._tmp_notch.config(text=self._page_dragging.cget("text"))
+            # Save notch info
+            idx:int = self.pages.index(self._page_dragging)
+            x:int = self._get_start_x(self._page_dragging)
+            self._tmp_notch_info:dict[str:int] =  dict(idx=idx, x=x)
+            # Put the temp notch in place
+            self._tmp_notch.grid(row=1, column=idx)
+            # Lift real notch
+            tk.Misc.lift(self._page_dragging)
+            # Put temp notch in data structures
+            self.pages[idx] = self._tmp_notch
+
+        x:int = event.x_root - super().winfo_rootx()
+        delta:int = self._calculate_idx_delta(x-self.dragx)
+        if delta != 0:
+            self._reshiffle(delta)
+        self._page_dragging.place(x=x-self.dragx, y=0)
+        return "break"
+
+    def _get_start_x(self, page:NotebookPage) -> int:
+        total:int = 0
+        for p in self.pages:
+            if p == page:
+                return total
+            total += p._width
+        raise RuntimeError("InternalError: page not in self.pages?")
+
+    def _calculate_idx_delta(self, notch_start:int) -> int:
+        idx:int = self._tmp_notch_info["idx"]
+        x:int = self._tmp_notch_info["x"]
+        if x < self._page_dragging.winfo_x():
+            # dragging =>
+            if self._tmp_notch == self.pages[-1]:
+                return 0
+            next_notch:TabNotch = self.pages[idx+1]
+            notch_end:int = notch_start + self._page_dragging._width
+            next_notch_start = x + self._tmp_notch.cget("width")
+            if notch_end > next_notch_start+next_notch._width/2:
+                return +1
+            else:
+                return 0
+        else:
+            # dragging <=
+            if self._tmp_notch == self.pages[0]:
+                return 0
+            prev_notch:TabNotch = self.pages[idx-1]
+            prev_notch_half = x - prev_notch.cget("width")/2
+            if notch_start < prev_notch_half:
+                return -1
+            else:
+                return 0
+
+    def _reshiffle(self, delta:int) -> None:
+        idx:int = self._tmp_notch_info["idx"]
+        self._tmp_notch_info["idx"] += delta
+        self._swap(self.pages, idx, idx+delta)
+        self._tmp_notch_info["x"] += self.pages[idx]._width * delta
+        for i in (idx, idx+delta):
+            self.pages[i].grid(row=1, column=i)
+
+    @staticmethod
+    def _swap(array:list, idxa:int, idxb:int):
+        array[idxa], array[idxb] = array[idxb], array[idxa]
+
     def _renaming(self, notch:TabNotch, rename:Callable) -> None:
         curr_high:float = float(super().xview()[1])
         rename()
-        if curr_high > 0.999:
-            self.see(len(self.notches))
+        if (curr_high > 0.999) and self.pages:
+            self.see(self.pages[-1])
 
 
 CONTROL_T:bool = False
@@ -296,28 +472,46 @@ CONTROL_NUMBERS_CONTROLS:bool = False
 CONTROL_NUMBERS_RESTRICT:bool = False
 HIDE_SCROLLBAR:bool = True
 
-class NotebookPage:
-    __slots__ = "notebook", "frame", "notch"
+class NotebookPage(TabNotch):
+    __slots__ = "notebook", "page_frame", "notches"
 
-    def __init__(self, notebook:Notebook, frame:tk.Frame, notch:TabNotch):
+    def __init__(self, *, notebook:Notebook, page_frame:tk.Frame,
+                 notches:TabNotches, **kwargs:dict[str:object]) -> NotebookPage:
+        super().__init__(notches, **kwargs)
+        self.page_frame:tk.Misc = page_frame
+        self.notches:TabNotches = notches
         self.notebook:Notebook = notebook
-        self.notch:TabNotch = notch
-        self.frame:tk.Misc = frame
 
     def add_frame(self, frame:tk.Misc) -> NotebookPage:
-        frame.pack(in_=self.frame, fill="both", expand=True)
+        def call(func:Callable[None]) -> Callable[tk.Event,str]:
+            def inner(event:tk.Event) -> str:
+                func()
+                return "break"
+            return inner
+        frame.pack(in_=self.page_frame, fill="both", expand=True)
         if TAB_CONTROLS:
             #frame.bind("<Control-Key><Tab>", self.notebook.switch_next_tab)
-            frame.bind("<Control-Tab>", self.notebook.switch_next_tab, add=True)
+            frame.bind("<Control-Tab>", call(self.notches.focus_next), add=True)
             if IS_UNIX:
                 sequence:str = "<Control-ISO_Left_Tab>"
             else:
                 sequence:str = "<Control-Shift-Tab>"
-            frame.bind(sequence, self.notebook.switch_prev_tab, add=True)
+            frame.bind(sequence, call(self.notches.focus_prev), add=True)
         if CONTROL_NUMBERS_CONTROLS:
+            def _control_numbers(event:tk.Event) -> str:
+                number:str = getattr(event, "keysym", None)
+                if not isinstance(number, str): return None
+                if number not in set("123456789"): return None
+                if CONTROL_NUMBERS_RESTRICT:
+                    idx:int = min(len(self.pages), int(number)) - 1
+                else:
+                    idx:int = int(number) - 1
+                if 0 <= idx < self.notches.number_of_pages:
+                    self.notches.focus_idx(idx)
+                return "break"
             for i in range(1, 10):
                 for on in (f"<Control-KeyPress-{i}>", f"<Alt-KeyPress-{i}>"):
-                    frame.bind(on, self.notebook.control_numbers, add=True)
+                    frame.bind(on, _control_numbers, add=True)
         if CONTROL_T:
             def control_t(event:tk.Event) -> str:
                 if event.state&1:
@@ -330,10 +524,10 @@ class NotebookPage:
         if CONTROL_W:
             def control_w(event:tk.Event) -> str:
                 kwargs:dict = dict(state=event.state, x=event.x, y=event.y)
-                if (event.state&1) or (self.notebook.curr_page is None):
+                if (event.state&1) or (self.notches.curr_page is None):
                     self.notebook.event_generate("<<Close-All>>", **kwargs)
                     return ""
-                self.notebook.tab_destroy(self.notebook.curr_page)
+                self.notebook.tab_destroy(self.notches.curr_page)
                 return "break"
             frame.bind("<Control-w>", control_w, add=True)
             frame.bind("<Control-W>", control_w, add=True)
@@ -341,140 +535,93 @@ class NotebookPage:
         return self
 
     def rename(self, title:str) -> NotebookPage:
-        self.notch.rename(title)
+        super().config(text=title)
         return self
 
     def close(self) -> None:
         self.notebook.tab_destroy(self)
 
-    def _close(self) -> None:
-        self.notch.destroy()
-        self.frame.destroy()
-
     def focus(self) -> NotebookPage:
-        self.notebook._tab_switch_to(self)
+        self.notebook.tab_focus(self)
         return self
+
+    def disappear(self) -> None:
+        self.page_frame.pack_forget()
+
+    def appear(self) -> None:
+        self.page_frame.pack(fill="both", expand=True)
+
+    def _close(self) -> None:
+        self.page_frame.destroy()
+        super().destroy()
 
 
 class Notebook(tk.Frame):
-    __slots__ = "pages", "next_id", "curr_page", "notches", "bottom", \
-                "on_try_close"
+    __slots__ = "pages", "next_id", "notches", "bottom", "on_try_close"
 
     def __init__(self, master:tk.Misc, min_tab_notch_size:int=0,
-                 font:str="TkTextFont", scrolled:bool=True) -> Notebook:
-        self.pages:list[NotebookPage] = []
-        self.curr_page:NotebookPage = None
-        self.on_try_close:Function[NotebookPage,Break] = lambda page: False
+                 font:str="TkTextFont", scrolled:bool=True,
+                 **kwargs) -> Notebook:
+        self.on_try_close:Callable[NotebookPage,Break] = lambda page: False
 
         super().__init__(master, **WIDGET_KWARGS, bg="black")
-        self.notches:TabNotches = TabNotches(self, min_tab_notch_size,
+        self.notches:TabNotches = TabNotches(self, min_width=min_tab_notch_size,
                                              font=font, scrolled=scrolled)
         self.notches.pack(fill="both")
-        self.notches.on_reshuffle = self.update_pages_list
         self.bottom:tk.Frame = tk.Frame(self, **WIDGET_KWARGS, bg="black")
         self.bottom.pack(fill="both", expand=True)
 
+    # Enable/Disable the add tab notch
     def disable_new_tab(self) -> None:
         self.notches.disable_new_tab()
 
     def enable_new_tab(self) -> None:
         self.notches.enable_new_tab()
 
+    # Create a tab
     def tab_create(self) -> NotebookPage:
-        notch:TabNotch = self.notches.add()
-        notch.rename("Untitled")
         frame:tk.Frame = tk.Frame(self.bottom, **WIDGET_KWARGS, bg="black")
-        page:NotebookPage = NotebookPage(self, frame=frame, notch=notch)
-        notch.page:NotebookPage = page
-        self.pages.append(page)
-        return page
+        page:NotebookPage = self.notches.add(page_frame=frame, notebook=self)
+        return page.rename("Untitled")
 
+    # Iterate over all of the pages
     def iter_pages(self) -> Iterator[NotebookPage]:
-        for notch in self.notches.notches:
-            yield notch.page
+        yield from self.notches.iter_pages()
 
-    def _tab_switch_to(self, page:NotebookPage|None) -> None:
-        if page == self.curr_page:
-            return None
-        if self.curr_page is not None:
-            self.curr_page.notch.tell_unfocused()
-            self.curr_page.frame.pack_forget()
-        if page:
-            page.frame.pack(fill="both", expand=True)
-            page.notch.tell_focused()
-        self.curr_page:NotebookPage = page
-        super().event_generate("<<Tab-Switched>>")
-        if page:
-            self.see(self.curr_page)
+    @property
+    def number_of_pages(self) -> int:
+        return self.notches.number_of_pages
 
-    def switch_prev_tab(self, event:tk.Event=None) -> str:
-        page:NotebookPage = self._switch_next_prev_tab(strides=-1, default=-1)
-        if page == self.curr_page:
-            page:NotebookPage = None
-        self._tab_switch_to(page)
+    # Currently focused page
+    @property
+    def curr_page(self) -> NotebookPage|None:
+        return self.notches.curr_page
+
+    # Focus methods
+    def switch_prev_tab(self, _:tk.Event=None) -> str:
+        self.notches.focus_prev()
         return "break"
 
-    def switch_next_tab(self, event:tk.Event=None) -> str:
-        page:NotebookPage = self._switch_next_prev_tab(strides=+1, default=0)
-        if page == self.curr_page:
-            page:NotebookPage = None
-        self._tab_switch_to(page)
+    def switch_next_tab(self, _:tk.Event=None) -> str:
+        self.notches.focus_next()
         return "break"
 
-    def _switch_next_prev_tab(self, strides:int, default:int) -> NotebookPage:
-        if self.curr_page is None:
-            if len(self.pages) == 0:
-                return None
-            return self.pages[default]
-        else:
-            idx:int = self.pages.index(self.curr_page) + strides
-            return self.pages[idx%len(self.pages)]
+    def tab_focus(self, page:NotebookPage|None) -> None:
+        self.notches.focus_page(page)
 
+    # Destroy tab
     def tab_destroy(self, page:NotebookPage) -> None:
-        if self.on_try_close(page):
-            return None
-        if self.curr_page == page:
-            if self.pages[0] == page:
-                self.switch_next_tab()
-            else:
-                self.switch_prev_tab()
-        assert self.curr_page != page, "SanityCheck"
-        assert self.curr_page in self.pages+[None], "SanityCheck"
-        page._close()
-        self.pages.remove(page)
-        self.notches.remove(page.notch)
+        self.notches.page_destroy(page)
 
-    def update_pages_list(self, idxa:int, idxb:int) -> None:
-        # TabNotches._reshuffle shuffled the pages so now we have to
-        #  update self.pages
-        self.notches._swap(self.pages, idxa, idxb)
-
-    def control_numbers(self, event:tk.Event) -> str:
-        number:str = getattr(event, "keysym", None)
-        if not isinstance(number, str):
-            return None
-        if number not in set("123456789"):
-            return None
-        if CONTROL_NUMBERS_RESTRICT:
-            idx:int = min(len(self.pages), int(number)) - 1
-        else:
-            idx:int = int(number) - 1
-        if not (0 <= idx < len(self.pages)):
-            return None
-        self.pages[idx].focus()
-        return "break"
-
+    # Scroll notches to see a specific page
     def see(self, page:NotebookPage) -> None:
-        assert page in self.pages, "Page not in self.pages?"
-        idx:int = self.pages.index(page)
-        see_add:bool = idx == len(self.pages)-1
-        self.notches.see(idx+see_add)
+        self.notches.see(page)
 
 
-if __name__ == "__main__":
+if __name__ == "__main__a":
     def add_tab(title:str) -> None:
         l = tk.Label(notebook, bg="black", fg="white", text=title)
-        notebook.tab_create().rename(title=title).add_frame(l).focus()
+        notebook.tab_create().rename(title).add_frame(l).focus()
 
     TAB_CONTROLS:bool = True
     CONTROL_NUMBERS_CONTROLS:bool = True
@@ -502,17 +649,15 @@ if __name__ == "__main__":
         """
         t = tk.Text(notebook, bg="black", fg="white", insertbackground="white",
                     takefocus=False, highlightthickness=0, bd=0)
-        t.insert("end", len(notebook.pages)+1)
+        t.insert("end", notebook.number_of_pages+1)
         page = notebook.tab_create()
         page_to_text[page] = t
-        page.rename(title=f"Tab number {len(notebook.pages)}")
+        page.rename(title=f"Tab number {notebook.number_of_pages}")
         page.add_frame(t).focus()
         return page
 
     def selected(_:tk.Event=None) -> None:
-        """
-        Do what you will.
-        """
+        print("Focused a page")
         if notebook.curr_page is None:
             return None
         page_to_text[notebook.curr_page].focus_set()
@@ -521,7 +666,8 @@ if __name__ == "__main__":
         """
         Return True to stop the tab from being closed.
         """
-        return notebook.pages.index(page)%2
+        print(f"Tried closing a page")
+        return list(notebook.iter_pages()).index(page)%2
 
     def close_all(event:tk.Event) -> None:
         """
@@ -557,7 +703,8 @@ if __name__ == "__main__":
 
     for i in range(5):
         page:NotebookPage = add_tab()
-        page.notch.can_drag:bool = i == 2 # Disable dragging of 3rd tab
+        can_drag:bool = (i != 2) # Disable dragging of 3rd tab
+        page.config(can_drag=can_drag)
 
     nb, nts = notebook, notebook.notches
     root.bind_all("<Button-3>", lambda e: print(e.widget._w))

@@ -12,6 +12,12 @@ class ReparentManager(Rule):
 
     def __init__(self, plugin:BasePlugin, widget:tk.Misc):
         super().__init__(plugin, widget, ons=())
+        # `widget` is the text's master (not actual because of the canvas
+        #   in `BetterText`). `self.target` is the `tk.Misc` that is directly
+        #   inside plugin.master `tk.Text` in case of `tk.Text` and `tk.Canvas`
+        #   in case of `tk.Canvas`.
+        # We should remove this code when BetterText starts to behave like a
+        #   proper tkinter widget
         self.target:tk.Misc = widget
         while self.target.master != plugin.master:
             self.target:tk.Misc = self.target.master
@@ -49,7 +55,7 @@ class ReparentManager(Rule):
             raise NotImplementedError("Can't work with toplevel widgets.")
         else:
             raise NotImplementedError("Unreachable code")
-            raise NotImplementedError("Can't work with the " \
+            raise NotImplementedError(f"Can't work with the " \
                                       f"{self.manager_type} manager")
         self.target.grid(in_=self.frame, sticky="news", row=self.SPACE_SIZE,
                          column=self.SPACE_SIZE)

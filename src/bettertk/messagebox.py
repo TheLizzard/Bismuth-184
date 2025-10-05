@@ -71,7 +71,7 @@ class Popup(BetterTk):
         y -= super().winfo_height()//2
         super().geometry(f"+{x}+{y}")
 
-    def get_root(self, widget:tk.Misc) -> tk.Tk|tk.Toplevel:
+    def get_root(self, widget:tk.Misc) -> tk.Tk|tk.Toplevel|BetterTk:
         while True:
             if isinstance(widget, tk.Tk|tk.Toplevel|BetterTk):
                 return widget
@@ -89,7 +89,6 @@ class Tell(Popup):
         super().__init__(master, title=title, icon=icon, center=center,
                          center_widget=center_widget, block=block,
                          iconphoto_default=iconphoto_default)
-        super().bind("<Return>", lambda e: self._destroy())
 
         left_frame = tk.Frame(self, **FRAME_KWARGS)
         left_frame.pack(side="left", fill="y", expand=True)
@@ -132,13 +131,14 @@ class YesNoQuestion(Popup):
     __slots__ = "result"
 
     def __init__(self, master:tk.Misc|None, title:str, message:str, *, icon:str,
-                 center:bool=True, center_widget:tk.Misc=None,
-                 iconphoto_default:bool=False) -> YesNoQuestion:
+                 center_widget:tk.Misc=None, iconphoto_default:bool=False,
+                 default:str="yes", center:bool=True) -> YesNoQuestion:
+        assert isinstance(default, str), "TypeError"
+        assert default in ("yes", "no"), "ValueError"
         self.result:bool = None
         super().__init__(master, title=title, icon=icon, center=center,
                          center_widget=center_widget, block=True,
                          iconphoto_default=iconphoto_default)
-        super().bind("<Return>", lambda e: self.yes_clicked())
 
         right_frame = tk.Frame(self, **FRAME_KWARGS)
         right_frame.pack(side="right", fill="both", expand=True)
@@ -160,6 +160,14 @@ class YesNoQuestion(Popup):
                        width=7, command=self.no_clicked)
         yes.pack(side="left", anchor="e", padx=5, pady=(5, 20))
         no.pack(side="left", anchor="e", padx=15, pady=(5, 20))
+
+        default_widget:tk.Button = yes if default == "yes" else no
+        for widget in (self, yes):
+            for event in ("<Return>", "<KP_Enter>", "<Escape>"):
+                widget.bind(event, lambda e: self.yes_clicked())
+        for widget in (no,):
+            for event in ("<Return>", "<KP_Enter>", "<Escape>"):
+                widget.bind(event, lambda e: self.no_clicked())
 
         super().mainloop()
 

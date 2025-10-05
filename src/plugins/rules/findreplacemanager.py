@@ -185,9 +185,7 @@ class FindReplaceManager(Rule):
             self.replace.destroy()
             self.replace:tk.Misc = None
             self.button.config(text="Find", command=self._find)
-        self.window.focus_force()
-        self.window.focus_set()
-        self.find.focus_set()
+        self.focus()
 
     def open_replace(self) -> None:
         self.show()
@@ -210,9 +208,11 @@ class FindReplaceManager(Rule):
             self.replace.insert("end", self.replace_str)
             self.replace.bind("<Escape>", lambda e: self.hide())
             self.find.bind("<Escape>", lambda e: self.hide())
-        self.window.focus_force()
+        self.focus()
+
+    def focus(self) -> None:
         self.window.focus_set()
-        self.find.focus_set()
+        self.find.focus_force()
 
     def fill_in_find(self) -> None:
         # Add whatever the user has selected in the editor
