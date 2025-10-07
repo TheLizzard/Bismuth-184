@@ -1,6 +1,7 @@
 from __future__ import annotations
 from threading import Thread, Lock, Event as _Event
 from contextlib import contextmanager
+from collections import defaultdict
 from typing import Callable
 from time import sleep
 import tempfile
@@ -21,9 +22,9 @@ Break:type = bool
 Pid:type = int
 Handler:type = Callable["Event",Break|None]
 EventBindings:type = list[tuple[Threaded,Handler]]
+ATTEMPTS:int = 100 # Part of timeout process
 
 _TMP_FOLDER:str = tempfile.gettempdir()
-CHUNK_SIZE:int = 5120 # 5kb
 
 
 def format_to_permutation(format:str) -> Iterable[str]:
@@ -48,7 +49,6 @@ def lock_wrapper(file:File) -> None:
 
 
 # Only until I implement something like tmpfs in python
-#   which might take a long time :/
 import shutil
 import os
 
@@ -71,7 +71,7 @@ class TmpFilesystem:
     def open(self, path:str, mode:str, *, lock:bool=True) -> File:
         if lock:
             with self.lock_wrapper("fs_write.lock"):
-                return open(self.normalise(path), mode)
+                self.open(path, mode, lock=False)
         else:
             return open(self.normalise(path), mode)
 
@@ -79,8 +79,7 @@ class TmpFilesystem:
     def lock_wrapper(self, path_or_file:str|File) -> None:
         if isinstance(path_or_file, str):
             path:str = path_or_file
-            exists:bool = os.path.exists(self.normalise(path))
-            file:File = self.open(path, ("rb" if exists else "wb"), lock=False)
+            file:File = self.open(path, "ab+", lock=False)
         else:
             file:File = path_or_file
         try:
@@ -135,7 +134,7 @@ class TmpFilesystem:
         # TODO: Implement cleanup?
         pass
 
-    def get_free_file(self, folder:str, format:str, mode:str) -> File|None:
+    def get_free_file(self, folder:str, format:str, *, mode:str) -> File|None:
         assert "w" in mode, "mode must be write"
         with self.lock_wrapper("fs_write.lock"):
             for perm in format_to_permutation(format):
@@ -201,7 +200,7 @@ class IPC:
         _sig_to_ipc[sig] = self
         self.sig = sig
         self._call_queue:list[tuple[list[Handler],Event]] = []
-        self._bindings:dict[EventType:EventBindings] = {}
+        self._bindings:defaultdict[EventType:EventBindings] = defaultdict(list)
         self._fs:TmpFilesystem = TmpFilesystem(name)
         self._bindings_lock:Lock = Lock()
         self._root:str = str(SELF_PID)
@@ -217,16 +216,6 @@ class IPC:
         with TmpFilesystem(name) as fs:
             with fs.lock_wrapper(file):
                 yield None
-
-    @staticmethod
-    def rm_event(func:Callable[Break|None]) -> Callable[Event,Break|None]:
-        """
-        A higher order function that takes a function that takes no args
-        and returns a function that takes 1 arg that is ignored
-        """
-        def inner(event:Event) -> Break|None:
-            return func()
-        return inner
 
     def event_generate(self, event:EventType, *, data:object=None,
                        where:Location="all", timeout:int=1000,
@@ -244,6 +233,10 @@ class IPC:
         if event == "":
             raise ValueError("event can't be an empty string. Look at " \
                              "the help(IPC.bind) for more info")
+        assert_type(timeout, int, "timeout")
+        assert_type(where, Location, "where")
+        assert_type(event, EventType, "event")
+        assert_type(ignore_bad_pids, bool, "ignore_bad_pids")
 
         def inner(pid:int) -> None:
             if pid == SELF_PID:
@@ -251,12 +244,10 @@ class IPC:
             else:
                 try:
                     self._send_data(pid, data, timeout=timeout)
-                except FileExistsError as error:
+                except (FileExistsError,ProcessLookupError) as error:
                     if not ignore_bad_pids:
                         raise error
 
-        assert_type(where, Location, "where")
-        assert_type(event, EventType, "event")
         event:Event = Event(event, data, _from=self._root)
         data:bytes = serialiser.dumps(event).encode("utf-8")
         threads:list[Thread] = []
@@ -292,10 +283,10 @@ class IPC:
         assert_type(handler, Callable, "handler")
         assert_type(threaded, Threaded, "threaded")
         with self._bindings_lock:
-            if event not in self._bindings:
-                self._bindings[event] = []
-            self._bindings[event].insert(0, (threaded,handler))
-        self._add_listener(event)
+            self._bindings[event].append((threaded,handler))
+        if not self._bound:
+            self._add_listener() # Adds the listener for all events
+            self._bound:bool = True
 
     def unbind(self, event:EventType, handler:Handler=None) -> None:
         """
@@ -304,13 +295,12 @@ class IPC:
         handlers for the event are unbound.
         """
         assert not self.dead, "IPC already closed"
-        if event not in self._bindings:
-            raise ValueError("Nothing bound to {event=!r}")
+        assert_type(event, EventType, "event")
         with self._bindings_lock:
             if handler is None:
                 self._bindings[event].clear()
             else:
-                for i, (_,h) in enumerate(self._bindings.get(event, []).copy()):
+                for i, (_,h) in enumerate(self._bindings[event]):
                     if h == handler:
                         self._bindings[event].pop(i)
                         return None
@@ -354,9 +344,8 @@ class IPC:
         assert_type(event, Event, "event")
         non_threaded_handlers:list[Handler] = []
         # In threaded handlers, ignore the return value
-        bindings:list = self._bindings.get(event.type, []) + \
-                        self._bindings.get("", [])
-        for (threaded,handler) in bindings:
+        bindings:list = self._bindings[event.type] + self._bindings[""]
+        for (threaded,handler) in reversed(bindings):
             if handler is not None:
                 if threaded:
                     Thread(target=handler, args=(event,), daemon=True).start()
@@ -374,8 +363,7 @@ class IPC:
             handlers, event = self._call_queue.pop(0)
             for handler in handlers:
                 ret:Break|None = handler(event)
-                if ret:
-                    break
+                if ret: break
 
     def get_all_pids(self) -> Iterable[str]:
         """
@@ -387,6 +375,7 @@ class IPC:
             if not folder.isdigit():
                 continue
             if int(folder) != SELF_PID:
+                # Clean up after the other process
                 if not pid_exists(int(folder)):
                     self._fs.removedir(folder)
                     continue
@@ -411,14 +400,10 @@ class IPC:
             path:str = self._fs.join(self._root, filename)
             # If we read and decode the data correctly, delete the file. Assume
             # if we can decode data, it's the full data and we should not expect
-            # anything to write to that file anyways
+            # anyone to write to that file anyways
             try:
-                data:str = ""
-                with self._fs.open(path, "rb", lock=False) as file:
-                    while True:
-                        chunk:bytes = file.read(CHUNK_SIZE)
-                        if not chunk: break
-                        data += chunk.decode("utf-8")
+                with self._fs.open(path, "r", lock=False) as file:
+                    data:str = file.read()
                 event:Event = serialiser.loads(data)
                 assert_type(event, Event, "event")
             except (TypeError, ValueError, UnicodeDecodeError):
@@ -430,10 +415,8 @@ class IPC:
         assert not self.dead, "IPC already closed"
         self._fs.makedir(self._root)
 
-    def _add_listener(self, event:EventType) -> None:
+    def _add_listener(self) -> None:
         assert not self.dead, "IPC already closed"
-        if self._bound: return None
-        self._bound:bool = True
         # Get old signal so we can reset it at cleanup
         self._old_signal = signal_get(self.sig)
         # Signals shouldn't really do anything complicated or time consuming
@@ -453,23 +436,44 @@ class IPC:
         Thread(target=threaded, daemon=True).start()
 
     def _send_data(self, pid:Pid, data:bytes, *, timeout:int=1000) -> None:
+        """
+        Send data to a specific pid. The timeout is in milliseconds.
+        To send the data we first pick a free file using `self._fs`,
+          we write the data to the file, we notify pid of the message
+        """
         assert not self.dead, "IPC already closed"
-        # Timeout is in milliseconds
-        attempts:int = 100
-        for i in range(attempts):
+        delay:float = timeout/ATTEMPTS # in milliseconds
+        # Try to find a free file for the message
+        while True:
             try:
-                file:File = self._fs.get_free_file(str(pid), "%d%d.msg", "wb")
+                file:File|None = self._fs.get_free_file(str(pid), "%d%d.msg",
+                                                        mode="wb")
+                if file: break
             except FileNotFoundError:
                 return None # pid must have not created a folder/died
-            if file is not None:
-                break
-            sleep(timeout/1000/attempts)
-        else:
-            raise FileExistsError("Too many messages left to pid but none " \
-                                  "of them are read")
+            # Wait delay and try again
+            sleep(delay/1000)
+            timeout -= delay
+            if timeout <= 0:
+                raise FileExistsError("Too many messages left to pid but " \
+                                      "none of them are read")
+        # Write and flush message
         with file:
             file.write(data)
-        signal_send(pid, self.sig)
+            file.flush()
+        # Try to notify the pid that a new message has been sent
+        while True:
+            try:
+                signal_send(pid, self.sig)
+                break
+            except OSError:
+                continue
+            # Wait delay and try again
+            sleep(delay/1000)
+            timeout -= delay
+            if timeout <= 0:
+                raise ProcessLookupError("Cannot notify pid of new message " \
+                                         "because pid isn't listening")
 
 
 def assert_type(obj:T|object, T:type, what:str=None) -> None:

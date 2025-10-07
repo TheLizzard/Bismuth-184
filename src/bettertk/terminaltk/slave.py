@@ -38,6 +38,17 @@ import traceback
 import os
 
 
+Break:type = bool
+def rm_event(func:"Callable[Break|None]") -> "Callable[ipc.Event,Break|None]":
+    """
+    A higher order function that takes a function that takes no args
+    and returns a function that takes 1 arg that is ignored
+    """
+    def inner(event:"ipc.Event") -> "Break|None":
+        return func()
+    return inner
+
+
 class Slave:
     __slots__ = "proc", "ipc", "_dead_event"
 
@@ -48,11 +59,11 @@ class Slave:
         # Set up bindings:
         bind = lambda event, handler: ipc.bind(event, handler, threaded=True)
         bind("run", self.run)
-        bind("pause", self.ipc.rm_event(self.pause))
-        bind("unpause", self.ipc.rm_event(self.unpause))
+        bind("pause", rm_event(self.pause))
+        bind("unpause", rm_event(self.unpause))
         bind("signal", lambda event: self._send_signal(event.data))
         bind("print", lambda event: print(event.data, end="", flush=True))
-        bind("exit", self.ipc.rm_event(self._dead_event.set))
+        bind("exit", rm_event(self._dead_event.set))
         bind("ping", lambda event: self.send("pong", event.data))
         # Tell master we are ready
         self.send("ready")

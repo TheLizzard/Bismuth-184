@@ -83,8 +83,8 @@ class _VirtualEvents:
                         try:
                             result:str = func(event)
                         except Exception as error:
-                            if hasattr(tk, "report_full_exception"):
-                                tk.report_full_exception(self.widget, error)
+                            if hasattr(self.widget, "report_full_exception"):
+                                self.widget.report_full_exception(error)
                             else:
                                 self.widget._report_exception()
                         else:

@@ -5,7 +5,6 @@ import tkinter as tk
 
 
 DEBUG_SEE:bool = False
-DEBUG_BG_TAG:bool = False
 
 
 class DLineInfoWrapper:
@@ -41,20 +40,20 @@ class DLineInfoWrapper:
             self.text.yview("moveto", self.yview)
         return False
 
-    def get_width(self, line:int, char:str="0") -> int:
+    def get_width(self, line:int) -> int:
         assert self._inside, "You can only call this if inside the context"
-        line += 1 # lines in tkinter start from 1
+        tkline:str = f"{line+1}.0" # lines in tkinter start from 1
         if self._monospaced_size != 0:
-            width:int = self._monospaced_get_width(line)
+            width:int = self._monospaced_get_width(tkline)
             if width != -1: # if there's a tab in the input, fail gracefully
                 return width
-        self.text.see(f"{line}.{char}", no_xscroll=True)
-        dlineinfo:tuple[int] = self.text.dlineinfo(f"{line}.0")
+        self.text.see(tkline, no_xscroll=True)
+        dlineinfo:tuple[int] = self.text.dlineinfo(tkline)
         if dlineinfo is None:
             return 0
         width:int = dlineinfo[2]
         if self._assume_monospaced:
-            chars:str = self.text.get(f"{line}.0", f"{line}.0 lineend")
+            chars:str = self.text.get(tkline, f"{tkline} lineend")
             if chars and ("\t" not in chars): # if tab/s, don't store value
                 size:float = width/len(chars)
                 if (int(size) != size) and (not self._shown_monospace_err):
@@ -64,7 +63,7 @@ class DLineInfoWrapper:
                 self._monospaced_size:int = int(size)
         return width
 
-    def _monospaced_get_width(self, line:int) -> int:
+    def _monospaced_get_width(self, tkline:str) -> int:
         """
         If we are using monospaced font and we already know it's size
           just calculate the line length in python instead of
@@ -72,7 +71,7 @@ class DLineInfoWrapper:
           which sometimes cause flickering and is super slow
         Fails and returns -1 if there is a tab in the input.
         """
-        chars:str = self.text.get(f"{line}.0", f"{line}.0 lineend")
+        chars:str = self.text.get(tkline, f"{tkline} lineend")
         if "\t" in chars: # force fail on tabs
             return -1
         return len(chars) * self._monospaced_size
@@ -148,40 +147,39 @@ class XViewFix(Delegator):
         self.text:tk.Text = text
         super().__init__()
 
-    def fix_dirty(self, char:str="0") -> None:
-        with self.dlineinfo:
-            for line in self.dirty:
-                self.line_lengths[line] = self.dlineinfo.get_width(line=line,
-                                                                   char=char)
-            self.dirty.clear()
+    def fix_dirty(self) -> None:
+        try:
+            with self.dlineinfo:
+                for line in self.dirty:
+                    length:int = self.dlineinfo.get_width(line=line)
+                    self.line_lengths[line] = length
+                self.dirty.clear()
+        except RuntimeError as err:
+            if hasattr(self.text, "report_full_exception"):
+                self.text.report_full_exception(err)
+            else:
+                self.text._report_exception()
 
     def lines_dirtied(self, idxa:str, idxb:str) -> None:
-        linea:int = int(idxa.split(".")[0])
-        lineb:int = int(idxb.split(".")[0])
+        # tkinter lines start from 1 and not 0
+        linea:int = int(idxa.split(".")[0]) - 1
+        lineb:int = int(idxb.split(".")[0]) - 1
         for line in range(linea, lineb+1):
-            self.dirty.add(line-1)
+            self.dirty.add(line)
 
     # On insert/delete (called even from inside control-z)
     def insert(self, index:str, chars:str, tags:tuple[str]|str=None) -> None:
-        char:str = self.delegate.index(index).split(".")[1]
         self.delegate.event_generate("<<XViewFix-Before-Insert>>")
         self._on_before_insert(index, chars)
         self.delegate.insert(index, chars, tags)
-        try:
-            self.fix_dirty(char=char)
-        except RuntimeError as err:
-            if hasattr(tk, "report_full_exception"):
-                tk.report_full_exception(self.text, err)
-            else:
-                self.text._report_exception()
+        self.fix_dirty()
         self.delegate.event_generate("<<XViewFix-After-Insert>>")
 
     def delete(self, index1:str, index2:str|None=None) -> None:
-        char:str = self.delegate.index(index1).split(".")[1]
         self.delegate.event_generate("<<XViewFix-Before-Delete>>")
         self._on_before_delete(index1, index2)
         self.delegate.delete(index1, index2)
-        self.fix_dirty(char=char)
+        self.fix_dirty()
         self.delegate.event_generate("<<XViewFix-After-Delete>>")
 
     # Add lines to dirty when the text is modified
@@ -189,18 +187,16 @@ class XViewFix(Delegator):
         idx:str = self.text.index(idx)
         if self.text.compare(idx, "==", "end"):
             idx:str = self.text.index("end -1c")
-        linestart:int = int(idx.split(".")[0])-1 # list idxs not text idxs
+        linestart:int = int(idx.split(".")[0]) - 1 # list idxs not text idxs
         self.dirty.add(linestart)
-        for i in range(chars.count("\n")):
-            line:int = linestart + i + 1 # list idxs not text idxs
+        for line in range(linestart+1, linestart+chars.count("\n")+1):
             self.line_lengths.insert(line, -1)
             self.dirty.add(line)
 
     def _on_before_delete(self, idxa:str, idxb:str) -> None:
         if idxb is None:
             idxa:str = self.text.index(f"{idxa} +1c")
-            if idxa == "":
-                return None
+            if idxa == "": return None
             linea, chara = idxa.split(".")
             linea:int = int(linea)
             if chara == "0":
@@ -211,8 +207,7 @@ class XViewFix(Delegator):
         else:
             idxa:str = self.text.index(idxa)
             idxb:str = self.text.index(idxb)
-            if (not idxa) or (not idxb):
-                return None
+            if not (idxa and idxb): return None
             if self.text.compare(idxb, "==", "end"):
                 idxb:str = self.text.index("end -1c")
             low:int = int(idxa.split(".")[0])
@@ -229,48 +224,42 @@ class XViewFix(Delegator):
 #   cpython) in 0.43 sec (without assuming monospaced font)
 class BetterText(tk.Text):
     def __init__(self, master:tk.Misc=None, **kwargs:dict) -> BetterText:
-        self._tags_with_bg:dict[str:str] = {"sel":"#c3c3c3"}
-        self._tags_with_font:set[str] = set()
-        self.ignore_tags_with_bg:bool = False
-        self._lock_tags_with_bg:bool = False
-        self._disabled:bool = False
-        self._xscrollcmd = None
+        self._xscrollcmd:Callable = lambda *args: None
+        self._disabled:bool = True # Set to false at the end of __init__
         self._xoffset:int = 0
         self._canvasx:int = 0
         bg:str = kwargs.pop("background", kwargs.pop("bg", "white"))
-        self._fix_kwargs(kwargs)
-
+        # Deal with kwargs
         self._width:int = kwargs.pop("width", 646)
         self._height:int = kwargs.pop("height", 646)
+        self._fix_kwargs(kwargs)
+        # Canvas
         self._canvas:tk.Canvas = tk.Canvas(master, bd=0, highlightthickness=0,
                                            bg=bg, width=self._width,
                                            height=self._height, cursor="xterm")
+        self._canvas.bind("<Configure>", self._on_resize)
+        # Frame (to allow text to be resized in pixels)
         self._frame = tk.Frame(self._canvas, highlightthickness=0, bd=0)
         self._frame.pack_propagate(False)
-        # https://stackoverflow.com/q/78802587/11106801
+        # Text
         super().__init__(self._frame, bd=0, highlightthickness=0, wrap="none",
                          xscrollcommand=self._on_xscroll_cmd, padx=0, pady=0,
                          **kwargs)
-        self._tags_with_bg["sel"] = super().tag_cget("sel", "background")
         super().pack(fill="both", expand=True)
         self._canvas.create_window((0,0), anchor="nw", window=self._frame,
                                    tags=("text",))
-        self._canvas.bind("<Configure>", self._on_resize)
-
+        # Copy some methods from canvas
         for method in INHERIT_FROM_CANVAS:
             setattr(self, method, getattr(self._canvas, method))
-
+        # Add XViewFix
         self._xviewfix:XViewFix = XViewFix(self)
         self.percolator:Percolator = Percolator(self)
         self.percolator.insertfilter(self._xviewfix)
-
+        # Bind scrolling
         super().bind("<MouseWheel>", self._scroll_windows)
         super().bind("<Button-4>", self._scroll_linux)
         super().bind("<Button-5>", self._scroll_linux)
-        super().bind("<B1-Motion>", self._redraw_sel_bg)
-        super().bind("<ButtonPress-1>", self._redraw_sel_bg)
-        super().bind("<ButtonRelease-1>", self._redraw_sel_bg)
-
+        # Redirect some methods to text
         self._canvas.bind("<MouseWheel>", self._scroll_windows)
         self._canvas.bind("<Button-4>", self._scroll_linux)
         self._canvas.bind("<Button-5>", self._scroll_linux)
@@ -279,23 +268,12 @@ class BetterText(tk.Text):
         self._canvas.bind("<ButtonRelease-1>", self._redirect_event)
         self._canvas.bind("<Double-Button-1>", self._redirect_event)
         self._canvas.bind("<Triple-Button-1>", self._redirect_event)
-
-        # self.after(100, lambda: self._update_viewport(xoffset=self._xoffset))
-
-    def disable(self) -> None:
-        self._disabled:bool = True
-
-    def enable(self) -> None:
+        # Enable self
         self._disabled:bool = False
-        assert self.cget("wrap") == "none", "Disable wrap when enabling" \
-                                            " BetterText"
+        # Re-parent self so that master is our self.master instead of inner
+        self.master:tk.Misc = master
 
-    def _redraw_sel_bg(self, event:tk.Event=None) -> None:
-        """
-        Redraw the sel tag on the canvas
-        """
-        self._redraw_tags_with_bg(tag="sel")
-
+    # Events redirector
     def _redirect_event(self, event:tk.Event) -> None:
         """
         Redirects mouse events from the canvas into the text box.
@@ -306,14 +284,18 @@ class BetterText(tk.Text):
             kwargs["button"] = event.num
         super().event_generate(f"<{name}>", **kwargs)
 
-    def config(self, **kwargs:dict) -> dict|None:
+    # On canvas resize
+    def _on_resize(self, event:tk.Event) -> None:
         """
-        Overwrite this method with our own where we can intercept some
-          arguments. For more info look at `_fix_kwargs`
+        Whenever the dummy canvas is resized, cache the new size
+        and resize the text widget to the same size
         """
-        return super().config(**self._fix_kwargs(kwargs))
-    configure = config
+        self._width, self._height = event.width, event.height
+        self._frame.config(width=self._width, height=self._height)
+        if not self._disabled:
+            self._update_viewport(xoffset=self._xoffset)
 
+    # kwargs fixer
     def _fix_kwargs(self, kwargs:dict) -> dict:
         """
         Intercept changes to wrap and make sure they are "none"
@@ -322,11 +304,22 @@ class BetterText(tk.Text):
         Intercept changes to background/cursor and apply them to the
           canvas as well
         """
+        def wrap_xscrollcmd(func:Callable|None) -> Callable:
+            if not func:
+                return lambda *args: None
+            def inner(low:str, high:str) -> None:
+                try:
+                    return func(low, high)
+                except tk.TclError:
+                    pass
+            return inner
+
         if len(kwargs) == 0:
             return super().config()
         if not self._disabled:
             assert kwargs.pop("wrap", "none") == "none", "wrap must be none"
         assert not kwargs.pop("border", 0), "border must be 0"
+        # https://stackoverflow.com/q/78802587/11106801
         assert not kwargs.pop("padx", 0), "padx must be 0"
         assert not kwargs.pop("pady", 0), "pady must be 0"
         assert not kwargs.pop("bd", 0), "border must be 0"
@@ -336,53 +329,130 @@ class BetterText(tk.Text):
             self._canvas.config(bg=kwargs["bg"])
         if "cursor" in kwargs:
             self._canvas.config(cursor=kwargs["cursor"])
-        self._xscrollcmd = kwargs.pop("xscrollcommand", self._xscrollcmd)
-        if self._xscrollcmd:
+        if "xscrollcommand" in kwargs:
+            self._xscrollcmd = wrap_xscrollcmd(kwargs.pop("xscrollcommand"))
+        if self._xscrollcmd and (not self._disabled):
             self._update_viewport(xoffset=self._xoffset)
         return kwargs
+
+    # Destroy
+    def destroy(self) -> None:
+        """
+        We have to override this function since canvas is the widget that
+          is inside the master passed in in __init__.
+        """
+        self._frame.children.pop(self._name, None)
+        self._canvas.destroy()
+        super().destroy()
+
+    # Enable/Disable
+    def enable(self) -> None:
+        """
+        Enables BetterText so it acts like a fixed tk.Text
+        """
+        self._disabled:bool = False
+        self._update_viewport(low=0.0)
+        wrap:str = self.cget("wrap")
+        assert wrap == "none", "Disable wrap when enabling BetterText"
+
+    def disable(self) -> None:
+        """
+        Disables BetterText so it acts like a normal tk.Text
+        """
+        self._canvas.moveto("text", 0)
+        self._disabled:bool = True
+
+    def assume_monospaced(self) -> None:
+        self._xviewfix.dlineinfo.assume_monospaced()
+
+    def unknown_if_monospaced(self) -> None:
+        self._xviewfix.dlineinfo.unknown_if_monospaced()
+
+    # config/configure/cget
+    def config(self, **kwargs:dict) -> dict|None:
+        """
+        Overwrite this method with our own where we can intercept some
+          arguments. For more info look at `_fix_kwargs`
+        """
+        return super().config(**self._fix_kwargs(kwargs))
+    configure = config
 
     def cget(self, key:str) -> object:
         if key == "xscrollcommand":
             return self._xscrollcmd
         return super().cget(key)
 
-    def _on_resize(self, event:tk.Event) -> None:
-        """
-        Whenever the dummy canvas is resized, cache the new size
-        and resize the text widget to the same size
-        """
-        self._width, self._height = event.width, event.height
-        self._frame.config(width=self._width, height=self._height)
-        self._update_viewport(xoffset=self._xoffset)
+    # Scrolling
+    def _scroll_linux(self, event:tk.Event) -> str:
+        steps:int = SCROLL_SPEED * (1-(event.num == 4)*2)
+        return self._scroll_event(steps, event)
 
+    def _scroll_windows(self, event:tk.Event) -> str:
+        assert event.delta != 0, "On Windows, `event.delta` should never be 0"
+        steps:int = int(-event.delta/abs(event.delta)*SCROLL_SPEED+0.5)
+        return self._scroll_event(steps, event)
+
+    def _scroll_event(self, steps:int, event:tk.Event) -> str:
+        """
+        If we get a scrolling event event:
+         -------- --------------------- -----------------------
+        |        |     Horizontal      |       Vertical        |
+         -------- --------------------- -----------------------
+        | Canvas | self._scroll(steps) | Send to Text widget   |
+        | Text   | self._scroll(steps) | Allow to pass through |
+         -------- --------------------- -----------------------
+        """
+        if event.widget not in (self, self._canvas):
+            return ""
+        if not (event.state&1):
+            if event.widget == self._canvas:
+                super().event_generate(f"<Button-{event.num}>")
+            return ""
+        self._scroll(steps)
+        return "break"
+
+    def _scroll(self, steps:int) -> None:
+        """
+        Calculate the new xoffset and call `update_viewport`.
+        """
+        if self._disabled:
+            return None
+        new_xoffset:int = self._xoffset + steps
+        max_xoffset:int = max(self._xviewfix.line_lengths) - self._width
+        xoffset:int = min(max_xoffset, max(0, new_xoffset))
+        if xoffset != self._xoffset:
+            self._update_viewport(xoffset=xoffset)
+
+    def _on_xscroll_cmd(self, low:str, high:str) -> None:
+        """
+        If the text widget tries to scroll, do complicated maths
+        """
+        if self._disabled:
+            self.cget("xscrollcommand")(str(low), str(high))
+        else:
+            low, high = float(low), float(high)
+            max_line_width:int = self._get_longest_visible_line_length()
+            new_xoffset:int = low * max_line_width
+            if new_xoffset != self._xoffset:
+                self._update_viewport(xoffset=new_xoffset)
+
+    # Helpers/xview
     def _get_longest_visible_line_length(self) -> int:
         """
-        Gets the length of the longest visible line on the screen in pixels.
-        Used in `BetterText.textx`
+        Gets the length of the longest visible line on the screen in pixels
         """
         xview:tuple[str,str]|None = super().xview()
-        if xview is None:
-            return -1
-        return int(self._width/(float(xview[1])-float(xview[0]))+0.5)
-
-        # Get the current viewport (y-axis)
-        top:str = super().index("@0,0")
-        bottom:str = super().index(f"@0,{self._height-1}")
-        top, bottom = int(top.split(".")[0]), int(bottom.split(".")[0])
-        # Get the max line width out of each of the lines in the viewport
-        line_widths:list[int] = self._xviewfix.line_lengths[top-1:bottom]
-        if len(line_widths) == 0:
-            print("error self._xviewfix.line_lengths[top-1:bottom]=[]", top,
-                  bottom, self._xviewfix.line_lengths)
-            return -1
-        return max(line_widths)
+        if xview is None: return -1
+        low, high = xview
+        low, high = float(low), float(high)
+        return int(self._width/(high-low) + 0.5)
 
     def textx(self, x:int, real:bool=True) -> int:
         """
         Converts text viewbox x coordinate into the real x coordinate.
         This is probably a value that tcl internally stores but doesn't
-        expose so we have to calculate it based on the fractions from
-        `Text.xview`
+          expose so we have to calculate it based on the fractions from
+          `Text.xview`
         """
         xview:tuple[str]|None = super().xview()
         if not xview: return x
@@ -395,29 +465,30 @@ class BetterText(tk.Text):
     def fixed_xview(self) -> tuple[str,str]:
         """
         This acts like tkinter.Text.xview with 0 arguments if the text
-        widget was large enough (vertically) to show all of the lines
+          widget was large enough (vertically) to show all of the lines
         """
         # Get base x offset of the viewport and the max line length
         if self._disabled:
             return super().xview()
         max_line_width:int = max(self._xviewfix.line_lengths)
         if max_line_width == 0:
-            print("error max(self._xviewfix.line_lengths)=0")
+            # error: max(self._xviewfix.line_lengths)=0"
             return ("0.0", "1.0")
         # Use the 2 values to calculate the new (low,high) values
         #   that we can pass through to the xscrollcommand
-        low:float = self._xoffset/max_line_width
-        high:float = (self._xoffset+self._width)/max_line_width
-        high:float = min(high, 1.0) # self._width might be > max_line_width
-        return str(low), str(high)
+        low:float  = self._xoffset/max_line_width
+        high:float =  self._width/max_line_width + low
+        return str(low), str(min(high,1.0))
 
     def xview(self, *args:tuple) -> tuple[str]|None:
         """
         Redo everything inside xview from scratch because that is the main
-        issue. This was a pain...
+          issue. This was a pain...
         Note: 'xview scroll XXX units' not allowed because I can't be bothered
               to compute the size of units
         """
+        if self._disabled:
+            return super().xview(*args)
         if len(args) == 0:
             return self.fixed_xview()
         if args[0] == "moveto":
@@ -432,14 +503,12 @@ class BetterText(tk.Text):
         if args[0] == "scroll":
             if len(args) == 2:
                 args:tuple = (*args, "pixels")
-            assert len(args) == 3, \
-                            "'xview scroll' expects 1 or 2 extra arguments"
+            assert len(args) == 3, "'xview scroll' expects 1/2 extra arguments"
             _, size, what = args
             try:
                 size:float = float(size)
             except ValueError:
-                raise ValueError(f"'xview scroll' expects an int/float not " \
-                                 f"{size!r}")
+                raise ValueError(f"'xview scroll' expects an int/float")
             if what == "pixels":
                 self._scroll(int(size+0.5))
             elif what == "units":
@@ -451,224 +520,86 @@ class BetterText(tk.Text):
             return None
         raise NotImplementedError(f"Implement {args!r}")
 
-    def _scroll_linux(self, event:tk.Event) -> str:
-        """
-        If we get a scrolling event event:
-         -------- --------------------- -----------------------
-        |        |     Horizontal      |       Vertical        |
-         -------- --------------------- -----------------------
-        | Canvas | self._scroll(steps) | Send to Text widget   |
-        | Text   | self._scroll(steps) | Allow to pass through |
-         -------- --------------------- -----------------------
-        """
-        if event.widget not in (self, self._canvas):
-            return None
-        if not (event.state&1):
-            if event.widget == self._canvas:
-                super().event_generate(f"<Button-{event.num}>")
-            else:
-                super().after(1, self._redraw_tags_with_bg)
-            return None
-        steps:int = SCROLL_SPEED * (1-(event.num == 4)*2)
-        self._lock_tags_with_bg:bool = True
-        self._scroll(steps)
-        self._lock_tags_with_bg:bool = False
-        return "break"
-
-    def _scroll_windows(self, event:tk.Event) -> str:
-        """
-        Same as `_scroll_linux` but for windows which uses `<MouseWheel>`
-        events with `event.delta`
-        """
-        if event.widget not in (self, self._canvas):
-            return None
-        if not (event.state&1):
-            if event.widget == self._canvas:
-                super().event_generate("<MouseWheel>", delta=event.delta)
-            else:
-                super().after(1, self._redraw_tags_with_bg)
-            return None
-        assert event.delta != 0, "On Windows, `event.delta` should never be 0"
-        steps:int = int(-event.delta/abs(event.delta)*SCROLL_SPEED+0.5)
-        self._lock_tags_with_bg:bool = True
-        self._scroll(steps)
-        self._lock_tags_with_bg:bool = False
-        return "break"
-
-    def _scroll(self, steps:int) -> None:
-        """
-        Calculate the new xoffset and call `update_viewport`.
-        """
-        if self._disabled:
-            xoffset:int = 0
-        else:
-            xoffset:int = min(max(self._xviewfix.line_lengths)-self._width,
-                              max(0, self._xoffset+steps))
-        self._update_viewport(xoffset=xoffset)
-
-    def _on_xscroll_cmd(self, low:str, high:str) -> None:
-        """
-        If the text widget tries to scroll, endo the scrolling and reset
-          using `self._xoffset`
-        """
-        self._update_viewport(xoffset=self._xoffset)
-
+    # See
     def see(self, idx:str, *, no_xscroll:bool=False) -> None:
         """
-        This took so much time (4h) and I am not 100% sure how/why it works
-        but it works :D
         This acts like `tkinter.Text.see` with a hidden `no_xscroll`
           parameter only used in `DLineInfoWrapper.get_width`
         """
-        # This is to disable BetterText.see while still allowing
-        #   DLineInfoWrapper.get_width to work
-        # low, _ = tk.Text.xview(self)
-        # super().see(idx)
-        # super().after(10, tk.Text.xview, self, "moveto", low)
-        # return None
-
-        if no_xscroll:
+        if no_xscroll or self._disabled:
             return super().see(idx)
         idx:str = super().index(idx)
+        # Threshold for long (target far away) vs shot (target close) scroll
         threshold:float = 0.346*self._width + 13.34
         cur_xoffset:int = self._xoffset
         if super().compare(f"{idx} linestart", "==", idx):
             tar_xoffset:int = 0
         else:
-            xpixels:list[int] = super().count(f"{idx} linestart", idx,
-                                              f"xpixels")
-            if xpixels is None:
-                assert self._disabled, "This should only happen when disabled"
-                xpixels:list[int] = [0]
-            tar_xoffset:int = xpixels[0]
-        diff:int = cur_xoffset - tar_xoffset
+            tar_xoffset:int = super().count(f"{idx} linestart", idx,
+                                            f"xpixels")[0]
+        # Calculate if target is already horizontally in the viewport
+        #   or we need to make a short/long horizontal jump
+        diff:int = tar_xoffset - cur_xoffset
         if DEBUG_SEE: print(f"{diff=}, {cur_xoffset=}, {tar_xoffset=}")
-        if diff <= 0 <= diff+self._width-3:
-            if DEBUG_SEE: print("No need")
-            # No need to scroll
-            xoffset:int = cur_xoffset
-        elif diff-threshold < 0 < diff+self._width+threshold:
-            if DEBUG_SEE: print("Scroll near")
+        if 0 <= diff <= self._width: # Do not modify this line (causes jitter)
+            # Target already horizontally visible
+            if DEBUG_SEE: print("Target already horizontally visible")
+            super().yview_pickplace(idx) # Vertical scroll
+            return None
+        elif -threshold < diff < self._width+threshold:
             # Scroll (near) so that idx is at the edge of the text box
-            xoffset:int = tar_xoffset-1
-            xoffset -= (self._width-4)*(diff<0)
+            if DEBUG_SEE: print("Scroll near")
+            new_xoffset:int = tar_xoffset
+            new_xoffset -= (self._width-3) * (diff>0) # cursor.width ≈ -3
         else:
-            if DEBUG_SEE: print("Scroll long")
             # Scroll (far) so that idx is at the middle of the text box
-            xoffset:int = tar_xoffset - int(self._width/2+0.5)
-        if cur_xoffset != xoffset:
-            lln:int = max(1, *self._xviewfix.line_lengths)
-            xoffset:int = min(lln-self._width, max(0, xoffset))
-            self._update_viewport(xoffset=xoffset)
-
+            if DEBUG_SEE: print("Scroll long")
+            new_xoffset:int = tar_xoffset - self._width//2
+        # Actual horizontal scroll
+        longest_line_length:int = max(self._xviewfix.line_lengths)
+        max_xoffset:int = longest_line_length - self._width
+        new_xoffset:int = min(max_xoffset, max(0, new_xoffset))
+        if cur_xoffset != new_xoffset:
+            self._update_viewport(xoffset=new_xoffset)
+        # Vertical scroll
         super().yview_pickplace(idx)
 
-    # Keep track of the tags with background/font
-    def tag_config(self, tagname:str, **kwargs) -> None:
-        super().tag_config(tagname, **kwargs)
-        if kwargs.get("background", None) is not None:
-            self._tags_with_bg[tagname] = kwargs.get("background")
-            self._redraw_tags_with_bg()
-        if kwargs.get("font", None) is not None:
-            self._tags_with_font.add(tagname)
-            for start, end in super().tag_ranges(tagname):
-                self._xviewfix.lines_dirtied(start, end)
-            self._xviewfix.fix_dirty()
-    tag_configure = tag_config
-
-    def tag_add(self, tagname:str, *idxs:tuple[str]) -> None:
-        super().tag_add(tagname, *idxs)
-        if len(idxs) == 0:
-            raise ValueError("You must specify at least one index with tag_add")
-        if len(idxs) == 1:
-            idxs:tuple[str] = idxs*2
-        assert len(idxs) % 2 == 0, "Indices passed in must be in pairs"
-        if tagname in self._tags_with_font:
-            for i in range(len(idxs)):
-                self._xviewfix.lines_dirtied(*idxs[i:i+2])
-            self._xviewfix.fix_dirty()
-        if tagname in self._tags_with_bg:
-            self._redraw_tags_with_bg()
-
-    def tag_remove(self, tagname:str, idxa:str, idxb:str) -> None:
-        super().tag_remove(tagname, idxa, idxb)
-        if tagname in self._tags_with_font:
-            self._xviewfix.lines_dirtied(idxa, idxb)
-            self._xviewfix.fix_dirty()
-
-    def tag_delete(self, *tagnames:tuple[str]) -> None:
-        assert len(tagnames) > 0, "You must provide at least one tag name"
-        for tagname in tagnames:
-            self.tag_remove(tagname, "1.0", "end")
-            if tagname in self._tags_with_bg:
-                self._tags_with_bg.pop(tagname)
-            if tagname in self._tags_with_font:
-                self._tags_with_font.remove(tagname)
-        super().tag_delete(tagnames)
-
     def _update_viewport(self, low:float=None, xoffset:int=None) -> None:
+        """
+        Scroll horizontally to match either the passed in low or xoffset
+        """
+        assert not self._disabled, "This shouldn't be called if disabled"
         super().update_idletasks()
-        lln:int = max(1, *self._xviewfix.line_lengths)
-        w_over_f:float = self._width/lln
+        longest_line_length:int = max(self._xviewfix.line_lengths)
+        longest_line_length:int = max(longest_line_length, self._width)
+        low_high_diff:float = self._width/longest_line_length
+        max_low:float = 1 - low_high_diff
         if xoffset is None:
-            assert low is not None, "pass in either low or xoffset"
-            low:float = max(0.0, min(1-w_over_f, low))
-            self._xoffset:int = int(low*lln + 0.5)
+            assert low is not None, "pass in either low or xoffset not both"
+            low:float = max(0.0, min(max_low, low))
+            self._xoffset:int = int(low*longest_line_length + 0.5)
         elif low is None:
-            self._xoffset = min(max(self._xviewfix.line_lengths)-self._width,
-                                max(0, xoffset))
-            low:float = max(0.0, min(1-w_over_f, self._xoffset/lln))
+            max_xoffset:int = longest_line_length - self._width
+            self._xoffset = min(max_xoffset, max(0, xoffset))
+            low:float = max(0.0, min(max_low,
+                                     self._xoffset/longest_line_length))
         else:
             raise RuntimeError("pass in either low or xoffset")
-        high:float = min(1.0, max(0.0, low+w_over_f))
+        high:float = min(1.0, max(0.0, low+low_high_diff))
 
         # Set xview
-        lvln:int = max(1, self._get_longest_visible_line_length())
-        vis_low:float = str(self._xoffset/lvln)
-        super().xview("moveto", str(1.0 if high > 0.998 else vis_low))
+        longest_visible_width:int = self._get_longest_visible_line_length()
+        longest_visible_width:int = max(1, longest_visible_width)
+        max_vis_low:float = 1 - self._width/longest_visible_width
+        vis_low:float = min(max_vis_low, self._xoffset / longest_visible_width)
+        super().xview("moveto", str(vis_low))
 
-        # Get the current textx(0)
-        curr_xoffset:int = self.textx(0, real=False)
-        self._canvasx:int = min(0, curr_xoffset-self._xoffset)
-        self._canvas.moveto("text", max(-self._width, self._canvasx))
+        # Get current xoffset that's in implemented in the tk.Text internally
+        curr_text_xoffset:int = self.textx(0, real=False)
+        self._canvasx:int = min(0, curr_text_xoffset-self._xoffset)
+        self._canvas.moveto("text", max(-self._width,self._canvasx))
         # print(f"{self._xoffset=}, {low=:.2f}, {high=:.2f} {curr_xoffset=}")
-        if self._canvasx != 0:
-            self._redraw_tags_with_bg(update_idletasks=False)
-        if self._xscrollcmd is not None:
-            if self._disabled:
-                low, high = 0.0, 1.0
-            self._xscrollcmd(str(low), str(high))
-
-    def _redraw_tags_with_bg(self, update_idletasks:bool=True, tag:str=None):
-        if self._lock_tags_with_bg or self.ignore_tags_with_bg:
-            return None
-        if update_idletasks:
-            super().update_idletasks()
-        self._canvas.delete("highlights")
-
-        start:str = super().index(f"@0,0")
-        end:str = super().index(f"@0,{self._height-1}")
-        start, end = int(start.split(".")[0]), int(end.split(".")[0])
-        for i in range(start, end+1):
-            tags:list[str] = super().tag_names(f"{i}.0 lineend")
-            if tag is not None:
-                if tag not in tags:
-                    continue
-                tags:list[str] = [tag]
-            for _tag in tags:
-                if _tag in self._tags_with_bg:
-                    self._draw_tag_bg(_tag, f"{i}.0 lineend")
-
-    def _draw_tag_bg(self, tag:str, idx:str) -> None:
-        if DEBUG_BG_TAG: print(f"Draw {tag=} {idx=}")
-        dlineinfo:tuple[int]|None = super().dlineinfo(idx)
-        if dlineinfo is None:
-            return None # Line not visible
-        colour:str = self._tags_with_bg[tag]
-        _, y0, _, height, _ = dlineinfo
-        coords:tuple[int] = (0, y0, self._width, y0+height)
-        self._canvas.create_rectangle(*coords, tags=("highlights"),
-                                      fill=colour, outline="")
+        self.cget("xscrollcommand")(str(low), str(high))
 
 
 if __name__ == "__main__":
@@ -684,7 +615,7 @@ if __name__ == "__main__":
     text.mark_set("insert", "1.0")
     text.pack(fill="both", expand=True)
     text.config(font=("DejaVu Sans Mono", 9, "normal", "roman"))
-    text._xviewfix.dlineinfo.assume_monospaced()
+    text.assume_monospaced()
 
     filepath:str = tk.__file__
     # filepath:str = join(dirname(dirname(dirname(__file__))), "bad.py")
@@ -698,13 +629,7 @@ if __name__ == "__main__":
     for ev in evs:
         text.bind(ev, lambda e: text.see("insert"))
 
-    # Note that at the start, it might have a graphical glitch, not my fault
-    #   ~~probably~~ maybe
-    # text.tag_config("mytag", background="cyan", fg="white")
-    # for i in range(0, 155, 4):
-    #     text.tag_add("mytag", f"{i+1}.0", f"{i+3}.0")
-
-    hbar = tk.Scrollbar(root, orient="horizontal", command=text.xview)
+    # hbar = tk.Scrollbar(root, orient="horizontal", command=text.xview)
     hbar = BetterScrollBarHorizontal(root, command=text.xview)
     text.config(xscrollcommand=hbar.set)
     hbar.pack(fill="x")
@@ -723,3 +648,4 @@ if __name__ == "__main__":
     label_loop()
 
     print(f"Took {perf_counter()-start:.2f} sec")
+    root.mainloop()

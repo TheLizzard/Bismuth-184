@@ -123,6 +123,7 @@ class FindReplaceManager(Rule):
         self.find.bind("<Return>", self.return_pressed)
         self.find.bind("<Shift-Return>", self.unreturn_pressed)
         self.find.bind("<KP_Enter>", self.return_pressed)
+        self.find.bind("<Shift-KP_Enter>", self.unreturn_pressed)
         self.find.bind("<Escape>", lambda e: self.hide())
         MiniPlugin(left, self.find).attach()
         # Checkboxes

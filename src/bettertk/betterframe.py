@@ -29,14 +29,20 @@ class BindFrame(tk.Frame):
         self_name:str = self._w
         def wrapper(event:tk.Event) -> str:
             widget:tk.Misc|str|None = event.widget # might be a str
-            while True:
-                if not isinstance(widget, tk.Misc):
-                    return ""
-                if widget == self:
+            if isinstance(widget, str):
+                if widget.startswith(self._w):
                     return func(event)
-                if isinstance(widget, tk.Toplevel|tk.Tk):
-                    return ""
-                widget:tk.Misc|None = widget.master
+            elif isinstance(widget, tk.Misc):
+                while True:
+                    if not isinstance(widget, tk.Misc):
+                        return ""
+                    if widget == self:
+                        return func(event)
+                    if isinstance(widget, tk.Toplevel|tk.Tk):
+                        return ""
+                    widget:tk.Misc|None = widget.master
+            elif widget is not None:
+                raise RuntimeError("event.widget is not tk.Misc|str|None?")
         return self.bind_all(seq, wrapper, add=add)
 
 def make_bind_frame(frame:tk.Frame, *, method:str="bind") -> None:
@@ -204,7 +210,9 @@ class BetterFrame(tk.Frame):
                  scrollbar_kwargs:dict={},
                  HScrollBarClass=tk.Scrollbar, VScrollBarClass=tk.Scrollbar,
                  **kwargs):
-        # This widget's options
+        # Default options
+        kwargs["vscrollleft"] = kwargs.get("vscrollleft", False)
+        kwargs["hscrolltop"] = kwargs.get("hscrolltop", False)
         kwargs["scroll_speed"] = kwargs.get("scroll_speed", 2)
         # Create outter frame
         self.outter:tk.Frame = tk.Frame(master)
@@ -222,26 +230,25 @@ class BetterFrame(tk.Frame):
         # Put self inside inner frame
         super().__init__(self.inner, **ZERO_BD)
         super().grid(row=1, column=1, sticky="news")
+        # Re-parent self so that master is our self.master instead of inner
+        self.master:tk.Misc = master
         # Create the 2 scrollbars
         self.v_scrollbar = self.h_scrollbar = None
         if vscroll:
             self.v_scrollbar = VScrollBarClass(self.outter, orient="vertical",
                                                command=self.canvas.yview,
                                                **scrollbar_kwargs)
-            kwargs["vscrollleft"] = kwargs.get("vscrollleft", False)
             self.canvas.config(yscrollcommand=self.v_scrollbar.set)
         if hscroll:
             self.h_scrollbar = HScrollBarClass(self.outter, orient="horizontal",
                                                command=self.canvas.xview,
                                                **scrollbar_kwargs)
-            kwargs["hscrolltop"] = kwargs.get("hscrolltop", False)
             self.canvas.config(xscrollcommand=self.h_scrollbar.set)
         # Bind to the mousewheel scrolling
-        make_bind_frame(self.canvas, method="bind_children")
-        self.canvas.bind_children("<MouseWheel>", self._scroll_windows,
-                                  add=True)
-        self.canvas.bind_children("<Button-4>", self._scroll_linux, add=True)
-        self.canvas.bind_children("<Button-5>", self._scroll_linux, add=True)
+        make_bind_frame(self, method="bind_children")
+        self.bind_children("<MouseWheel>", self._scroll_windows, add=True)
+        self.bind_children("<Button-4>", self._scroll_linux, add=True)
+        self.bind_children("<Button-5>", self._scroll_linux, add=True)
         # Copy all of the geometry manager methods from outter
         for attr in GEOMETRY_MANAGER_METHODS:
             setattr(self, attr, getattr(self.outter, attr))
@@ -256,6 +263,15 @@ class BetterFrame(tk.Frame):
         self.canvas.bind("<Configure>", self._outter_resized, add=True)
         # Initial resize (I have no idea why it's needed)
         self.after(1, self._inner_resized)
+
+    def destroy(self) -> None:
+        """
+        We have to override this function since outter is the widget that
+          is inside the master passed in in __init__.
+        """
+        self.inner.children.pop(self._name, None)
+        self.outter.destroy()
+        super().destroy()
 
     # Helpers
     def _get_x_offset(self) -> tuple[int,int]:

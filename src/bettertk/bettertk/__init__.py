@@ -66,7 +66,7 @@ class BetterTkSettings:
     def started_using(self) -> None:
         self.bettertk_users += 1
 
-    def stoped_using(self) -> None:
+    def stopped_using(self) -> None:
         self.bettertk_users -= 1
 
     def config(self, bg=None, separator_colour=None, hightlight_colour=None,
@@ -675,9 +675,7 @@ class BetterTk(tk.Frame):
         self.root.focus_force()
 
     def destroy(self) -> None:
-        self.settings.stoped_using()
-        # Some trickery:
-        self.master.children.pop(self._name)
+        self.settings.stopped_using()
         super().destroy()
         self.root.destroy()
 

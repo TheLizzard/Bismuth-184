@@ -137,7 +137,7 @@ class App:
     # Helpers
     @staticmethod
     def get_filename(filepath:str) -> str:
-        if filepath is None:
+        if not filepath:
             return "Untitled"
         return filepath.split("/")[-1].split("\\")[-1]
 
@@ -150,23 +150,25 @@ class App:
         raise KeyError("InternalError")
 
     # Tab management
-    def new_tab(self, *, focus:bool=True) -> BetterText:
+    def new_tab(self) -> BetterText:
+        # Create page and add text box
         page:NotebookPage = self.notebook.tab_create()
         page.page_frame.config(bg="black") # Less eye burning
         text:BetterText = TextClass(page.page_frame, highlightthickness=0, bd=0,
                                     font=settings.editor.font)
         text.plugin:Plugin = None
         if isinstance(text, BetterText):
-            text._xviewfix.dlineinfo.assume_monospaced()
-            text.ignore_tags_with_bg:bool = True
+            text.assume_monospaced()
         page.add_frame(text)
+        # Set up plugin and key attributes
         text.inserted_default:bool = False
         text.filepath:str = ""
         self.text_to_page[text] = page
         self.plugin_manage(text)
-        if focus:
-            page.focus()
-            text.focus_force()
+        # Focus
+        page.focus()
+        text.focus_force()
+        # Bind
         text.bind("<<Saved-File>>", self.maybe_change_plugin, add=True)
         text.bind("<<Opened-File>>", self.maybe_change_plugin, add=True)
         text.bind("<<Modified-Change>>", self.rename_tab, add=True)
@@ -202,7 +204,6 @@ class App:
 
     def rename_tab(self, event:tk.Event) -> None:
         filename:str = self.get_filename(event.widget.filepath)
-        if not filename: return None
         if event.widget.edit_modified():
             filename:str = f"*{filename}*"
         self.text_to_page[event.widget].rename(filename)
@@ -286,8 +287,7 @@ class App:
             plugin:Plugin = getattr(text, "plugin")
             if plugin:
                 plugin.destroy()
-            while text._tclCommands:
-                text.deletecommand(text._tclCommands[0])
+            text.destroy()
 
         self.root.destroy()
         return "break"
@@ -331,14 +331,13 @@ class App:
 
     def _set_notebook_state(self, opened:list[tuple]) -> None:
         for i, plugin_state in enumerate(opened):
-            last:bool = opened[-1] is plugin_state
-            text:BetterText = self.new_tab(focus=last)
+            text:BetterText = self.new_tab()
             text.inserted_default:bool = True
             try:
                 text.plugin.set_state(plugin_state)
             except Exception as error:
-                if hasattr(tk, "report_full_exception"):
-                    tk.report_full_exception(text, error)
+                if hasattr(text, "report_full_exception"):
+                    text.report_full_exception(error)
                 else:
                     text._report_exception()
 

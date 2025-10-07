@@ -80,11 +80,11 @@ class Explorer:
         try:
             return images.get_sprite(self.master, path)
         except Exception as error:
-            if hasattr(tk, "report_full_exception"):
+            if hasattr(self.master, "report_full_exception"):
                 global _shown_sprite_error
                 if not _shown_sprite_error:
                     _shown_sprite_error = True
-                    tk.report_full_exception(self.master, error)
+                    self.master.report_full_exception(error)
             return images.get_sprite(self.master, "")
 
     def _get_shown_children(self, frame:tk.Frame, *, withself:bool):

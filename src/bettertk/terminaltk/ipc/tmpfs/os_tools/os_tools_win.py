@@ -96,30 +96,38 @@ def unlock_file(file:File) -> None:
 
 
 class NamedSemaphore:
-    __Slots__ = "cevent", "closed"
+    __Slots__ = "_cevent", "_closed"
 
     def __init__(self, name:str, *, create:bool=False) -> NamedSemaphore:
         cname:LPCSTR = string_to_c(name)
-        self.closed:bool = False
+        self._closed:bool = False
         if create:
-            self.cevent:HANDLE = CreateEventA(None, True, False, cname)
+            self._cevent:HANDLE = CreateEventA(None, True, False, cname)
         else:
-            self.cevent:HANDLE = OpenEventA(EVENT_ALL_ACCESS, False, cname)
+            self._cevent:HANDLE = OpenEventA(EVENT_ALL_ACCESS, False, cname)
 
-    def set(self) -> None:
-        SetEvent(self.cevent)
+    def set(self) -> NamedSemaphore:
+        SetEvent(self._cevent)
+        return self
 
-    def wait_clear(self) -> None:
-        res:DWORD = WaitForSingleObject(self.cevent, INFINITE)
-        ResetEvent(self.cevent)
+    def wait_clear(self) -> NamedSemaphore:
+        res:DWORD = WaitForSingleObject(self._cevent, INFINITE)
+        ResetEvent(self._cevent)
+        return self
 
-    def close(self) -> None:
-        CloseHandle(self.cevent)
-        self.closed:bool = True
+    def close(self) -> NamedSemaphore:
+        CloseHandle(self._cevent)
+        self._closed:bool = True
+        return self
 
-    def unlink(self) -> None:
-        if not self.closed:
+    def unlink(self) -> NamedSemaphore:
+        if not self._closed:
             self.close()
+        return self
+
+    @property
+    def closed(self) -> bool:
+        return self._closed
 
 
 def pid_exists(pid:int) -> bool:

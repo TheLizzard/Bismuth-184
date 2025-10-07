@@ -354,7 +354,7 @@ class ExpandedExplorer(Explorer):
         self.changing.entry.insert(0, self.changing.item.purename)
         self.changing.entry.select_range(0, "end")
         self.changing.entry.icursor("end")
-        self.changing.entry.focus_set()
+        self.changing.entry.focus_force()
 
     def maybe_cancel_rename(self, event:tk.Event) -> None:
         if not self.renaming:
@@ -425,7 +425,7 @@ class ExpandedExplorer(Explorer):
     def _newitem(self, newitem:Item, parent:tk.Frame) -> None:
         super()._expand(parent)
         newframe:tk.Frame = super().create_frame(newitem)
-        newframe.focused_widget:tk.Misc = self.changing.focus_get()
+        newframe.focused_widget:tk.Misc = self.changing.focused_widget
         super().update(soft=True)
         self.selected = self.changing = newframe
         self.creating:bool = True

@@ -85,29 +85,35 @@ _sem_getvalue.errcheck = _errcheck_zero
 
 
 class NamedSemaphore:
-    __slots__ = "csem", "name", "closed"
+    __slots__ = "_csem", "_name", "_closed"
 
     def __init__(self, name:str, *, create:bool=False) -> NamedSemaphore:
-        if create:
-            self.csem = _sem_open(string_to_c(name), O_CREAT|O_EXCL, 0o644, 0)
-        else:
-            self.csem = _sem_open(string_to_c(name), 0, 0o644, 0)
-        if self.csem in (-1, 0, None): # Whatever the value of SEM_FAILED is
+        flags:int = O_CREAT|O_EXCL if create else 0
+        self._csem = _sem_open(string_to_c(name), flags, 0o644, 0)
+        if self._csem in (-1, 0, None): # Whatever the value of SEM_FAILED is
             raise OSError("sem_open failed")
-        self.closed:bool = False
-        self.name:str = name
+        self._closed:bool = False
+        self._name:str = name
 
-    def set(self) -> None:
-        _sem_post(self.csem)
+    def set(self) -> NamedSemaphore:
+        _sem_post(self._csem)
+        return self
 
-    def wait_clear(self) -> None:
-        _sem_wait(self.csem)
+    def wait_clear(self) -> NamedSemaphore:
+        _sem_wait(self._csem)
+        return self
 
-    def close(self) -> None:
-        self.closed:bool = True
-        _sem_close(self.csem)
+    def close(self) -> NamedSemaphore:
+        self._closed:bool = True
+        _sem_close(self._csem)
+        return self
 
-    def unlink(self) -> None:
-        if not self.closed:
+    def unlink(self) -> NamedSemaphore:
+        if not self._closed:
             self.close()
-        _sem_unlink(string_to_c(self.name))
+        _sem_unlink(string_to_c(self._name))
+        return self
+
+    @property
+    def closed(self) -> bool:
+        return self._closed

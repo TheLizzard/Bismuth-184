@@ -162,3 +162,4 @@ src/error_logs
 
 # Old files
 src/bettertk/betterframe.old.py
+src/bettertk/bettertext.old.py

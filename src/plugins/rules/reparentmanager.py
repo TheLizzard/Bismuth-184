@@ -12,15 +12,10 @@ class ReparentManager(Rule):
 
     def __init__(self, plugin:BasePlugin, widget:tk.Misc):
         super().__init__(plugin, widget, ons=())
-        # `widget` is the text's master (not actual because of the canvas
-        #   in `BetterText`). `self.target` is the `tk.Misc` that is directly
-        #   inside plugin.master `tk.Text` in case of `tk.Text` and `tk.Canvas`
-        #   in case of `tk.Canvas`.
-        # We should remove this code when BetterText starts to behave like a
-        #   proper tkinter widget
+        # Target is the widget that will get reparented:
+        #   the tk.Text if widget is tk.Text and
+        #   the tk.Canvas if widget is BetterText
         self.target:tk.Misc = widget
-        while self.target.master != plugin.master:
-            self.target:tk.Misc = self.target.master
         self.frame:tk.Frame = tk.Frame(plugin.master, highlightthickness=0,
                                        bd=0)
         self.frame.grid_columnconfigure(self.SPACE_SIZE, weight=1)

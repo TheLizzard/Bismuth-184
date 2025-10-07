@@ -97,7 +97,8 @@ class GridGiver:
     def _mouse_pressed(self, event:tk.Event) -> None:
         self.b1pressed:bool = True
         event:tk.Event = self._get_true_event(event)
-        self.dragx, self.dragy = event.x, event.y
+        # It's possible for event.x to be None??? Why???
+        self.dragx, self.dragy = (event.x or 0), (event.y or 0)
         self._select(event.widget)
 
     def _start_dragging(self, event:tk.Event) -> None:

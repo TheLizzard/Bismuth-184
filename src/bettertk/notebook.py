@@ -34,14 +34,28 @@ TAB_NOTCH_OPTIONS:list[str] = [
                                 "focused_fg", "focused_bg", "min_width",
                                 "padx",
                               ]
+ALL_TAB_NOTCH_OPTIONS:list[str] = TAB_NOTCH_OPTIONS + \
+                              [
+                                "background", "foreground",
+                                "focused_background", "focused_foreground",
+                              ]
 
 
 class TabNotch(tk.Canvas):
     """
+    A tab notch inside TabNotches which is inside Notebook
+
     Options:
         text, font, min_width, can_drag, padx,
         bg, background, fg, focused_foreground,
         focused_bg, focused_background, focused_fg, focused_foreground
+
+    Methods:
+        focus() -> None
+        unfocus() -> None
+
+    Properties:
+        focused:bool
     """
 
     __slots__ = "_text_id", "_text", "_rrect_id", "_width", "_min_width", \
@@ -145,7 +159,7 @@ class TabNotch(tk.Canvas):
             self._redraw_text()
         # Unknown options
         for arg in kwargs:
-            raise tk._tkinter.TclError(f'unknown option "{arg}"')
+            raise tk.TclError(f'unknown option "{arg}"')
 
     def cget(self, key:str) -> object:
         if key == "font":
@@ -170,7 +184,7 @@ class TabNotch(tk.Canvas):
             return self._height
         if key == "padx":
             return self._padx
-        raise tk._tkinter.TclError(f'unknown option "{key}"')
+        raise tk.TclError(f'unknown option "{key}"')
 
     # Helpers
     def _rename_text_helper(self) -> None:
@@ -201,6 +215,13 @@ class TabNotch(tk.Canvas):
 
 
 class TabNotches(BetterFrame):
+    """
+    Options:
+        <all of the TabNotch options except: text>
+        <all of the BetterFrame options>
+    Options only on __init__:
+        scrolled
+    """
     __slots__ = "add_notch", "_min_width", "notebook", "notches", \
                 "_tmp_notch", "_tmp_notch_info", "_notch_dragging", \
                 "dragging", "dragx", "_notches_kwargs"
@@ -208,15 +229,15 @@ class TabNotches(BetterFrame):
     def __init__(self, notebook:Notebook, scrolled:bool=True,
                  **kwargs:dict[str:object]) -> TabNotches:
         self._notches_kwargs:dict[str:object] = kwargs
+        self.pages:list[NotebookPage|TabNotch] = []
         self.notebook:Notebook = notebook
+        self.add_notch:TabNotch = None
         super().__init__(notebook, bg=DEFAULT_NOTCH_BG, hscroll=scrolled,
                          HScrollBarClass=BetterScrollBarHorizontal,
                          hscrolltop=True, scrollbar_kwargs={"thickness":4},
                          hide_hscroll=HIDE_SCROLLBAR)
-        self.pages:list[NotebookPage|TabNotch] = []
         self.curr_page:NotebookPage = None
         self._page_dragging:bool = None
-        self.add_notch:TabNotch = None
         self.dragging:bool = False
         # Create add notch
         self.enable_new_tab()
@@ -243,6 +264,40 @@ class TabNotches(BetterFrame):
         self.add_notch:TabNotch = TabNotch(self, text="+", **kwargs)
         self.add_notch.grid(row=1, column=len(self.pages)+1)
 
+    # config/configure/cget
+    def config(self, **kwargs:dict[str:object]) -> dict[str:object]|None:
+        # Get a list of the notches
+        notches:list[TabNotch] = self.pages.copy()
+        if self.add_notch:
+            notches.append(self.add_notch)
+        # Return config if no kwargs
+        if not kwargs:
+            if notches:
+                options = notches[0].config() | super().config()
+            else:
+                options = self._notches_kwargs | super().config()
+            options.pop("text", None)
+            return options
+        # For each key, select if it's a notch or betterframe option
+        for key, value in kwargs.items():
+            both:bool = key in ("bg", "background")
+            if key == "text":
+                raise tk.TclError(f'unknown option "-text"')
+            if key in ALL_TAB_NOTCH_OPTIONS:
+                self._notches_kwargs[key] = value
+                for notch in notches:
+                    notch.config(**{key:value})
+            if (key not in ALL_TAB_NOTCH_OPTIONS) or both:
+                super().config(**{key:value})
+    configure = config
+
+    def cget(self, key:str) -> object:
+        if (key in ALL_TAB_NOTCH_OPTIONS) and (key not in ("bg", "background")):
+            # What do I do if there are no notches and key is "min_width"
+            #   and it's not in self._notches_kwargs
+            raise NotImplementedError("I am thinking of how to implement this")
+        return super().cget(key)
+
     # Add a new page
     def add(self, page_frame:tk.Frame, notebook:Notebook) -> NotebookPage:
         page:NotebookPage = NotebookPage(notebook=notebook, notches=self,
@@ -254,11 +309,25 @@ class TabNotches(BetterFrame):
         self.pages.append(page)
         return page
 
-    # Remove a page
+    # Remove page
     def remove(self, page:NotebookPage) -> None:
-        assert page in self.pages, "InternalError"
+        assert page in self.pages, "page not in self.pages?"
+        # Check if we can close page
+        if self.notebook.on_try_close(page):
+            return None
+        # Focus another page
+        if self.curr_page == page:
+            if self.pages[0] == page:
+                self.focus_next()
+            else:
+                self.focus_prev()
+        assert self.curr_page != page, "SanityCheck"
+        assert self.curr_page in self.pages+[None], "SanityCheck"
+        # Pop+close page
         idx:int = self.pages.index(page)
         self.pages.pop(idx)
+        page._close()
+        # Fix grid
         for i in range(idx, len(self.pages)):
             self.pages[i].grid(row=1, column=i)
 
@@ -306,9 +375,9 @@ class TabNotches(BetterFrame):
             return None
         if self.curr_page is not None:
             self.curr_page.unfocus()
-            self.curr_page.disappear()
+            self.curr_page._disappear()
         if page:
-            page.appear()
+            page._appear()
             TabNotch.focus(page) # Ewww
         self.curr_page:NotebookPage = page
         self.notebook.event_generate("<<Tab-Switched>>")
@@ -330,20 +399,6 @@ class TabNotches(BetterFrame):
     def focus_idx(self, idx:int) -> None:
         self.pages[idx].focus()
 
-    # Destroy tab
-    def page_destroy(self, page:NotebookPage) -> None:
-        if self.notebook.on_try_close(page):
-            return None
-        if self.curr_page == page:
-            if self.pages[0] == page:
-                self.focus_next()
-            else:
-                self.focus_prev()
-        assert self.curr_page != page, "SanityCheck"
-        assert self.curr_page in self.pages+[None], "SanityCheck"
-        page._close()
-        self.pages.remove(page)
-
     def _switch_next_prev_tab(self, strides:int, default:int) -> NotebookPage:
         if self.curr_page is None:
             if len(self.pages) == 0:
@@ -353,16 +408,24 @@ class TabNotches(BetterFrame):
             idx:int = self.pages.index(self.curr_page) + strides
             return self.pages[idx%len(self.pages)]
 
+    # Methods called from TabNotch
     def _clicked(self, notch_or_page:TabNotch|NotebookPage) -> None:
+        """
+        Called from TabNotch when the notch is clicked on
+        """
         if notch_or_page == self.add_notch:
             self.notebook.event_generate("<<Tab-Create>>")
         else:
             notch_or_page.focus()
 
     def _close(self, notch_or_page:TabNotch|Notebookpage) -> None:
+        """
+        Called from TabNotch when the notch is middle clicked on
+        """
         if notch_or_page != self.add_notch:
             notch_or_page.close()
 
+    # Dragging
     def _start_dragging(self, event:tk.Event) -> None:
         if not isinstance(event.widget, NotebookPage): return None
         self._page_dragging:NotebookPage = event.widget
@@ -413,6 +476,7 @@ class TabNotches(BetterFrame):
         self._page_dragging.place(x=x-self.dragx, y=0)
         return "break"
 
+    # Helpers
     def _get_start_x(self, page:NotebookPage) -> int:
         total:int = 0
         for p in self.pages:
@@ -473,6 +537,19 @@ CONTROL_NUMBERS_RESTRICT:bool = False
 HIDE_SCROLLBAR:bool = True
 
 class NotebookPage(TabNotch):
+    """
+    A page inside Notebook
+
+    Options:
+        <all of the TabNotch options>
+
+    Methods:
+        add_frame(tk.Misc) -> Self
+        rename(str) -> Self
+        focus() -> Self
+        close() -> None
+    """
+
     __slots__ = "notebook", "page_frame", "notches"
 
     def __init__(self, *, notebook:Notebook, page_frame:tk.Frame,
@@ -538,17 +615,17 @@ class NotebookPage(TabNotch):
         super().config(text=title)
         return self
 
-    def close(self) -> None:
-        self.notebook.tab_destroy(self)
-
     def focus(self) -> NotebookPage:
         self.notebook.tab_focus(self)
         return self
 
-    def disappear(self) -> None:
+    def close(self) -> None:
+        self.notebook.tab_destroy(self)
+
+    def _disappear(self) -> None:
         self.page_frame.pack_forget()
 
-    def appear(self) -> None:
+    def _appear(self) -> None:
         self.page_frame.pack(fill="both", expand=True)
 
     def _close(self) -> None:
@@ -557,19 +634,58 @@ class NotebookPage(TabNotch):
 
 
 class Notebook(tk.Frame):
+    """
+    A Notebook widget.
+
+    Options:
+        <all of the TabNotches options>
+        <all of the BetterFrame options>
+        bottom_bg, bottom_background
+    Options only on __init__:
+        scrolled
+
+    Methods:
+        enable_new_tab() -> None
+        disable_new_tab() -> None
+        tab_create() -> NotebookPage
+        tab_remove(NotebookPage) -> None
+        iter_pages() -> Iterable[NotebookPage]
+        tab_switch_prev() -> None
+        tab_switch_next() -> None
+        tab_focus(NotebookPage|None) -> None
+        see(NotebookPage) -> None
+
+    Properties:
+        number_of_pages:int
+        curr_page:int
+        bottom:tk.Frame
+        on_try_close:Callable[NotebookPage,Break]
+    """
     __slots__ = "pages", "next_id", "notches", "bottom", "on_try_close"
 
-    def __init__(self, master:tk.Misc, min_tab_notch_size:int=0,
-                 font:str="TkTextFont", scrolled:bool=True,
-                 **kwargs) -> Notebook:
+    def __init__(self, master:tk.Misc, scrolled:bool=True,
+                 **kwargs:dict[str:object]) -> Notebook:
         self.on_try_close:Callable[NotebookPage,Break] = lambda page: False
 
         super().__init__(master, **WIDGET_KWARGS, bg="black")
-        self.notches:TabNotches = TabNotches(self, min_width=min_tab_notch_size,
-                                             font=font, scrolled=scrolled)
+        self.notches:TabNotches = TabNotches(self, scrolled=scrolled)
         self.notches.pack(fill="both")
         self.bottom:tk.Frame = tk.Frame(self, **WIDGET_KWARGS, bg="black")
         self.bottom.pack(fill="both", expand=True)
+        self.config(**kwargs)
+
+    # config/configure/cget
+    def config(self, **kwargs:dict[str:object]) -> dict[str:object]|None:
+        if ("bottom_bg" in kwargs) or "bottom_background" in kwargs:
+            bg:str = kwargs.pop("bottom_background",
+                                kwargs.pop("bottom_bg", None))
+            self.bottom.config(bg=bg)
+            if not kwargs: return None
+        return self.notches.config(**kwargs)
+    configure = config
+
+    def cget(self, key:str) -> object:
+        return self.notches.cget(key)
 
     # Enable/Disable the add tab notch
     def disable_new_tab(self) -> None:
@@ -578,11 +694,15 @@ class Notebook(tk.Frame):
     def enable_new_tab(self) -> None:
         self.notches.enable_new_tab()
 
-    # Create a tab
+    # Create/destroy tab
     def tab_create(self) -> NotebookPage:
         frame:tk.Frame = tk.Frame(self.bottom, **WIDGET_KWARGS, bg="black")
         page:NotebookPage = self.notches.add(page_frame=frame, notebook=self)
         return page.rename("Untitled")
+
+    def tab_remove(self, page:NotebookPage) -> None:
+        self.notches.remove(page)
+    tab_destroy = tab_remove
 
     # Iterate over all of the pages
     def iter_pages(self) -> Iterator[NotebookPage]:
@@ -598,20 +718,16 @@ class Notebook(tk.Frame):
         return self.notches.curr_page
 
     # Focus methods
-    def switch_prev_tab(self, _:tk.Event=None) -> str:
+    def tab_switch_prev(self, _:tk.Event=None) -> str:
         self.notches.focus_prev()
         return "break"
 
-    def switch_next_tab(self, _:tk.Event=None) -> str:
+    def tab_switch_next(self, _:tk.Event=None) -> str:
         self.notches.focus_next()
         return "break"
 
     def tab_focus(self, page:NotebookPage|None) -> None:
         self.notches.focus_page(page)
-
-    # Destroy tab
-    def tab_destroy(self, page:NotebookPage) -> None:
-        self.notches.page_destroy(page)
 
     # Scroll notches to see a specific page
     def see(self, page:NotebookPage) -> None:

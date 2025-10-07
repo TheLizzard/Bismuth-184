@@ -25,7 +25,7 @@ _stop:bool = False
 
 MAX_SIGUSR_N:int = 10
 for i in range(1, MAX_SIGUSR_N+1):
-    globals()[f"SIGUSR{i}"] = _signal.NSIG+i
+    globals()[f"SIGUSR{i}"] = _signal.NSIG + i
 SIG_DFL = SIG_IGN = object()
 
 
@@ -38,8 +38,7 @@ def signal_register(signal:int, handler:Callable) -> None:
     def call_loop() -> None:
         while event in _events:
             event.wait_clear()
-            if _stop:
-                break
+            if _stop: break
             handler:Callable = _signal_handlers[signal]
             if handler is not SIG_DFL:
                 handler(signal, None)
@@ -59,14 +58,8 @@ def signal_get(signal:int) -> Callable:
     return _signal_handlers.get(signal, SIG_DFL)
 
 def signal_send(pid:int, signal:int) -> None:
-    assert signal != 0, "Use `pid_exists` function instead"
-    try:
-        event:NamedSemaphore = NamedSemaphore(f"_signal_{pid}_{signal}",
-                                              create=False)
-    except OSError:
-        return None # Signal not accepted by pid
-    event.set()
-    event.close()
+    assert signal != 0, "Use `pid_exists(pid:int) -> bool` instead"
+    NamedSemaphore(f"_signal_{pid}_{signal}", create=False).set().close()
 
 def signal_cleanup() -> None:
     global _stop

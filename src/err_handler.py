@@ -9,6 +9,15 @@ import sys
 import os
 
 
+if os.name == "posix":
+    DETACH_PROC_KWARGS:dict = dict(start_new_session=True)
+elif os.name == "nt":
+    from subprocess import DETACHED_PROCESS
+    DETACH_PROC_KWARGS:dict = dict(creation_flags=DETACHED_PROCESS)
+else:
+    DETACH_PROC_KWARGS:dict = dict()
+
+
 THIS:str = os.path.abspath(__file__)
 PATH:str = os.path.dirname(THIS)
 ERR_PATH_FORMAT:str = os.path.join(PATH, "error_logs", "error.{n}.txt")
@@ -70,10 +79,12 @@ def get_full_traceback(err:Exception) -> Traceback:
 
     return main_traceback
 
-def report_full_exception(widget:tk.Widget, err:BaseException) -> None:
-    widget._root().report_callback_exception(widget, type(err), err,
-                                             get_full_traceback(err))
-tk.report_full_exception = report_full_exception
+def report_full_exception(widget:tk.Misc, err:BaseException) -> None:
+    assert isinstance(widget, tk.Misc), "widget must be a tk.Misc"
+    assert isinstance(err, BaseException), "err must be a BaseException"
+    root:tk.Tk = widget._root()
+    root.report_callback_exception(type(err), err, get_full_traceback(err))
+tk.Misc.report_full_exception = report_full_exception
 
 
 class ErrorCatcher:
@@ -148,20 +159,25 @@ class RunManager:
                 return None
 
     def report_exc(self, *exc:tuple, critical:bool, msg:str="") -> None:
+        assert len(exc) == 3, "exc must be a tuple of (type, err, tb)"
         if critical:
             pre_string:str = " Critical error ".center(80, "=")
         else:
             pre_string:str = " Non critical error ".center(80, "=")
-        tb:str = "".join(format_exception(*exc)).rstrip("\n")
+        try:
+            tb:str = "".join(format_exception(*exc)).rstrip("\n")
+        except BaseException:
+            tb:str = "Couldn't generate traceback in " \
+                     "err_handler.py@RunManager.report_exc"
         string:str = pre_string + "\n" + tb + "\n"
         if msg:
             string += msg + "\n"
         string += "="*80
         string:str = string.replace("\x00", "\\x00")
         proc:Popen = Popen([executable, THIS], shell=False, stdin=DEVNULL,
-                           stdout=DEVNULL, stderr=DEVNULL,
+                           stdout=DEVNULL, stderr=DEVNULL, **DETACH_PROC_KWARGS,
                            env=os.environ|{"_display_err":string})
-        Thread(target=proc.wait, name="subproc-reaper", daemon=False).start()
+        Thread(target=proc.wait, name="subproc-reaper", daemon=True).start()
 
 
 # Main display dispatcher
@@ -268,31 +284,36 @@ def _try_set_iconphoto(root:tk.Tk|BetterTk) -> HasErrorer:
 
 if __name__ == "__main__":
     string:str|None = os.environ.get("_display_err", None)
-    if string is None:
-        def start() -> int:
-            global root
-            root = tk.Tk()
-            root.after(20, lambda: 1/0) # Raise error
-            root.bind("<Delete>", lambda e: 1/0)
-            return 1
-
-        def init(arg:int) -> tuple[str,bool]:
-            assert arg == 1
-            return ("123", False)
-
-        def run(arg1:str, arg2:bool) -> None:
-            try:
-                for i in range(100):
-                    root.update()
-                print(1/0) # Raise error
-            except KeyboardInterrupt:
-                return None
-
-        manager:RunManager = RunManager()
-        manager.register(start, exit_on_error=True)
-        manager.register(init, exit_on_error=False)
-        manager.register(run, exit_on_error=False)
-        manager.exec()
-
-    else:
+    if string:
         _display(string)
+        sys.exit(0)
+
+    def start() -> int:
+        root = tk.Tk()
+        root.after(2000, lambda: 1/0) # Raise error
+        root.bind("<Delete>", lambda e: 1/0)
+        return 100
+
+    def init(arg:int) -> tuple[str,bool]:
+        assert arg == 100
+        return ("123", False)
+
+    def run(arg1:str, arg2:bool) -> None:
+        def stack_overflow(idx:int=0) -> None:
+            if idx == 1000:
+                raise RecursionError()
+            if idx < 0:
+                raise RuntimeError()
+            try:
+                stack_overflow(idx+1)
+            except RecursionError:
+                stack_overflow(-1)
+        stack_overflow() # Raise error
+
+    import sys
+    sys.setrecursionlimit(45)
+    manager:RunManager = RunManager()
+    manager.register(start, exit_on_error=True)
+    manager.register(init, exit_on_error=False)
+    manager.register(run, exit_on_error=False)
+    manager.exec()

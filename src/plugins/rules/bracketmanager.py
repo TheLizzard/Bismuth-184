@@ -38,14 +38,15 @@ class BracketManager(Rule):
         evs:list[str] = ["<BackSpace>"]
         for open, close, tcl_name in self.BRACKETS:
             evs.append(open)
-            if open != close:
-                evs.extend((close, f"<Alt-{tcl_name}>"))
+            evs.extend((close, f"<Alt-{tcl_name}>"))
         super().__init__(plugin, text, tuple(evs))
         self.text:tk.Text = self.widget
         self.text.tag_config(self.BACKET_HIGHLIGHT_TAG, background="grey")
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:
         if event.state&CTRL:
+            return False
+        if on in ("alt-'", 'alt-"'):
             return False
         # if (event.state&ALT) and (not on.startswith("alt-")):
         #     return False

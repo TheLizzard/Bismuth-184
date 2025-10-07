@@ -178,8 +178,14 @@ class SaveLoadManager(Rule):
         self.text.event_generate("<<Saved-File>>")
 
     def _internal_open(self, *, reload:bool) -> None:
+        xview, yview = self.text.xview()[0], self.text.yview()[0]
+        insert:str = self.text.index("insert")
         success:bool = self._try_internal_open(reload=reload)
-        if not success:
+        if success:
+            self.plugin.move_insert(insert)
+            self.text.xview("moveto", xview)
+            self.text.yview("moveto", yview)
+        else:
             self.text.after(10, self.text.event_generate, "<<Close-Tab>>")
 
     def _try_internal_open(self, *, reload:bool) -> Success:
@@ -260,8 +266,7 @@ class SaveLoadManager(Rule):
             if not self._can_read():
                 msg:str = f"The file {self.text.filepath}\ncan't be read."
                 telluser(self.text, title="Can't read file", message=msg,
-                         center=True, icon="warning",
-                         center_widget=self.text, block=False)
+                         center=True, icon="warning", center_widget=self.text)
             elif modified:
                 with open(self.text.filepath, "rb") as fd:
                     filedata:bytes = fd.read() \
@@ -275,7 +280,7 @@ class SaveLoadManager(Rule):
                               f"you have a merge conflict."
                     telluser(self.text, title=title, message=msg,
                              center=True, icon="warning",
-                             center_widget=self.text, block=False)
+                             center_widget=self.text)
             else:
                 opened:bool = True
                 self._internal_open(reload=False)
