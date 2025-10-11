@@ -285,29 +285,15 @@ DEBUG:bool = False
 TEST:bool = False
 
 
-class CleanupTk(tk.Tk):
-    def destroy(self) -> None:
-        super().destroy()
-        self.cleanup()
-    def cleanup(self) -> None:
-        ...
-
-class CleanupToplevel(tk.Toplevel):
-    def destroy(self) -> None:
-        super().destroy()
-        self.cleanup()
-    def cleanup(self) -> None:
-        ...
-
-
 class NoTitlebarTk:
     def __init__(self, master=None, withdraw:bool=False, **kwargs):
         # Figure out the master.
         if master is None:
-            self.root = CleanupTk(**kwargs)
+            self.root = tk.Tk(**kwargs)
         elif isinstance(master, (tk.Misc, NoTitlebarTk)):
-            self.wait_for_func(True, master.winfo_ismapped, tcl=master)
-            self.root = CleanupToplevel(master, **kwargs)
+            master.update_idletasks() # This should be equivalent to the bellow
+            # self.wait_for_func(True, master.winfo_ismapped, tcl=master)
+            self.root = tk.Toplevel(master, **kwargs)
         else:
             raise ValueError("Invalid `master` argument. It must be " \
                              "`None` or a tkinter widget")
@@ -356,12 +342,10 @@ class NoTitlebarTk:
     def _change_shape(self) -> None:
         # https://sites.ualberta.ca/dept/chemeng/AIX-43/share/man/info/en_US/
         #   a_doc_lib/x11/specs/pdf/shape.PDF
-        pass
         # No clue what I am doing here or how to even import libx-shape
     """
 
     def _get_display(self, widget:tk.Misc) -> DISPLAY:
-        self.root.cleanup = self.cleanup
         _display_owners.add(self)
         if DEBUG: print(f"[DEBUG]: display_owners = {len(_display_owners)}")
         for notitlebartk in _display_owners:
@@ -370,10 +354,12 @@ class NoTitlebarTk:
         if DEBUG: print(f"[DEBUG]: Opening display")
         return XOpenDisplay(None)
 
-    def cleanup(self) -> None:
-        if self._cleanedup:
-            # BetterTk calls self.destroy() twice.
-            return None
+    def destroy(self) -> None:
+        self.root.destroy()
+        self._cleanup()
+
+    def _cleanup(self) -> None:
+        if self._cleanedup: return None
         assert self in _display_owners, "InternalError"
         self._cleanedup:bool = True
         _display_owners.remove(self)
@@ -575,8 +561,8 @@ class NoTitlebarTk:
 
 
 class Draggable(NoTitlebarTk):
-    def __init__(self):
-        super().__init__()
+    def __init__(self, master:tk.Misc=None, **kwargs:dict) -> Draggable:
+        super().__init__(master, **kwargs)
         self.dragging:bool = False
         self.bind("<Button-1>" ,self.clickwin)
         self.bind("<B1-Motion>", self.dragwin)
@@ -598,7 +584,8 @@ class Draggable(NoTitlebarTk):
 
 
 # Example 0
-if __name__ == "__main__" and False:
+if (__name__ == "__main__") and False:
+    # Works but is useless right now
     root = NoTitlebarTk()
     root.geometry("400x400")
     root.make_non_clickable()
@@ -607,7 +594,7 @@ if __name__ == "__main__" and False:
 
 # Example 1
 if __name__ == "__main__":
-    root = NoTitlebarTk()
+    root = Draggable()
     root.title("AppWindow Test")
     root.geometry("100x100")
 
@@ -625,9 +612,9 @@ if __name__ == "__main__":
 
 # Example 2
 if __name__ == "__main__":
-    root = NoTitlebarTk()
+    root = Draggable()
     root.geometry("150x150")
-    child = NoTitlebarTk(root)
+    child = Draggable(root)
     child.geometry("150x150")
 
     tk.Label(root, text="Master").pack(fill="x")
@@ -645,8 +632,9 @@ if __name__ == "__main__":
     root.mainloop()
 
 
+# Example 3
 if __name__ == "__main__":
-    root = NoTitlebarTk()
+    root = Draggable()
     root.geometry("150x150")
 
     but = tk.Button(root, text="Close", command=root.destroy)
@@ -666,6 +654,7 @@ if __name__ == "__main__":
 
 
 # This crashes gnome-shell after making it use ~400MB of RAM???
+# Test 1
 if __name__ == "__main__" and TEST:
     root = NoTitlebarTk()
     label = tk.Label(root)
@@ -686,7 +675,7 @@ if __name__ == "__main__" and TEST:
     raise SystemExit
 
 
-# Test 1
+# Test 2
 if (__name__ == "__main__") and TEST:
     for i in range(1000):
         root = NoTitlebarTk()
@@ -698,7 +687,7 @@ if (__name__ == "__main__") and TEST:
             print(f"Passed {i}th test")
 
 
-# Test 2
+# Test 3
 if (__name__ == "__main__") and TEST:
     print("Creating root")
     root = tk.Tk()

@@ -318,15 +318,12 @@ class BasePlugin(ProtoPlugin):
 
     @contextmanager
     def see_end_wrapper(self) -> None:
-        see_end:bool = False
-        see_x_char:str = ""
+        see_end:bool = (float(self.text.yview()[1]) == 1.0)
         try:
-            see_x_char:str = self.text.index("insert").split(".")[-1]
-            see_end:bool = (self.text.yview()[1] == 1)
             yield None
         finally:
-            if see_end and see_x_char:
-                self.text.see(f"end -1l +{see_x_char}c")
+            if see_end:
+                self.text.yview("moveto", "1.0")
 
     # Combiners (needed to make inter-manager data transfere easier)
     def get_virline(self, end:str) -> str:

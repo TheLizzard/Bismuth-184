@@ -240,21 +240,28 @@ class SaveLoadManager(Rule):
         yview:str = str(self.text.yview()[0])
         insert:str = self.text.index("insert")
         # Congregate state information:
-        save_state:list[object] = (filepath, modified, data, saved_data)
-        view_state:list[object] = (xview, yview, insert)
-        return (save_state, view_state)
+        state:dict = dict(filepath=filepath, modified=modified, data=data,
+                          saved_data=saved_data, xview=xview, yview=yview,
+                          insert=insert)
+        return state
 
     def set_state(self, state:object) -> None:
         assert not self.text.filepath, "set_state called too late"
-        if not isinstance(state, list|tuple): return None
-        save_state, view_state = state
-        self._set_state_save(*save_state)
-        self._set_state_view(*view_state)
+        if not isinstance(state, dict): return None
+        filepath:str = state.pop("filepath", "")
+        modified:str = state.pop("modified", True)
+        data:str = state.pop("data", "")
+        saved_data:str = state.pop("saved_data", "")
+        xview:str = state.pop("xview", "0.0")
+        yview:str = state.pop("yview", "0.0")
+        insert:str = state.pop("insert", "1.0")
+        self._set_state_save(filepath, modified, data, saved_data)
+        self._set_state_view(xview, yview, insert)
 
     def _set_state_view(self, xview:str, yview:str, insert:str) -> None:
         self.plugin.move_insert(insert)
-        self.text.xview("moveto", xview)
-        self.text.yview("moveto", yview)
+        self.text.after(1, self.text.xview, "moveto", xview)
+        self.text.after(1, self.text.yview, "moveto", yview)
 
     def _set_state_save(self, filepath:str, modified:bool, data:str,
                         saved_data:str) -> None:

@@ -2,7 +2,6 @@ from .rules.baserule import Rule
 from .rules.wrapmanager import WrapManager
 from .rules.undomanager import UndoManager
 from .rules.umarkmanager import UMarkManager
-from .rules.jerrymanager import JerryManager
 from .rules.selectmanager import SelectManager
 from .rules.bracketmanager import BracketManager
 from .rules.shortcutmanager import RemoveShortcuts
@@ -20,7 +19,6 @@ COMMON_RULES:list[Rule] = [
                             WrapManager,
                             UndoManager,
                             UMarkManager,
-                            JerryManager,
                             SelectManager,
                             BracketManager,
                             RemoveShortcuts,

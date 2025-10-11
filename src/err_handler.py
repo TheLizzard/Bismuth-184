@@ -299,6 +299,9 @@ if __name__ == "__main__":
         return ("123", False)
 
     def run(arg1:str, arg2:bool) -> None:
+        # Can't run this test in python versions between (3.13.0, 3.13.7]
+        #   because of: https://github.com/python/cpython/issues/132744
+        # This will have to wait until Debian Trixie gets python3>=3.13.8
         def stack_overflow(idx:int=0) -> None:
             if idx == 1000:
                 raise RecursionError()

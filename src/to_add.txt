@@ -19,14 +19,12 @@ Editor:
 * Up/Down arrow keys don't work as expected with "no-wrap"
 * Control-KP_8 and Control-KP_2 don't remove selections
 * Control-m doesn't remove marks that are on empty lines
-* Double-Click and then drag doesn't extend selection
 * Adding a shebang to an unsaved file should switch to the correct plugin
 * png/jpeg/pdf viewer
 
 IPC:
 * Remove psutil dependency for checking if process exists
 * Use semaphores on Windows instead of events (CreateSemaphoreA/WaitForSingleObject/ReleaseSemaphore)
-* There's prob a race condition where the event is sent before the file writing is finished and flushed
 
 Terminal:
 * Add confirm close prompt when closing a running proc
@@ -47,6 +45,7 @@ File Explorer:
 * Deleting a top level folder causes problems
 * Deleting an item fails if another file with same name has been deleted
 * Removing a folder doesn't remove it from being cwd
+* Clicking on new file/folder doesn't scroll down to the file/folder creation (we need BetterFrame.seex(int) and BetterFrame.seey(int))
 
 BetterTk Window:
 * There is a bug where `event_generate("<Control-w>")` causes a recursion error (`error_logs/error.0007.txt`)

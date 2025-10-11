@@ -10,13 +10,13 @@ MOUSE_DRAG_PIXELS:int = 10
 SCROLL_SPEED:int = 1
 
 MOUSE_START_MARK:str = "mouse_start"
+Span:type = tuple[str,str]
 
 
 class SelectManager(Rule):
     __slots__ = "text", "old_sel_fg", "old_sel_bg", "old_inactivebg", \
-                "selecting", "set_linsert"
-    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("insertdeletemanager",True),
-                                                 ("jerrymanager",False)]
+                "selecting", "set_linsert", "double"
+    REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("insertdeletemanager",True)]
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> Rule:
         evs = (
@@ -27,7 +27,7 @@ class SelectManager(Rule):
                 # Mouse
                 "<Double-Button-1>", "<Triple-Button-1>",
                 "<ButtonPress-1>", "<ButtonRelease-1>", "<B1-Motion>",
-                "<<ButtonPress-1>>", "<<ButtonRelease-1>>", "<<B1-Motion>>",
+                "<ButtonPress-1>", "<ButtonRelease-1>", "<B1-Motion>",
                 # User/program input
                 "<<Before-Insert>>", "<<After-Insert>>", "<<After-Delete>>",
                 # Backspace to stop other rules from handling it if selsected
@@ -38,6 +38,7 @@ class SelectManager(Rule):
               )
         super().__init__(plugin, text, evs)
         self.text:tk.Text = self.widget
+        self.double:Span|None = None
         self.set_linsert:bool = True
         self.selecting:bool = False
 
@@ -91,8 +92,6 @@ class SelectManager(Rule):
 
         if on in ("<buttonpress-1>", "<buttonrelease-1>", "<b1-motion>"):
             on:str = on.removeprefix("<").removesuffix(">")
-        elif on in ("buttonpress-1", "buttonrelease-1"):
-            print("jerry failed us")
 
         if on in ("backspace", "delete", "<before-delete>"):
             start, end = self.plugin.get_selection()
@@ -174,6 +173,7 @@ class SelectManager(Rule):
             return True
 
         if on == "mouse-release":
+            self.double:Span|None = None
             if self.selecting:
                 self.selecting:bool = False
                 return True
@@ -183,8 +183,10 @@ class SelectManager(Rule):
             self.plugin.remove_selection()
             start:str = self.get_movement("left", True, "insert", text=True)
             end:str = self.get_movement("right", True, "insert", text=True)
-            self.plugin.set_selection(start, end)
-            self.plugin.move_insert(end)
+            self.double:Span|None = (start, end)
+            self.plugin.set_selection(*self.double)
+            self.plugin.move_insert(self.double[-1])
+            self.selecting:bool = True
             return True
 
         if on == "triple-mouse":
@@ -193,7 +195,7 @@ class SelectManager(Rule):
         if on == "mouse-motion":
             if not self.selecting:
                 return False
-            # reimplement this using `xview`/`yview`
+            # Move screen so we cen see cursor
             delta:str = None
             if drag[0] != 0:
                 delta:str = f"{SCROLL_SPEED*drag[0]}c"
@@ -207,9 +209,20 @@ class SelectManager(Rule):
                 delta:str = f"{SCROLL_SPEED*drag[1]}l"
             if delta is not None:
                 self.text.see(f"{idx} +{delta}")
-            start, end = self.plugin.order_idxs(MOUSE_START_MARK, idx)
-            self.plugin.set_selection(start, end)
-            self.plugin.move_insert(idx)
+            # Set new selection
+            if self.double is None:
+                # Normal mouse dragging
+                start, end = self.plugin.order_idxs(MOUSE_START_MARK, idx)
+                self.plugin.set_selection(start, end)
+                self.plugin.move_insert(idx)
+            else:
+                # Double mouse dragging
+                new_start:str = self.get_movement("left", True, idx, text=False)
+                new_end:str = self.get_movement("right", True, idx, text=False)
+                start, end = self.calc_biggest_span((new_start,new_end),
+                                                    self.double)
+                self.plugin.set_selection(start, end)
+                self.plugin.move_insert(end if end == new_end else start)
             return True
 
         if on == "<before-insert>":
@@ -222,7 +235,7 @@ class SelectManager(Rule):
 
         # Selection stuff
         cur:str = self.text.index("insert")
-        new:str = self.get_movement(on, ctrl, cur)
+        new:str = self.get_movement(on, ctrl, cur, text=False)
         # Home/End
         if on in ("home", "end"):
             pass
@@ -244,7 +257,7 @@ class SelectManager(Rule):
         if shift:
             start, end = self.plugin.get_selection()
             # Calculate the new selection range
-            newstart, newend = self.sel_calc(start, end, cur, new)
+            newstart, newend = self.sel_calc((start,end), cur, new)
             if self.text.compare(newend, "==", "end"):
                 newend:str = self.text.index("end -1c")
                 self.plugin.move_insert(newend)
@@ -259,44 +272,55 @@ class SelectManager(Rule):
         self.text.event_generate("<<Add-Separator>>")
         return True
 
-    def get_movement(self, arrow, ctrl:bool, cur:str, text:bool=False) -> str:
+    def get_movement(self, arrow:str, ctrl:bool, cur:str, *, text:bool) -> str:
+        """
+        Calculates how `cur` (a text index) will move in the `arrow`
+          direction with `ctrl` signalling if Control is being pressed
+        The `text` argument tells us if we should only consider text
+          words (part of double click)
+        The returned text index is always in the "{line}.{char}" format
+          and not something like "1.0+1c" or "insert-1c"
+
+        The possible values of `arrow` are:
+            left right up down home end
+        """
         if ctrl:
             # Left/Right
             if arrow == "left":
                 size:int = self.get_word_size(-1, cur, "1.0", text)
-                return f"{cur} -{size}c"
+                return self.text.index(f"{cur} -{size}c")
             elif arrow == "right":
                 size:int = self.get_word_size(+1, cur, "end -1c", text)
-                return f"{cur} +{size}c"
+                return self.text.index(f"{cur} +{size}c")
             # Up/Down
             elif arrow == "up":
                 size:int = self.get_para_size(-1, cur, "1.0")
-                return f"{cur} -{size}l linestart"
+                return self.text.index(f"{cur} -{size}l linestart")
             elif arrow == "down":
                 size:int = self.get_para_size(+1, cur, "end -1c")
-                return f"{cur} +{size}l lineend"
+                return self.text.index(f"{cur} +{size}l lineend")
             # Home/End
             elif arrow == "home":
                 return "1.0"
             elif arrow == "end":
-                return "end -1c"
+                return self.text.index("end -1c")
         else:
             # Left/Right
             if arrow == "left":
-                return f"{cur} -1c"
+                return self.text.index(f"{cur} -1c")
             elif arrow == "right":
-                return f"{cur} +1c"
+                return self.text.index(f"{cur} +1c")
             # Up/Down
             elif arrow == "up":
                 if cur.split(".")[0] == "1":
                     if DEBUG: print("[DEBUG]: linsert set [new == 1.0]")
                     self.text.mark_set("linsert", "1.0")
-                    return f"{cur} linestart"
+                    return self.text.index(f"{cur} linestart")
                 charsin:str = self.text.index("linsert").split(".")[1]
                 new:str = f"{cur} -1l linestart +{charsin}c"
                 if self.text.compare(new, ">", f"{cur} -1l lineend"):
-                    return f"{cur} -1l lineend"
-                return f"{cur} -1l linestart +{charsin}c"
+                    return self.text.index(f"{cur} -1l lineend")
+                return self.text.index(f"{cur} -1l linestart +{charsin}c")
             elif arrow == "down":
                 charsin:str = self.text.index("linsert").split(".")[1]
                 new:str = f"{cur} +1l linestart +{charsin}c"
@@ -304,8 +328,8 @@ class SelectManager(Rule):
                     if DEBUG: print("[DEBUG]: linsert set [new == end-1c]")
                     self.text.mark_set("linsert", "end -1c")
                 if self.text.compare(new, ">", f"{cur} +1l lineend"):
-                    return f"{cur} +1l lineend"
-                return f"{cur} +1l linestart +{charsin}c"
+                    return self.text.index(f"{cur} +1l lineend")
+                return self.text.index(f"{cur} +1l linestart +{charsin}c")
             # Home/End
             elif arrow == "home":
                 line:str = self.text.get(f"{cur} linestart", cur)
@@ -314,7 +338,7 @@ class SelectManager(Rule):
                 spaces:int = len(line) - len(line.lstrip(" \t"))
                 if spaces == len(line):
                     spaces:int = 0
-                return f"{cur} linestart +{spaces}c"
+                return self.text.index(f"{cur} linestart +{spaces}c")
             elif arrow == "end":
                 fline:str = self.text.get(f"{cur} linestart", f"{cur} lineend")
                 line:str = self.plugin.get_virline(f"{cur} lineend")
@@ -322,11 +346,11 @@ class SelectManager(Rule):
                 if (cur_char < len(line)) or (len(fline) == cur_char):
                     comment:int = len(fline) - len(line)
                     if len(fline.rstrip(" \t")) == len(line):
-                        return f"{cur} lineend"
+                        return self.text.index(f"{cur} lineend")
                     else:
-                        return f"{cur} lineend -{comment}c"
+                        return self.text.index(f"{cur} lineend -{comment}c")
                 else:
-                    return f"{cur} lineend"
+                    return self.text.index(f"{cur} lineend")
         raise NotImplementedError(f"Unreachable {ctrl=!r} {arrow=!r}")
 
     def get_word_size(self, strides, start, stop, text:bool=False) -> int:
@@ -363,6 +387,7 @@ class SelectManager(Rule):
         return max(1, chars_skipped)
 
     def get_para_size(self, strides:int, start:str, stop:str) -> int:
+        assert abs(strides) == 1, "ValueError"
         cur:str = start
         lines_skipped:int = 0
         while True:
@@ -374,15 +399,31 @@ class SelectManager(Rule):
                 break
         return lines_skipped
 
-    def sel_calc(self, start:str, end:str, cur:str, new:str) -> tuple[str,str]:
-        # Nothing selected
+    def sel_calc(self, span:Span, cur:str, new:str) -> Span:
+        """
+        How should the selection `span` change if `cur` is the current
+          cursor position and `new` is the new cursor position
+        """
+        start, end = span
         if start == end:
             return self.plugin.order_idxs(cur, new)
-        # selection's start changing
         if cur == start:
             return self.plugin.order_idxs(new, end)
-        # selection's end changing
         if cur == end:
             return self.plugin.order_idxs(start, new)
-        # Cursor not inside selection
+        # Current cursor index not in [selection.start, selection.end]
         return self.plugin.order_idxs(cur, new)
+
+    def calc_biggest_span(self, spana:Span, spanb:Span) -> Span:
+        """
+        When double press dragging the mouse:
+            spana:Span    The span of the word where the dragging started
+            spanb:Span    The span of where the cursor is at right now
+        Note: spana and spanb are interchangeable
+        Note: spana and spanb cannot be overlapping unless they are equal
+        """
+        if spana == spanb: return spana
+        if self.text.compare(spana[0], "<", spanb[0]):
+            return (spana[0],spanb[1])
+        else:
+            return (spanb[0],spana[1])
