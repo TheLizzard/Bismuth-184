@@ -153,9 +153,10 @@ class SelectManager(Rule):
 
     def do(self, _, on, ctrl:bool, shift:bool, idx:str, drag:tuple) -> Break:
         if on in ("backspace", "delete"):
-            with self.plugin.virtual_event_wrapper():
-                self.plugin.delete_selection()
-            return True
+            with self.plugin.see_end_wrapper():
+                with self.plugin.virtual_event_wrapper():
+                    self.plugin.delete_selection()
+                return True
 
         if on == "<set-linsert>":
             self.text.mark_set("linsert", "insert")

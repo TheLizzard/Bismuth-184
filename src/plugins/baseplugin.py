@@ -323,7 +323,7 @@ class BasePlugin(ProtoPlugin):
             yield None
         finally:
             if see_end:
-                self.text.yview("moveto", "1.0")
+                self.text.after(1, self.text.yview, "moveto", "1.0")
 
     # Combiners (needed to make inter-manager data transfere easier)
     def get_virline(self, end:str) -> str:

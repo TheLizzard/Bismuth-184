@@ -560,20 +560,26 @@ class NotebookPage(TabNotch):
         self.notebook:Notebook = notebook
 
     def add_frame(self, frame:tk.Misc) -> NotebookPage:
-        def call(func:Callable[None]) -> Callable[tk.Event,str]:
+        def switch(direction:str) -> Callable[tk.Event,str]:
             def inner(event:tk.Event) -> str:
-                func()
+                if self.notebook.number_of_pages > 1:
+                    if direction == "prev":
+                        self.notches.focus_prev()
+                    elif direction == "next":
+                        self.notches.focus_next()
+                    else:
+                        raise NotImplementedError(f"Impossible {direction!r}")
                 return "break"
             return inner
         frame.pack(in_=self.page_frame, fill="both", expand=True)
         if TAB_CONTROLS:
             #frame.bind("<Control-Key><Tab>", self.notebook.switch_next_tab)
-            frame.bind("<Control-Tab>", call(self.notches.focus_next), add=True)
+            frame.bind("<Control-Tab>", switch("next"), add=True)
             if IS_UNIX:
                 sequence:str = "<Control-ISO_Left_Tab>"
             else:
                 sequence:str = "<Control-Shift-Tab>"
-            frame.bind(sequence, call(self.notches.focus_prev), add=True)
+            frame.bind(sequence, switch("prev"), add=True)
         if CONTROL_NUMBERS_CONTROLS:
             def _control_numbers(event:tk.Event) -> str:
                 number:str = getattr(event, "keysym", None)

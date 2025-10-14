@@ -273,14 +273,14 @@ class LineNumbers(tk.Canvas):
         super().create_line((self.width-3, 0, self.width-3, max_y), width=1,
                             fill=self.fg, tags=("separator", ))
 
-        self.redraw_loop()
+        # self.redraw_loop()
 
-    def redraw_loop(self) -> None:
-        try:
-            self.redraw()
-            super().after(100, self.redraw_loop)
-        except tk.TclError:
-            pass
+    # def redraw_loop(self) -> None:
+    #     try:
+    #         self.redraw()
+    #         super().after(100, self.redraw_loop)
+    #     except tk.TclError:
+    #         pass
 
     def insert(self, index:str, text:str, *args:tuple) -> None:
         result = self._insert(index, text, *args)
@@ -337,20 +337,19 @@ if __name__ == "__main__":
     from betterframe import BetterFrame
 
     root = BetterTk()
-    root.title("New")
-    # root.resizable(False, False)
 
-    frame = BetterFrame(root, bg="black", height=200, hscroll=True,
-                        VScrollBarClass=BetterScrollBarVertical, vscroll=True,
-                        HScrollBarClass=BetterScrollBarHorizontal)
+    frame = BetterFrame(root, bg="cyan", height=200, vscroll=True,
+                        VScrollBarClass=BetterScrollBarVertical)
     frame.pack(fill="both", expand=True)
 
-    for i in range(30):
-        text = f"This is text label number {i}"
-        text = " "*50 + text + " "*50
-        label = tk.Label(frame, text=text, bg="black",
-                         fg="white")
-        label.pack(fill="x")
+    i:int = 0
+    def add():
+        global i
+        for _ in range(5):
+            label = tk.Label(frame, text=f"Label number {i}", bg="cyan")
+            label.pack(anchor="w", fill="x")
+            i += 1
+    tk.Button(frame, text="Add widgets", command=add).pack(fill="x")
 
     root.mainloop()
 

@@ -3,16 +3,16 @@ import tkinter as tk
 
 from .baseplugin import BasePlugin
 from .common_rules import COMMON_RULES
-from .rules.python.runmanager import RunManager
-from .rules.python.colourmanager import ColourManager
-from .rules.python.commentmanager import CommentManager
-from .rules.python.saveloadmanager import SaveLoadManager
-from .rules.python.whitespacemanager import WhiteSpaceManager
+from .rules.sh.runmanager import RunManager
+from .rules.sh.colourmanager import ColourManager
+from .rules.sh.commentmanager import CommentManager
+from .rules.sh.saveloadmanager import SaveLoadManager
+from .rules.sh.whitespacemanager import WhiteSpaceManager
 
 
-class PythonPlugin(BasePlugin):
+class ShPlugin(BasePlugin):
     __slots__ = ()
-    DEFAULT_CODE:str = 'import this\n\nprint("Hello world")'
+    DEFAULT_CODE:str = '#!/bin/bash\nset -e\n\necho "Hello world"'
 
     def __init__(self, *args:tuple) -> PythonPlugin:
         rules:list[Rule] = [
@@ -29,12 +29,12 @@ class PythonPlugin(BasePlugin):
         if filepath is None:
             return False
         # Check file extension
-        if filepath.endswith(".py"):
+        if filepath.endswith(".sh") or filepath.endswith(".run"):
             return True
         # Check shebang
         try:
             with open(filepath, "r") as file:
-                if (file.read(2) == "#!") and ("python" in file.readline()):
+                if (file.read(2) == "#!") and ("sh" in file.readline()):
                     return True
         except:
             pass

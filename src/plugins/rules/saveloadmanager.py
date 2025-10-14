@@ -79,12 +79,13 @@ class SaveLoadManager(Rule):
         if not os.path.exists(self.text.filepath):
             return False
         with open(self.text.filepath, "rb") as file:
-            filesystem_data:bytes = file.read() \
-                                        .replace(b"\r\n", b"\n") \
-                                        .rstrip(b"\n")
+            filesystem_data:bytes = file.read()
         if not filesystem_data:
             return False
-        return filesystem_data != self.text.filesystem_data.encode("utf-8")
+        filesystem_data:str = self._security(filesystem_data, decode=True)
+        modified:bool = filesystem_data != self.text.filesystem_data
+        self.text.filesystem_data:str = filesystem_data
+        return modified
 
     def _edit_modified(self, value:bool) -> None:
         self.text.edit_modified(value)
@@ -306,7 +307,7 @@ class SaveLoadManager(Rule):
             if decode:
                 assert isinstance(data, bytes), "if decode, data must be bytes"
                 data:str = data.decode("utf-8")
-            assert isinstance(data, str), "data should a string at this point"
+            assert isinstance(data, str), "Pass in decode=True"
             data:str = data.replace("\r\n", "\n").removesuffix("\n")
             char:str = _get_first_non_printable(data)
             if char:

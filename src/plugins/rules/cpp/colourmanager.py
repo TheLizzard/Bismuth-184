@@ -15,7 +15,7 @@ class ColourConfig(BaseColourConfig):
                            "keyword":      dict(foreground="orange"),
                            "builtins":     dict(foreground="#ff75ff"),
                            "string":       dict(foreground="lime"),
-                           "definition":   dict(foreground="cyan"), # parial use
+                           "definition":   dict(foreground="cyan"),
                            "preprocessor": dict(foreground="cyan"),
                            **kwargs
                         })
@@ -78,7 +78,6 @@ def get_builtins() -> Iterable[str]:
              ] + c_funcs
     stdlib.sort(key=lambda s: -len(s)) # Longest first
     return [f"std::{builtin}" for builtin in stdlib] + ["std::"] + c_funcs
-    return main + [f"std::{builtin}" for builtin in main] + ["std::"]
 
 def get_keywords() -> Iterable[str]:
     return [

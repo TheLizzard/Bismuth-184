@@ -272,6 +272,8 @@ class BetterText(tk.Text):
         self._disabled:bool = False
         # Re-parent self so that master is our self.master instead of inner
         self.master:tk.Misc = master
+        for event in ("<<XViewFix-After-Insert>>", "<<XViewFix-After-Delete>>"):
+            super().bind(event, self._call_xscrollcmd, add=True)
 
     # Events redirector
     def _redirect_event(self, event:tk.Event) -> None:
@@ -601,6 +603,10 @@ class BetterText(tk.Text):
         # print(f"{self._xoffset=}, {low=:.2f}, {high=:.2f} {curr_xoffset=}")
         self.cget("xscrollcommand")(str(low), str(high))
 
+    def _call_xscrollcmd(self, event:tk.Event) -> None:
+        low, high = self.xview()
+        self.cget("xscrollcommand")(low, high)
+
 
 if __name__ == "__main__":
     from os.path import dirname, join
@@ -627,7 +633,7 @@ if __name__ == "__main__":
                       "<Down>", "<KeyRelease-Left>", "<KeyRelease-Right>",
                       "<KeyRelease-Up>", "<KeyRelease-Down>")
     for ev in evs:
-        text.bind(ev, lambda e: text.see("insert"))
+        text.bind(ev, lambda e: text.see("insert"), add=True)
 
     # hbar = tk.Scrollbar(root, orient="horizontal", command=text.xview)
     hbar = BetterScrollBarHorizontal(root, command=text.xview)
@@ -649,3 +655,5 @@ if __name__ == "__main__":
 
     print(f"Took {perf_counter()-start:.2f} sec")
     root.mainloop()
+
+# text.cget("xscrollcommand")(*text.xview())
