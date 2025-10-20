@@ -179,7 +179,7 @@ class UndoManager(Rule):
             self.text.edit_reset()
             return False
 
-        raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on} in {self.__class__.__qualname__}")
 
     def _get_type(self, string:str) -> str:
         if len(string) > 1:

@@ -67,7 +67,7 @@ class UMarkManager(Rule):
             self._fix()
             return False
 
-        raise RuntimeError(f"Unhandled {on!r} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on!r} in {self.__class__.__qualname__}")
 
     # Mark helpers
     def _add_umark(self, line:int, char:int) -> None:

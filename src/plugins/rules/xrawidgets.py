@@ -11,7 +11,7 @@ from bettertk import TkSpriteCache
 
 class SingletonMeta(type):
     def __call__(Class:type, plugin:BasePlugin, text:tk.Text) -> Class:
-        name:str = "_singleton_" + Class.__name__.lower()
+        name:str = "_singleton_" + Class.__qualname__.lower()
         self:Cls = getattr(text, name, None)
         if self is None:
             self:Cls = super().__call__(plugin, text)
@@ -160,7 +160,7 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
         if on == "<remove-all-umarks>":
             self.sidebar_text.tag_remove("umark", "1.0", "end")
             return False
-        raise RuntimeError(f"Unhandled {on!r} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on!r} in {self.__class__.__qualname__}")
 
     def bounce(self, event:tk.Event, on:str, proper_on:str) -> str:
         if on == "focusin":
@@ -176,7 +176,7 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
             self.text.event_generate(proper_on, x=0, y=event.y, **kwargs)
             return "break"
 
-        raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on} in {self.__class__.__qualname__}")
 
 
 class ScrollbarManager(Rule, metaclass=SingletonMeta):

@@ -30,21 +30,23 @@ register(MyClass, "MyClass", MyClass.serialise, MyClass.deserialise)
 ```
 
 The classes registered on import are:
-    * int, float, bool, None
+    * int, float, bool, None, Ellipsis
     * list, dict, tuple, set, frozenset, bytes, bytearray
     * complex, range, slice
+    * signal.Signals
 
 This module defines `dumps` and `loads` functions like the json library. It
 also defines `enc_dumps` and `enc_loads` which work with `bytes` instead of
 `str` using the "utf-8" encoding.
 
 Issues:
-    * It detects circular references by catching `RecursionError`s in `dumps`
+    * It detects circular references by catching `RecursionError`s in `dumps`.
+        This is a problem since https://github.com/python/cpython/issues/132744
     * Not very memory efficient for a lot of objects with a lot of references
         but it's perfectly good enough for lists of ints/floats/strings but
         it should be compressable by zlib or gzip
     * It has the same speed restrictions as the built-in json library
-    * It is very hard to read the encoded data as a human (too many \\s)
+    * It is very hard to read the encoded data as a human (too many backslashes)
 """
 from __future__ import annotations
 from base64 import b64encode, b64decode
@@ -58,12 +60,11 @@ Deserialiser:type = Callable[dict,T]
 
 
 class DoubleDict:
+    __slots__ = "val", "rev"
+
     def __init__(self) -> None:
         self.val:dict = {}
         self.rev:dict = {}
-        self.get = self.val.get
-        self.__getitem__ = self.val.get
-        self.reverse_get = self.rev.get
 
     def __setitem__(self, key:object, value:object) -> None:
         self.val[key] = value
@@ -80,87 +81,65 @@ class DoubleDict:
         return key
 
     def reverse_get(self, key:object, *default:tuple[object]) -> object:
-        # Gets overwritten in `__init__`
-        pass
+        return self.rev.get(key, *default)
 
     def get(self, key:object, *default:tuple[object]) -> object:
-        # Gets overwritten in `__init__`
-        pass
+        return self.val.get(key, *default)
 
     def __getitem__(self, key:object) -> object:
-        # Gets overwritten in `__init__`
-        pass
+        return self.val.get(key)
 
 
 def _dumps(obj:object, **kwargs:dict) -> str:
-    if type(obj) in (str, bool, type(None), int, float, list, dict):
-        return _dumps_builtin_types(obj, **kwargs)
-    serialiser:Serialiser = _serialisers.get(type(obj), None)
-    typename:str = _typenames.get(type(obj), None)
-    data:dict = serialiser(obj, **kwargs)
-    if not isinstance(data, dict):
-        raise TypeError("Serialiser must return a dict")
-    new:dict = {}
-    for key, value in data.items():
-        if isinstance(key, str) and key.endswith("class"):
-            key:str = f"_{key}"
-        new[key] = value
-    return _dumps_builtin_types(new | {"class":typename})
-
-def _dumps_builtin_types(obj:object, **kwargs:dict) -> str:
     if type(obj) in (str, bool, type(None), int, float):
         return json.dumps(obj)
-    if type(obj) == list:
+    elif type(obj) == list:
+        # Serialise a list
         output:str = "["
         for value in obj:
             output += _dumps(value, **kwargs) + ", "
-        return output.removesuffix(", ")+"]"
-    if type(obj) == dict:
-        output:str = "{"
-        for key, value in obj.items():
-            if key != "class":
-                key:str = _dumps(key, **kwargs)
-            key:str = json.dumps(key)
-            value:object = _dumps(value, **kwargs)
-            output += f"{key}: {value}, "
-        return output.removesuffix(", ")+"}"
-    raise TypeError(f"Unknown type {obj.__class__.__name__}")
+        return output.removesuffix(", ") + "]"
+    else:
+        # Get the correct serialiser
+        serialiser:Serialiser = _serialisers.get(type(obj), None)
+        if serialiser is None:
+            raise TypeError(f"No serialisation method registered for "\
+                            f"{type(obj).__qualname__}")
+        # Get the typename and serialise the data
+        typename:str = _typenames.get(type(obj), None)
+        data:dict = serialiser(obj, **kwargs)
+        if not isinstance(data, dict):
+            raise TypeError("Serialiser must return a dict")
+        # Serialise the dict output from the serialiser
+        output:str = f'{{"class":{json.dumps(typename)}, '
+        for key, value in data.items():
+            new_key:str = json.dumps(_dumps(key, **kwargs))
+            new_value:str = _dumps(value, **kwargs)
+            output += f"{new_key}:{new_value}, "
+        return output.removesuffix(", ") + "}"
 
 def _loads(obj:object, **kwargs:dict) -> object:
     if isinstance(obj, dict):
-        new:dict = {}
-        typename:str = None
-        for key, value in obj.items():
-            if key == "class":
-                typename:str = value
-                continue
-            key:object = json.loads(key)
-            key:object = _loads(key, **kwargs)
-            value:object = _loads(value, **kwargs)
-            if isinstance(key, str) and key.endswith("class"):
-                key:str = key.removeprefix("_")
-            new[key] = value
+        typename:str|None = obj.get("class", None)
         if typename is None:
-            raise ValueError("class missing from dict")
+            raise ValueError('"class" key missing')
+        new:dict = {_loads(json.loads(key)):_loads(value, **kwargs)
+                    for key, value in obj.items() if key != "class"}
         return _load_object(new, typename, **kwargs)
     elif isinstance(obj, list):
-        new:list = []
-        for value in obj:
-            value:object = _loads(value)
-            if isinstance(value, dict) and ("class" in value):
-                value:dict = _load_object(value)
-            new.append(value)
-        return new
+        return list(map(_loads, obj))
     else:
         return obj
 
 def _load_object(data:dict, typename:str, **kwargs:dict) -> object:
-    if typename != "dict":
+    assert isinstance(typename, str), "TypeError"
+    if typename == "dict":
+        return data
+    else:
         T:type = _typenames.reverse_get(typename, None)
         if T is None:
             raise ValueError(f"Missing deserialiser for {typename}")
         return _deserialisers[T](data, **kwargs)
-    return data
 
 
 def dumps(obj:object, **kwargs:dict) -> str:
@@ -198,8 +177,8 @@ def register(T:type, name:str, serialiser:Serialiser,
 
 @lambda f: f()
 def _register_builtins() -> None:
-    def ident(x:object, **kwargs:dict) -> object:
-        return x
+    def ident(obj:object) -> object:
+        return obj
 
     def val_type_to_json(T:type) -> Serialiser:
         def inner(value:object, **kwargs:dict) -> dict:
@@ -227,6 +206,11 @@ def _register_builtins() -> None:
             return T(*data["v"])
         return inner
 
+    def ellipsis_to_json(ellipsis:Ellipsis, **kwargs:dict) -> dict:
+        return {}
+    def json_to_ellipsis(data:dict, **kwargs:dict) -> Ellipsis:
+        return Ellipsis
+
     register(dict, "dict", ident, ident)
     register(set, "set", val_type_to_json(list), json_to_val_type(set))
     register(tuple, "tuple", val_type_to_json(list), json_to_val_type(tuple))
@@ -238,6 +222,7 @@ def _register_builtins() -> None:
     register(complex, "complex", complex_to_json, json_to_complex)
     register(range, "range", triplet_to_json, json_to_triplet(range))
     register(slice, "slice", triplet_to_json, json_to_triplet(slice))
+    register(type(Ellipsis), "Ellipsis", ellipsis_to_json, json_to_ellipsis)
 
     import signal
     register(signal.Signals, "signal.Signals", val_type_to_json(int),
@@ -246,6 +231,8 @@ def _register_builtins() -> None:
 
 if __name__ == "__main__":
     class MyClass:
+        __slots__ = "attr"
+
         def __init__(self, attr:object) -> MyClass:
             self.attr:object = attr
 
@@ -255,16 +242,69 @@ if __name__ == "__main__":
         def __repr__(self) -> str:
             return f"MyClass({self.attr!r})"
 
+        def __eq__(self, other:object) -> bool:
+            return repr(self) == repr(other)
+
         @classmethod
         def deserialise(self, data:dict, **kwargs:dict) -> MyClass:
             return MyClass(data.pop("attr"))
 
     register(MyClass, "MyClass", MyClass.serialise, MyClass.deserialise)
 
-    # data:object = [b"\x00", MyClass(5.6)]
-    data:object = {"class":MyClass(b"abc")}
-    # data:object = {1:1, "class":0}
-    data:object = [i for i in range(10)]
-    serialised:str = dumps(data)
-    data:object = loads(serialised)
-    print(repr(data))
+    TESTS:list[object] = [
+        # Test numbers
+        1, 1.1, 1.0,
+        # Test strings/bytes
+        "Hello", "class", b"Hello world", b"class",
+        # Test dictionaries
+        {}, {"class":-1}, {"class":-1, "a":"b"}, {"a":"class",1:2}, {"a":"b"},
+        # Test sets
+        set(), {1}, {"a"}, {"class"}, {"a","class"},
+        # Test lists
+        [], [1], ["class"], [1,2,"class"], list(range(10)),
+        # Test True, False, None, Ellipsis
+        True, False, None, Ellipsis,
+        # Test tuples
+        (), ("a",), ("class",), ("a","b"), ("a","class"),
+        # Test complex
+        (1+0j), (0+5j),
+        # Test range
+        range(-1,5,1),
+        # Test custom classes
+        MyClass(5.6), MyClass("class"),
+        # Test combinations of custom classes and other objects
+        [b"\x00",MyClass(5.6)], [b"\x00",MyClass(b"abc")],
+        {"class":MyClass(b"abc")},
+    ]
+
+    failed_any_tests:bool = False
+    failed:bool = False
+    for obj in TESTS:
+        if failed: print("-"*20)
+        failed:bool = False
+        try:
+            serialised:str = dumps(obj)
+        except:
+            print(f"Serialiser errored on {obj!r}")
+            failed_any_tests:bool = True
+            continue
+        try:
+            data:object = loads(serialised)
+        except:
+            print(f"Deserialiser errored on {obj!r}")
+            failed_any_tests:bool = True
+            continue
+        if type(obj) != type(data):
+            failed:bool = True
+        elif obj != data:
+            failed:bool = True
+        if failed:
+            failed_any_tests:bool = True
+            print(f"Serialiser+Deserialiser didn't work on {obj!r}")
+            print(f"Serialised data: {serialised!r}")
+            print(f"Deserialised data: {data}")
+    if failed_any_tests:
+        print("-"*20)
+        print("Tests: \x1b[91mFailed\x1b[0m")
+    else:
+        print("Tests: \x1b[92mPassed\x1b[0m")

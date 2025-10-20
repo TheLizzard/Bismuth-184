@@ -36,8 +36,8 @@ class ProtoPlugin:
             for i, rule in enumerate(rules):
                 Rule:type = rule.__class__
                 if self._should_load_rule(Rule, _pass):
-                    if DEBUG: print(f"[DEBUG]: attaching {Rule.__name__}")
-                    self.loaded_rules.add(Rule.__name__.lower())
+                    if DEBUG: print(f"[DEBUG]: attaching {Rule.__qualname__}")
+                    self.loaded_rules.add(Rule.__qualname__.lower())
                     rule.attach()
                     rules.pop(i)
                     break
@@ -49,13 +49,13 @@ class ProtoPlugin:
         unmet:Dependancies = self._unmet_dependencies(requests)
         if not unmet:
             return True
-        err_msg:str = f"{Rule.__name__} requested {unmet[0]!r} library " \
+        err_msg:str = f"{Rule.__qualname__} requested {unmet[0]!r} library " \
                       f"but it's not loaded."
         if _pass == "warn":
             for lib, strict in unmet:
                 if strict:
                     return False
-            print(f"[WARNING] {err_msg} {Rule.__name__} might "
+            print(f"[WARNING] {err_msg} {Rule.__qualname__} might "
                   f"malfunction.")
             return True
         if _pass == "error":
@@ -71,7 +71,8 @@ class ProtoPlugin:
         return unmet
 
     def _get_rule_dependencies(self, Rule:type) -> Dependancies:
-        err:str = f"TypeError: Invalid REQUESTED_LIBRARIES in {Rule.__name__!r}"
+        err:str = f"TypeError: Invalid REQUESTED_LIBRARIES in " \
+                  f"{Rule.__qualname__!r}"
         libraries:Dependancies = Rule.REQUESTED_LIBRARIES
         assert isinstance(libraries, tuple|list), err
         for request in libraries:
@@ -99,7 +100,7 @@ class ProtoPlugin:
         try:
             self.rules.append(Rule(self, self.widget))
         except BaseException as error:
-            print(f"[ERROR]: {Rule.__name__} errored out")
+            print(f"[ERROR]: {Rule.__qualname__} errored out")
             raise
 
     def add_rules(self, rules:Iterable[type[Rule]]) -> None:
@@ -127,13 +128,13 @@ class ProtoPlugin:
     def get_state(self) -> object:
         state:dict[str:object] = dict()
         for rule in self.rules:
-            state[rule.__class__.__name__] = rule.get_state()
+            state[rule.__class__.__qualname__] = rule.get_state()
         return state
 
     def set_state(self, state:dict) -> None:
         assert isinstance(state, dict), "TypeError"
         for rule in self.rules:
-            rule_name:str = rule.__class__.__name__
+            rule_name:str = rule.__class__.__qualname__
             if rule_name in state:
                 rule.set_state(state[rule_name])
 

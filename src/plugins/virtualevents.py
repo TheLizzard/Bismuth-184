@@ -22,8 +22,9 @@ class VirtualEvent:
         self.x:int = kwargs.pop("x", 0)
         self.y:int = kwargs.pop("y", 0)
         if len(kwargs) != 0:
-            raise TypeError(f"{self.__class__.__name__} got an unexpected " \
-                            f"keyword arguments {tuple(kwargs.keys())}")
+            raise TypeError(f"{self.__class__.__qualname__} got an " \
+                            f"unexpected keyword arguments " \
+                            f"{tuple(kwargs.keys())}")
 
 
 class _VirtualEvents:
@@ -129,7 +130,7 @@ class _VirtualEvents:
             if WARNING:
                 print(f"[WARNING]: unbind({event_name}) is dropping down to " \
                       "the tkinter unbind, even though this event is managed " \
-                      f"by {self.__class__.__name__}")
+                      f"by {self.__class__.__qualname__}")
         if all:
             self.old_unbind_all(event_name, id)
         else:

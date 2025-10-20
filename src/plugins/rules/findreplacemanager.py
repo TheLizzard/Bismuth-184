@@ -169,7 +169,7 @@ class FindReplaceManager(Rule):
         if on in ("control-r", "control-h"):
             self.open_replace()
             return True
-        raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on} in {self.__class__.__qualname__}")
 
     def open_find(self) -> None:
         self.show()

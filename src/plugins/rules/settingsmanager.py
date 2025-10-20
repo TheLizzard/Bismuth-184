@@ -33,7 +33,7 @@ class SettingsManager(Rule, metaclass=SingletonMeta):
         if on == "<open-settings>":
             self.open_settings()
             return False
-        raise RuntimeError(f"Unhandled {on!r} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on!r} in {self.__class__.__qualname__}")
 
     # Add/Get setting value (used by other managers)
     def add_setting(self, name:str, *, type:str, default:object) -> None:

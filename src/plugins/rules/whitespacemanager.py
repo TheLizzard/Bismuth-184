@@ -78,7 +78,7 @@ class WhiteSpaceManager(Rule):
         elif on == "<raw-after-insert>":
             self.update_default_indentation()
             return False
-        raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on} in {self.__class__.__qualname__}")
 
     # Return
     def return_pressed(self, shift:bool) -> tuple[Break,str]:

@@ -86,13 +86,13 @@ class XCLIENT_MESSAGE_EVENT(ctypes.Structure):
 def errcheck_not_zero(value, func, args):
     if value in (0, None):
         args_str = ", ".join(map(str, args))
-        raise OSError(f"{func.__name__}({args_str}) => {value}")
+        raise OSError(f"{func.__qualname__}({args_str}) => {value}")
     return args
 
 def errcheck_zero(value, func, args):
     if value != 0:
         args_str = ", ".join(map(str, args))
-        raise OSError(f"{func.__name__}({args_str}) => {value}")
+        raise OSError(f"{func.__qualname__}({args_str}) => {value}")
     return args
 
 def string_to_c(data:str) -> CHAR_PTR:

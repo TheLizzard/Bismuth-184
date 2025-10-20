@@ -152,7 +152,7 @@ class SaveLoadManager(Rule):
             self._internal_open(reload=True)
             return True
 
-        raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on} in {self.__class__.__qualname__}")
 
     # Save/Open
     def _save(self) -> None:

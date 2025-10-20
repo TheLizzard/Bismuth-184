@@ -274,7 +274,8 @@ class SelectManager(Rule):
             pass
         # Unknown
         else:
-            raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+            raise RuntimeError(f"Unhandled {on} in " \
+                               f"{self.__class__.__qualname__}")
         # Actual computation
         if shift:
             start, end = self.plugin.get_selection()

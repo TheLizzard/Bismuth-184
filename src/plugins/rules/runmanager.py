@@ -91,7 +91,7 @@ class RunManager(Rule):
             self.cwd:str = None
             return None
 
-        raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on} in {self.__class__.__qualname__}")
 
     # Run
     def run_with_args(self) -> None:

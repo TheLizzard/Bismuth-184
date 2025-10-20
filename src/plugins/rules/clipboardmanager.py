@@ -58,4 +58,4 @@ class ClipboardManager(Rule):
                     self.text.delete(start, end)
                     self.text.insert("insert", copied)
             return True
-        raise RuntimeError(f"Unhandled {op} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {op} in {self.__class__.__qualname__}")

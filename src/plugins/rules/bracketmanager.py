@@ -74,7 +74,7 @@ class BracketManager(Rule):
                 return self.close_bracket(self.RBRACKETS_DICT[on], on)
             if on == "backspace":
                 return self.backspace()
-        raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on} in {self.__class__.__qualname__}")
 
     def alt_bracket(self, on:str) -> Break:
         on:str = on.removeprefix("alt-")

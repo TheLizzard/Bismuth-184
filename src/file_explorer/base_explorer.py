@@ -278,7 +278,7 @@ class Item:
         self.perms:int = (x<<2) | (w<<1) | r
 
     def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.name})"
+        return f"{self.__class__.__qualname__}({self.name})"
 
     @property
     def fullpath(self) -> str:

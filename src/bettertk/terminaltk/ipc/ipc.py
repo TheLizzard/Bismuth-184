@@ -488,16 +488,16 @@ def assert_type(obj:T|object, T:type, what:str=None) -> None:
     else:
         if not isinstance(T, type):
             raise ValueError(f"T must be a type variable not " \
-                             f"{T.__class__.__name__}")
+                             f"{T.__class__.__qualname__}")
         if isinstance(obj, T):
             return None
-        type_name:str = T.__name__
+        type_name:str = T.__qualname__
     if what is None:
         raise TypeError(f"expected type {type_name} not " \
-                        f"{obj.__class__.__name__}")
+                        f"{obj.__class__.__qualname__}")
     else:
         raise TypeError(f"expected {what!r} to be a {type_name} object not " \
-                        f"a {obj.__class__.__name__} object")
+                        f"a {obj.__class__.__qualname__} object")
 
 
 if __name__ == "__main__":

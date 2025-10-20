@@ -32,7 +32,7 @@ class WrapManager(Rule, metaclass=SingletonMeta):
         if on == "<settings-changed>":
             self._config_wrap()
             return False
-        raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on} in {self.__class__.__qualname__}")
 
     def _config_wrap(self) -> None:
         if self.text.get_setting("wrap"):

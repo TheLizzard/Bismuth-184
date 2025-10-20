@@ -69,14 +69,14 @@ class Rule:
             return None
         start:float = perf_counter()
         data = self.applies(event, on)
-        if DEBUG: print(f"[DEBUG {perf_counter()-start:.2f}]: Checking if {on} applies to {self.__class__.__name__}")
+        if DEBUG: print(f"[DEBUG {perf_counter()-start:.2f}]: Checking if {on} applies to {self.__class__.__qualname__}")
         if not isinstance(data, tuple|list):
             data = (data,)
         *data, applies = data
         if applies:
             start:float = perf_counter()
             block:bool = self.do(on, *data)
-            if DEBUG: print(f"[DEBUG {perf_counter()-start:.2f}]: {self.__class__.__name__}.do({on}) => {block}")
+            if DEBUG: print(f"[DEBUG {perf_counter()-start:.2f}]: {self.__class__.__qualname__}.do({on}) => {block}")
             return "break" if block else None
 
     def applies(self, event:tk.Event, on:str) -> tuple[...,Applies]:

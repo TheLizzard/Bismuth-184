@@ -39,7 +39,7 @@ class ControlIJKLManager(Rule):
                 if on == "l":
                     if shift: return False
                     return self.control_l()
-        raise RuntimeError(f"Unhandled {on} in {self.__class__.__name__}")
+        raise RuntimeError(f"Unhandled {on} in {self.__class__.__qualname__}")
 
     # Control-i and Control-k
     def control_i(self, shift:bool) -> Break:
