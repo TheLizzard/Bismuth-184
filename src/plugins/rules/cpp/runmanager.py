@@ -40,7 +40,7 @@ class RunManager(BaseRunManager):
 
     RUN:list[str] = ["{tmp}/executable"]
 
-    def compile(self, *, print_str:str="") -> bool:
+    def compile(self) -> bool:
         if not self.text.filepath.endswith(".cpp"):
             return False
         compiler:Compiler = Compiler(self.effective_cwd)
@@ -49,12 +49,18 @@ class RunManager(BaseRunManager):
         if compiler.links:
             super().set_env_var("LIBRARY_PATH", set(compiler.links))
             super().set_env_var("LD_LIBRARY_PATH", set(compiler.links))
-        cmd:str = " ".join(command) + "\n\n"
+        cmd:str = " ".join(command) + "\n"
+        self.term.queue([*PRINTF, self.center("Pre-Compiling", "-")],
+                        condition=(0).__eq__)
         self.term.queue([*PRINTF, cmd], condition=(0).__eq__)
         if compiler.error:
             self.term.queue([*PRINTF, compiler.error], condition=(0).__eq__)
             return False
-        return super().compile(print_str=print_str, command=command)
+        return super().compile(command=command,
+                               print_str=self.center("Compiling", "-"))
+
+    def execute(self, args:Iterable[str]) -> None:
+        super().execute(args, print_str=self.center("Running", "-"))
 
 
 class Compiler:

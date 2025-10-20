@@ -109,12 +109,12 @@ class RunManager(Rule):
         if (self.term is None) or (not self.term.running()):
             self.term = TerminalTk(self.widget)
             self.term.bind("<<Closing-Terminal>>", self.cleanup)
-            print_str:str = " Starting ".center(80, "=") + "\n"
+            print_str:str = self.center("Starting", "=") + "\n"
         else:
             self.term.queue_clear(stop_cur_proc=True)
             # self.term.check_alive()
             self.term.clear()
-            print_str:str = " Restarting ".center(80, "=") + "\n"
+            print_str:str = self.center("Restarting", "=") + "\n"
 
         if self.tmp is None:
             self.tmp:TemporaryDirectory = TemporaryDirectory()
@@ -125,6 +125,9 @@ class RunManager(Rule):
         if self.compile(): # must be after self.cd
             self.execute(args)
         self.after()
+
+    def center(self, string:str, fill:str) -> str:
+        return f" {string} ".center(80, fill)
 
     def cd(self, req_cwd:str=None, *, print_str:str="") -> None:
         if self.CD is None:
