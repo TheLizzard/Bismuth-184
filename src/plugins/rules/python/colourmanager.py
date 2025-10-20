@@ -14,11 +14,31 @@ except:
     from colourmanager import Regex, Parser as BaseParser
 
 
-def isfloat(data:str) -> bool:
+NUMBER_REGEX:re.Pattern = re.compile((
+    r"(?:"
+        r"0|" # The number zero or
+        r"(?:"
+            r"[1-9]" # Any non-zero integer
+            r"\d*"   # Followed by any number of integers
+        r")"
+    r")"
+    r"(?:" # Followed by 0 or 1 fractional parts
+        r"\."  # A fractional part starts with a "."
+        r"\d*" # Followed by any number of integers
+    r")?"
+    r"(?:" # Followed by 0 or 1 exponential parts
+        r"[eE]" # A fractional part starts with an "e"
+        r"\d*"  # Followed by any number of integers
+    r")?"
+))
+VALID_NUMBER_ENDERS:set[str] = set("0123456789.eE")
+
+def isnumber(data:str) -> bool:
+    if data[-1:] not in VALID_NUMBER_ENDERS: return False
     try:
         float(data)
         return True
-    except ValueError:
+    except:
         return False
 
 
@@ -26,35 +46,70 @@ class ColourConfig(BaseColourConfig):
     __slots__ = ()
 
     def __init__(self, kwargs:dict[str:dict[str:str]]={}) -> ColourConfig:
+        light_cyan:str = "#b0ffff" # Check if it's too dark/bright
+        purple:str = "#ff75ff" # Maybe a touch lighter? (check night-time)
+        grey:str = "#a0a0a0" # Maybe something lighter (check night-time)
         super().__init__({
-                           "comment":           dict(foreground="red"),
-                           "keyword":           dict(foreground="orange"),
-                           "builtin":           dict(foreground="#ff75ff"),
-                           "string":            dict(foreground="lime"),
-                           "definition":        dict(foreground="cyan"),
-                           "f-string-format":   dict(foreground="#c0c0c0"),
-                           # "identifier":        dict(foreground="#b0ffff"),
-                           # "number":            dict(foreground="#c0c0c0"),
-                           "decorator":        dict(foreground="#ff75ff"),
-                           "type-annotation":  dict(foreground="#c0c0c0"),
+                           "comment":          dict(foreground="red"),
+                           "keyword":          dict(foreground="orange"),
+                           "builtin":          dict(foreground=purple),
+                           "string":           dict(foreground="lime"),
+                           "definition":       dict(foreground="cyan"),
+                           "f-string-format":  dict(foreground=grey),
+                           # "identifier":        dict(foreground=light_cyan),
+                           # "number":            dict(foreground=grey),
+                           "decorator":        dict(foreground=purple),
+                           "type-annotation":  dict(foreground=grey),
+                           "f-string-bracket": dict(foreground="yellow"),
+                           "self":             dict(foreground=grey),
+                           # "walrus-operator":  dict(foreground="white"),
+                           # "type-annotation-arrow": dict(foreground=grey),
                            **kwargs
                         })
 
 
+EXPR_KWS:set[str] = {"lambda", "if", "for", "else", "False", "True", "None",
+                     "and", "or", "not", "await", "in", "is", "yield"}
+CMD_KWS:set[str] = {"assert", "with", "async", "def", "class", "break",
+                    "continue", "del", "elif", "try", "except", "finally",
+                    "from", "import", "nonlocal", "global", "pass", "raise",
+                    "return", "while", "for"}
+KWS_WITH_COLON:set[str] = {"lambda", "while", "if", "for", "else", "def",
+                           "class", "elif", "try", "except", "finally",
+                           "with"}
+KDS_WITH_IMMEDIATE_COLON:set[str] = {"else", "finally", "try"}
+
+SPACES:str = " \t"
+STRING_TYPES:set[str] = {"string", "f-string-format", "f-string-bracket"}
+TYPE_ANNOTATION_IGNORETYPES:set[str] = {"comment", "decorator"}
+# TYPE_ANNOTATION_IGNORETYPES += STRING_TYPES
+DECORATOR_IGNORETYPES:set[str] = {"keyword", "comment"} | STRING_TYPES
+
+
 # To speed up parsing, only check for these if we need to
 config:dict[str:dict[str:str]] = ColourConfig()
+CHECK_FSTRING_BRACKETS:bool = "f-string-bracket" in config
 CHECK_TYPE_ANNOTATIONS:bool = "type-annotation" in config
+CHECK_FSTRING_FORMATS:bool = "f-string-format" in config
 CHECK_IDENTIFIERS:bool = "identifier" in config
 CHECK_DECORATORS:bool = "decorator" in config
 CHECK_NUMBERS:bool = "number" in config
-CHECK_COLONS:bool = True
+
+
+if (not CHECK_NUMBERS) and (not CHECK_IDENTIFIERS):
+    # Faster to just call str.isdigit
+    isnumber:Callable[str,bool] = str.isdigit
+
+FSTRING_BARCKET_TOKENTYPE:str = "string"
+if CHECK_FSTRING_BRACKETS:
+    FSTRING_BARCKET_TOKENTYPE:str = "f-string-bracket"
 
 
 class Parser(BaseParser):
     __slots__ = "keywords", "builtins", "string_prefixes"
 
     def __init__(self) -> Parser:
-        super().__init__(str.isidentifier)
+        super().__init__(isidentifier=str.isidentifier, isnumber=isnumber)
         self.keywords:set[str] = set(keyword.kwlist)
         self.builtins:set[str] = set()
         for name in dir(builtins):
@@ -64,203 +119,292 @@ class Parser(BaseParser):
         self.string_prefixes:set[str] = {"r","u","f","t","b",
                                          "fr","rf","tr","rt","br","rb"}
 
-    def read(self) -> Iterable[TokenTypePair]:
-        while True:
-            token:Token = self.peek_token()
-            # print("in:", (token,))
-            if not token: break
-            # Keywords
-            if token in self.keywords:
-                yield self.read_token(), "keyword"
-                if token in ("def", "class"): # def ···
-                    yield self.read_join_spaces(" \t"), "" # Eat spaces
-                    if self.isidentifier(self.peek_token()):
-                        yield self.read_token(), "definition"
-                elif token == "lambda": # lambda···: (needed for f-strings)
-                    for token, tokentype in self.read():
-                        if (token == ":") and (tokentype != "keyword"):
-                            yield ":", "keyword"
-                            break
-                        yield token, tokentype
-                        # lambda's colon must be on the same line
-                        if token == "\n": break
-            # Builtins
-            elif (self.seen_text[-1:] not in set(".'\"\\#")) and \
-                                                  (token in self.builtins):
-                yield self.read_token(), "builtin"
-            # Decorators
-            elif CHECK_DECORATORS and (token == "@"):
-                yield from self.read_decorator()
-            # Colon as keyword
-            elif CHECK_COLONS and (token == "{"):
-                yield self.read_token(), ""
-                brackets:int = 1
-                for token, tokentype in self.read():
-                    if (token == ":") and (tokentype != "type-annotation"):
-                        tokentype:TokenType = "dict-colon"
-                    yield token, tokentype
-                    if token == "{":
-                        brackets += 1
-                    elif token == "}":
-                        brackets -= 1
-                        if brackets == 0: break
-            elif CHECK_COLONS and (token == ":"):
-                yield self.read_token(), "keyword"
-            # Types annotations
-            elif CHECK_TYPE_ANNOTATIONS and (token == "\n"):
-                yield self.read_token(), ""
-                # TODO
-            # Comment
-            elif token == "#":
-                token:Token = self.read_token() # Read the "#"
+    def read(self) -> None:
+        token:Token = self.peek_token()
+        if not token: return None
+        # Keywords
+        if token in self.keywords:
+            self.set("keyword")
+            # Def/Class definition identifier
+            if token in ("def", "class"):
+                self.skip_whitespaces(SPACES) # Eat spaces
+                if self.isidentifier(self.peek_token()):
+                    self.set("definition")
+                # Def type-annotations
+                if CHECK_TYPE_ANNOTATIONS and (token == "def"):
+                    self.read_def_type_annotation()
+            # Keyword colon
+            if CHECK_TYPE_ANNOTATIONS and (token in KWS_WITH_COLON):
+                orig_keyword:Token = token
+                # Shortcut for tokens that must be immediately followed by
+                #   a colon
+                if token in KDS_WITH_IMMEDIATE_COLON:
+                    if self.peek_token() != ":":
+                        return None
+                # Search for the next colon or command keyword
+                waiting_for:set[str] = {":","]","}",")","else"} | CMD_KWS
                 while True:
-                    new_token:Token = self.read_token()
-                    # Newline is not part of the comment
-                    if new_token == "\n":
-                        yield token, "comment"
-                        yield "\n", ""
-                        break
-                    token += new_token
-            # Prefix (might be with string/just an identifier)
-            elif token.lower() in self.string_prefixes:
-                token:Token = self.read_token() # Read the string prefix
-                new_token:Token = self.peek_token()
-                if new_token and (new_token in "'\""):
-                    yield from self.read_string(token)
-                else:
-                    yield token, "identifier"
-            # Strings without a prefix
-            elif token in "'\"":
-                yield from self.read_string() # Read the string
-            # Match soft-keyword (MATCH_SOFTKW)
-            elif token == "match":
-                if not self.seen_text.rstrip(" \t").endswith("\n"):
-                    yield self.read_token(), "identifier"
-                else:
-                    token:Token = self.read_token() # `match`
-                    spaces:Token = self.read_join_spaces(" \t")
-                    new_token:Token = self.peek_token()
-                    if new_token in ":,;=^&|@~)]}":
-                        yield token, "identifier"
-                        yield spaces, ""
-                    elif new_token in self.keywords: # `match def`
-                        yield token, "identifier"
-                        yield spaces, ""
-                    else:
-                        yield token, "keyword"
-                        yield spaces, ""
-            # Case soft keyword
-            elif token == "case":
-                if not self.seen_text.rstrip(" \t").endswith("\n"):
-                    yield self.read_token(), "identifier"
-                else:
-                    token:Token = self.read_token() # `case`
-                    spaces:Token = self.read_join_spaces(" \t")
-                    new_token:Token = self.peek_token()
-                    if new_token in ":,;=^&|@~)]}":
-                        yield token, "identifier"
-                        yield spaces, ""
-                    elif new_token in self.keywords: # `case def`
-                        yield token, "identifier"
-                        yield spaces, ""
-                    elif new_token == "_": # `case _`
-                        new_token:Token = self.read_token()
-                        yield token, "keyword"
-                        yield spaces, ""
-                        yield new_token, "keyword"
-                    else:
-                        yield token, "keyword"
-                        yield spaces, ""
-            # Identifiers
-            elif CHECK_IDENTIFIERS and self.isidentifier(token):
-                yield self.read_token(), "identifier"
-            # Numbers
-            elif CHECK_NUMBERS and isfloat(token):
-                yield self.read_token(), "number"
-            # Default
+                    token:Token = self.read_wait_for(waiting_for)
+                    if token == ":":
+                        start:Location = self.tell()
+                        self.skip()
+                        if self.peek_token() == "=":
+                            self.set("walrus-operator", start) # ":"
+                            self.set("walrus-operator") # "="
+                            continue # Continue looking for colon keyword
+                        else:
+                            self.set("keyword", start) # ":"
+                    elif (orig_keyword == "if") and (token == "else"):
+                        # Don't look for the colon for the "else"
+                        self.set("keyword")
+                    break # Command keyword so stop looking for ":"
+        # Builtins
+        elif token in self.builtins:
+            if self.curr_line_seen(respect_slashes=True)[-1:] == ".":
+                self.set("identifier")
             else:
-                yield self.read_token(), ""
+                self.set("builtin")
+        # Decorators
+        elif CHECK_DECORATORS and (token == "@"):
+            self.set("decorator") # "@"
+            self.read_wait_for({"\n"}, "decorator",
+                               ignoretypes=DECORATOR_IGNORETYPES)
+        # Colon as keyword
+        elif CHECK_TYPE_ANNOTATIONS and (token in ("{", "[", "(")):
+            open:str = token
+            close:str = {"(":")", "[":"]", "{":"}"}[open]
+            self.set("container-bracket")
+            while True:
+                waiting_for:set[str] = {close, "=", ",", ":"} | CMD_KWS
+                token:Token = self.read_wait_for(waiting_for)
+                if token == close:
+                    self.set("container-bracket")
+                    break
+                elif token not in ("=", ",", ":"):
+                    break
+                self.skip()
+        elif CHECK_TYPE_ANNOTATIONS and (token == ":"):
+            start:Location = self.tell()
+            self.skip()
+            if self.peek_token() == "=": # Walrus operator
+                self.set("walrus-operator", start) # ":"
+                self.set("walrus-operator") # "="
+            else: # Type annotation
+                self.set("type-annotation", start) # ":"
+                self.read_type_annotation({"\n","="})
+        # Comment
+        elif token == "#":
+            self.set("comment") # "#"
+            while self.peek_token() != "\n": # Newline not in comment
+                self.set("comment")
+        # Strings:
+        elif token.lower() in self.string_prefixes:
+            start:Location = self.tell()
+            self.set("identifier") # Jump over the string prefix
+            new_token:Token = self.peek_token()
+            if new_token in ("'", '"'):
+                self.set("string", start) # String prefix
+                self.read_string(token)
+        elif token in ("'", '"'):
+            self.read_string()
+        # Match soft-keyword (MATCH_SOFTKW)
+        elif token == "match":
+            if self.curr_line_seen(respect_slashes=True).rstrip(" \t"):
+                self.set("identifier")
+            else:
+                start:Location = self.tell()
+                self.skip() # `match` but we aren't sure if keyword
+                self.skip_whitespaces(SPACES)
+                new_token:Token = self.peek_token()
+                if new_token in set(":,;=^&|@~)]}"):
+                    self.set("identifier", start)
+                elif new_token in self.keywords: # match followed by a keyword
+                    self.set("identifier", start)
+                else:
+                    self.set("keyword", start)
+        # Case soft keyword
+        elif token == "case":
+            if self.curr_line_seen(respect_slashes=True).rstrip(" \t"):
+                self.set("identifier")
+            else:
+                start:Location = self.tell()
+                self.skip() # `case` but we aren't sure if keyword
+                self.skip_whitespaces(SPACES)
+                new_token:Token = self.peek_token()
+                if new_token in set(":,;=^&|@~)]}"):
+                    self.set("identifier", start)
+                elif new_token in self.keywords: # case followed by a keyword
+                    self.set("identifier", start)
+                elif new_token == "_": # case <underscore>
+                    self.set("keyword", start)
+                    self.set("keyword") # "_"
+                else:
+                    self.set("keyword", start)
+        # Identifiers
+        elif CHECK_IDENTIFIERS and self.isidentifier(token):
+            self.set("identifier")
+        # Numbers
+        elif CHECK_NUMBERS and isnumber(token):
+            self.set("number") # Leading -/+ signs aren't part of the token
+        # Respect slashes at the end of the line
+        elif token == "\n":
+            line:str = self.curr_line_seen()
+            slashes:int = len(line) - len(line.rstrip("\\"))
+            if slashes&1:
+                self.set("no-sync-slashes") # "\n"
+            else:
+                self.skip() # "\n"
+        # Default
+        else:
+            self.skip()
 
-    def read_string(self, prefix:Token="") -> Iterable[TokenTypePair]:
+    def read_def_type_annotation(self) -> None:
+        self.skip_whitespaces(SPACES)
+        # Opening bracket
+        if self.peek_token() != "(": return None
+        self.skip() # "("
+        # Self argument if it's there
+        self.skip_whitespaces(SPACES)
+        if self.peek_token() == "self":
+            self.set("self")
+        # Inside the brackets
+        while True:
+            token:Token = self.read_wait_for({")", ":"})
+            if (token == "\n") or (not token):
+                return None
+            elif token == ")":
+                break
+            elif token == ":":
+                self.set("type-annotation") # Set ":" keyword=>type-annotation
+                self.read_type_annotation({"\n",")","=",","})
+            else:
+                raise NotImplementedError("Unreachable")
+        # Closing bracket
+        if self.peek_token() != ")":
+            return None
+        self.skip() # ")"
+        # "->" type annotation
+        self.skip_whitespaces(SPACES)
+        start:Location = self.tell()
+        if self.peek_token() == "-":
+            self.skip()
+            if self.peek_token() == ">":
+                self.set("type-annotation-arrow", start)
+                self.set("type-annotation-arrow")
+                self.skip_whitespaces(SPACES)
+                # Return type annotation
+                self.read_type_annotation({"\n",":"})
+
+    def read_type_annotation(self, ending_tokens:set[Token]) -> None:
+        """
+        Read a type annotation and colour it accordingly
+        """
+        self.read_wait_for(ending_tokens | CMD_KWS, "type-annotation",
+                      ignoretypes=TYPE_ANNOTATION_IGNORETYPES)
+
+    def read_string(self, prefix:Token="") -> None:
         fstring:bool = "f" in prefix
-        single:Token = self.read_token()
-        output:Token = prefix + single
+        single:Token = self.peek_token()
+        assert single in ("'", '"'), "InternalError"
+        self.set("string") # starting quote
         triple:bool = False
-        # Check for ""/"""···
+        # Check for empty string/triple quotes
         if self.peek_token() == single:
-            output += self.read_token()
-            if self.peek_token() != single:
-                yield output, "string"
-                return
-            output += self.read_token()
+            self.set("string")
+            if self.peek_token() != single: # "" => return
+                return None
+            self.set("string")
             triple:bool = True
         # Actual string reading loop
         while True:
-            token:Token = self.read_token()
-            output += token
-            # No data left => return
-            if not token:
-                yield output, "string"
-                return
-            # Newlines aren't special if triple quotes
-            elif (token == "\n") and (not triple):
-                yield output[:-1], "string" # Newline not part of string
-                yield "\n", ""
-                return
-            # Slash-Character (the character might be a newline)
-            elif token == "\\":
-                output += self.read_token() # Read the token after the \
-            # On string-closing
-            elif token == single:
-                if not triple:
-                    yield output, "string"
-                    return
-                if self.peek_token() == single:
-                    output += self.read_token()
-                    if self.peek_token() == single:
-                        output += self.read_token()
-                        yield output, "string"
-                        return
-            # F-string code
-            elif (token == "{") and fstring:
-                if self.peek_token() == "{":
-                    output += self.read_token()
-                    continue
-                # Flush the string so far and reset it
-                yield output[:-1], "string"
-                yield output[-1:], "string" # f-string-open
-                output:Token = ""
-                # Actual f-string recursive call
-                override_tokentype:TokenType = ""
-                if not FSTRINGS_COLOURED:
-                    override_tokentype:TokenType = "string"
-                depth:int = 1
-                for token, tokentype in self.read():
-                    # Open/close bracket
-                    if (token == "}") and (tokentype != "string"):
-                        depth -= 1
-                        if depth == 0:
-                            yield token, "string" # f-string-close
-                            break
-                    if (token == "{") and (tokentype != "string"):
-                        depth += 1
-                    # Lambdas and ":" f-string formatting
-                    elif (token == ":") and (tokentype != "keyword"):
-                        override_tokentype:TokenType = "f-string-format"
-                    if override_tokentype:
-                        tokentype:TokenType = override_tokentype
-                    # Change the token back to a string
-                    yield token, tokentype
-
-    def read_decorator(self) -> Iterable[TokenTypePair]:
-        yield self.read_token(), "decorator" # "@"
-        for token, tokentype in self.read():
-            if token == "\n":
-                yield "\n", ""
+            token:Token = self.peek_token()
+            if not token: # No data left => return
                 break
-            if (not tokentype) or (tokentype == "identifier"):
-                tokentype:TokenType = "decorator"
-            yield token, tokentype
+            elif (not triple) and (token == "\n"): # Newline if not triple
+                break
+            elif token == "\\":  # Slash + character
+                self.set("string") # "\"
+                if fstring and (self.peek_token() in "{}"):
+                    continue # Curly brackets cannot be escaped with a \
+                self.set("string") # Token after the \ (might be \n)
+            elif token == single: # String-closing
+                self.set("string") # quote
+                if not triple: break
+                if self.peek_token() == single:
+                    self.set("string")
+                    if self.peek_token() == single:
+                        self.set("string")
+                        break
+            elif fstring and (token == "{"): # F-strings
+                fstring_start:Location = self.tell()
+                self.set("string") # "{"
+                if self.peek_token() == "{": # second "{"
+                    self.set("string")
+                    continue
+                self.set(FSTRING_BARCKET_TOKENTYPE, fstring_start) # open
+                # Actual f-string recursive call
+                token:Token = self.read_wait_for({"}", ":"} | CMD_KWS)
+                if token not in ("}", ":"):
+                    if not FSTRINGS_COLOURED:
+                        self.set_from("string", fstring_start+len("{"))
+                    return None # Command keyword in f-string => return
+                format_start:Location = self._check_format()
+                if format_start is None:
+                    if not FSTRINGS_COLOURED:
+                        self.set_from("string", fstring_start+len("{"))
+                    return None # Command keyword in f-string => return
+                if not FSTRINGS_COLOURED:
+                    self.set_from("string", fstring_start+len("{"))
+                if self.peek_token() == "}":
+                    self.set(FSTRING_BARCKET_TOKENTYPE) # close
+            else: # Default
+                self.set("string")
+
+    def _check_format(self) -> Location|None:
+        """
+        Reads the formating part of f-strings. If there is a ":" part, it
+          should be in `self.peek_token()`.
+
+        format := (whitespaces + "=" + whitespaces)? +
+                  ("!" + conversion)? +
+                  (":" + format_spec)?
+        conversion := "s" | "r" | "a"
+        whitespaces := whitespace*
+        whitespace := " " | "\t" | "\n" | "\f" | "\v"
+
+        Technically `format_spec` should be recursive but I've never
+          seen anyone use it and implementing it will be a pain
+
+        https://docs.python.org/3/reference/lexical_analysis.html#f-strings
+        """
+        start:Location = self.tell()
+        if self.peek_token() == ":":
+            self.skip() # ":"
+            if self.read_wait_for({"}"} | CMD_KWS) != "}":
+                return None # Command keyword in f-string => return
+        # Exclam
+        prev_start:Location = self.prev_start(start)
+        prev_token:Token = self.token_at(prev_start)
+        if prev_token in ("s", "r", "a"):
+            prev_prev_start:Location = self.prev_start(prev_start)
+            if self.token_at(prev_prev_start) == "!":
+                start:Location = prev_prev_start
+        elif prev_token == "!": # unfinished conversion: {!}
+            start:Location = prev_start
+        # Equals
+        new_start:Location = start
+        while True: # Spaces after =
+            new_start:Location = self.prev_start(new_start)
+            if self.token_at(new_start).strip(" \t\n"):
+                break
+        if self.token_at(new_start) == "=":
+            while True: # Spaces before =
+                start:Location = new_start
+                new_start:Location = self.prev_start(new_start)
+                if self.token_at(start).strip(" \t\n"):
+                    break
+        self.set_from("f-string-format", start)
+        return start
 
 
 class ColourManager(BaseColourManager):
@@ -273,4 +417,4 @@ class ColourManager(BaseColourManager):
         # self.prog = make_pat()
 
 
-FSTRINGS_COLOURED:bool = False
+FSTRINGS_COLOURED:bool = True

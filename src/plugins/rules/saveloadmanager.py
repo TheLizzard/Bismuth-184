@@ -108,7 +108,8 @@ class SaveLoadManager(Rule):
             return False
 
         if on == "<force-set-data>":
-            self.text.delete("1.0", "end -1c")
+            if self.text.compare("1.0", "!=", "end -1c"):
+                self.text.delete("1.0", "end -1c")
             self.text.insert("end", data)
             self.text.event_generate("<<Clear-Separators>>")
             self._edit_modified(False)
@@ -175,7 +176,9 @@ class SaveLoadManager(Rule):
             print("Stopping save")
         else:
             with open(self.text.filepath, "wb") as file:
-                file.write(self.text.filesystem_data.encode("utf-8"))
+                if self.text.filesystem_data: # Empty text => empty file
+                    file.write(self.text.filesystem_data.encode("utf-8"))
+                    file.write(b"\n") # https://stackoverflow.com/q/72271
         self.text.event_generate("<<Saved-File>>")
 
     def _internal_open(self, *, reload:bool) -> None:
@@ -297,7 +300,8 @@ class SaveLoadManager(Rule):
         if data is None: return None
         self.text.event_generate("<<Clear-Separators>>")
         if not opened:
-            self.text.delete("1.0", "end")
+            if self.text.compare("1.0", "!=", "end -1c"):
+                self.text.delete("1.0", "end")
             self.text.insert("end", data, "program")
             self.text.event_generate("<<Opened-File>>")
         self._edit_modified(modified)

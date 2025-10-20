@@ -10,11 +10,6 @@ import os
 OLD_CWD_PATH:str = os.getcwd()
 os.chdir(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
 
-DEBUG_TIME:bool = False
-if DEBUG_TIME:
-    from bettertk.messagebox import debug
-    timer:list[float] = [perf_counter()]
-
 from file_explorer.expanded_explorer import ExpandedExplorer, isfolder
 from bettertk.betterframe import make_bind_frame
 from bettertk.betterframe import BetterFrame
@@ -74,7 +69,7 @@ class App:
                                       sashwidth=4, bg="grey")
         pannedwindow.pack(fill="both", expand=True)
 
-        self.notebook = notebook.Notebook(pannedwindow, 0,
+        self.notebook = notebook.Notebook(pannedwindow, scrolled=True,
                                           font=settings.window.font)
         self.notebook.bind("<<Tab-Create>>", lambda _: self.new_tab())
         self.notebook.bind("<<Tab-Switched>>", self.change_selected_tab)
@@ -107,7 +102,7 @@ class App:
         self.explorer_frame = BetterFrame(left_frame, bg="black",
                                      HScrollBarClass=BetterScrollBarHorizontal,
                                      VScrollBarClass=BetterScrollBarVertical,
-                                     scroll_speed=1, hscroll=True, vscroll=True)
+                                     hscroll=True, vscroll=True)
         self.explorer_frame.grid(row=3, column=1, columnspan=3, sticky="news")
         self.explorer_frame.config(hide_hscroll=settings.explorer.hide_h_scroll,
                                    hide_vscroll=settings.explorer.hide_v_scroll)
@@ -396,15 +391,9 @@ class App:
 
 if __name__ == "__main__":
     def start(ipc:IPC=None) -> tuple[App,IPC]:
-        if DEBUG_TIME:
-            debug(f"Imports: {perf_counter()-timer[0]:.2f}")
-            timer[0] = perf_counter()
         return App(ipc)
 
     def init(app:App) -> tuple[App,IPC]:
-        if DEBUG_TIME:
-            debug(f"App create: {perf_counter()-timer[0]:.2f}")
-            timer[0] = perf_counter()
         app.init()
         for path in sys.argv[1:]:
             if path == "--no-focus": continue
@@ -412,12 +401,6 @@ if __name__ == "__main__":
         return app
 
     def run(app:App) -> None:
-        if DEBUG_TIME:
-            debug(f"App init: {perf_counter()-timer[0]:.2f}")
-            timer[0] = perf_counter()
-            def inner() -> None:
-                debug(f"To idle: {perf_counter()-timer[0]-0.01:.2f}")
-            app.root.after(10, app.root.after_idle, inner)
         try:
             app.mainloop()
         except KeyboardInterrupt:

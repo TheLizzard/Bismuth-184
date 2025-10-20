@@ -196,6 +196,7 @@ class BetterFrame(tk.Frame):
         * hide_hscroll/hide_vscroll only set the "hide" attribute on the
             corresponding scrollbar. It will work as expected if you are
             using the scroll bars from `betterscrollbar.py`
+        * `scroll_speed` is in pixels and must be an integer
 
     Options:
         width, height, bg, background, bd, borderwidth, highlightthickness,
@@ -210,16 +211,21 @@ class BetterFrame(tk.Frame):
                  scrollbar_kwargs:dict={},
                  HScrollBarClass=tk.Scrollbar, VScrollBarClass=tk.Scrollbar,
                  **kwargs):
+        assert isinstance(hscroll, bool), "TypeError"
+        assert isinstance(vscroll, bool), "TypeError"
         # Default options
         kwargs["vscrollleft"] = kwargs.get("vscrollleft", False)
         kwargs["hscrolltop"] = kwargs.get("hscrolltop", False)
-        kwargs["scroll_speed"] = kwargs.get("scroll_speed", 2)
+        kwargs["scroll_speed"] = kwargs.get("scroll_speed", 30)
         # Create outter frame
         self.outter:tk.Frame = tk.Frame(master)
         self.outter.grid_rowconfigure(1, weight=1)
         self.outter.grid_columnconfigure(1, weight=1)
         # Create canvas
-        self.canvas:tk.Canvas = tk.Canvas(self.outter, **ZERO_BD)
+        self.canvas:tk.Canvas = tk.Canvas(self.outter, **ZERO_BD,
+                                          # In pixels, tied to `scroll_speed`
+                                          xscrollincrement="1",
+                                          yscrollincrement="1")
         self.canvas.grid(row=1, column=1, sticky="news")
         # Create inner frame and put inside canvas
         self.inner:tk.Frame = tk.Frame(self.canvas, **ZERO_BD)
@@ -321,16 +327,16 @@ class BetterFrame(tk.Frame):
     def _scroll_windows(self, event:tk.Event) -> None:
         assert event.delta != 0, "On Windows, `event.delta` should never be 0"
         steps = int(-event.delta/abs(event.delta)*self._scroll_speed)
-        if event.state&1:
-            self.canvas.xview_scroll(steps, "units")
-        else:
-            self.canvas.yview_scroll(steps, "units")
+        self._scroll(steps, horizontal=event.state&1)
 
     def _scroll_linux(self, event:tk.Event) -> None:
         steps:int = self._scroll_speed
         if event.num == 4:
             steps *= -1
-        if event.state&1:
+        self._scroll(steps, horizontal=event.state&1)
+
+    def _scroll(self, steps:int, *, horizontal:bool) -> None:
+        if horizontal:
             self.canvas.xview_scroll(steps, "units")
         else:
             self.canvas.yview_scroll(steps, "units")

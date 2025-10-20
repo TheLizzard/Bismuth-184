@@ -226,7 +226,7 @@ class TabNotches(BetterFrame):
                 "_tmp_notch", "_tmp_notch_info", "_notch_dragging", \
                 "dragging", "dragx", "_notches_kwargs"
 
-    def __init__(self, notebook:Notebook, scrolled:bool=True,
+    def __init__(self, notebook:Notebook, *, scrolled:bool=True,
                  **kwargs:dict[str:object]) -> TabNotches:
         self._notches_kwargs:dict[str:object] = kwargs
         self.pages:list[NotebookPage|TabNotch] = []
@@ -669,8 +669,9 @@ class Notebook(tk.Frame):
     """
     __slots__ = "pages", "next_id", "notches", "bottom", "on_try_close"
 
-    def __init__(self, master:tk.Misc, scrolled:bool=True,
+    def __init__(self, master:tk.Misc, *, scrolled:bool=True,
                  **kwargs:dict[str:object]) -> Notebook:
+        assert isinstance(scrolled, bool), "TypeError"
         self.on_try_close:Callable[NotebookPage,Break] = lambda page: False
 
         super().__init__(master, **WIDGET_KWARGS, bg="black")

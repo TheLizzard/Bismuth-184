@@ -1,7 +1,7 @@
 Editor:
 * Implement the replace part of `FindReplaceManager`
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
-* `FindReplaceManager` removes hit tag when the user adds/removes text near the hit
+* `FindReplaceManager` removes hit tag when re-colouring
 * Commenting a block with a comment inside it, uncomments the comment
 * Control(-Shift)?-z doesn't scroll if there is text selected
 * Rework `BasePlugin.find_bracket_match` to use `BasePlugin.text_replace_tag`
@@ -10,9 +10,6 @@ Editor:
 * Unclosed bracket in `FindReplaceManager` with "whole word" fails text="a()\na(x)", search="a("
 * On Windows, the window grows horizontally each time the Bismuth-184 is opened
 * Tabs are counted as 1 character when pressing the arrows
-* BetterText makes pasting scroll to the start of the line (typing also has this problem)
-* BetterText still has visual bugs when adding to a long line if a longer line exists
-* BetterText has problems when the longest line is only slighly longer than the text box (possibly because of the scrollbar)
 * Closing ] doesn't highlight correctly only when in string (only sometimes)
 * Control arrows don't account that "-" can be part of an int literal
 * Check if umarks are computationally expensive
@@ -51,7 +48,7 @@ BetterTk Window:
 * There is a bug where `event_generate("<Control-w>")` causes a recursion error (`error_logs/error.0007.txt`)
 
 Error Handler:
-* The traceback is corrupted when a recursion error is detected (look into `error_logs` for more details)
+* The traceback is corrupted when a recursion error is detected (`error_logs/?` for more details)
 
 Minor things/Low priority:
 * Disable line numbers when "no-wrap"?

@@ -90,15 +90,17 @@ class SelectManager(Rule):
         shift:bool = event.state & SHIFT
         alt:bool = event.state & ALT
 
+        idx:str = None
+        drag:tuple = None
+
         if on in ("<buttonpress-1>", "<buttonrelease-1>", "<b1-motion>"):
             on:str = on.removeprefix("<").removesuffix(">")
 
-        if on in ("backspace", "delete", "<before-delete>"):
+        elif on in ("backspace", "delete", "<before-delete>"):
             start, end = self.plugin.get_selection()
             if start == end:
-                return False
-        idx:str = None
-        drag:tuple = None
+                if not ((on == "backspace") and (ctrl or alt)):
+                    return False
 
         # Double/Triple click
         if on.endswith("button-1"):
@@ -149,14 +151,30 @@ class SelectManager(Rule):
                 on:str = {"1":"end", "7":"home"}.get(on, on)
                 ctrl:bool = alt
 
-        return on, ctrl, shift, idx, drag, True
+        return on, ctrl, shift, alt, idx, drag, True
 
-    def do(self, _, on, ctrl:bool, shift:bool, idx:str, drag:tuple) -> Break:
-        if on in ("backspace", "delete"):
+    def do(self, _, on:str, ctrl:bool, shift:bool, alt:bool, idx:str,
+           drag:tuple) -> Break:
+        if on == "delete":
             with self.plugin.see_end_wrapper():
                 with self.plugin.virtual_event_wrapper():
                     self.plugin.delete_selection()
-                return True
+            return True
+
+        if on == "backspace":
+            with self.plugin.see_end_wrapper():
+                with self.plugin.virtual_event_wrapper():
+                    start, end = self.plugin.get_selection()
+                    # If selected
+                    if start != end:
+                        self.plugin.delete_selection()
+                        return True
+                    # If ctrl-backspace or alt-backspace
+                    if ctrl or alt:
+                        start:str = self.get_movement("left", True,
+                                                      "insert", text=False)
+                        self.text.delete(start, "insert")
+                        return True
 
         if on == "<set-linsert>":
             self.text.mark_set("linsert", "insert")
@@ -185,7 +203,8 @@ class SelectManager(Rule):
             start:str = self.get_movement("left", True, "insert", text=True)
             end:str = self.get_movement("right", True, "insert", text=True)
             self.double:Span|None = (start, end)
-            self.plugin.set_selection(*self.double)
+            if start != end:
+                self.plugin.set_selection(*self.double)
             self.plugin.move_insert(self.double[-1])
             self.selecting:bool = True
             return True
@@ -220,6 +239,8 @@ class SelectManager(Rule):
                 # Double mouse dragging
                 new_start:str = self.get_movement("left", True, idx, text=False)
                 new_end:str = self.get_movement("right", True, idx, text=False)
+                if int(new_end.split(".")[1]) == 0:
+                    new_end:str = f"{new_end} -1c"
                 start, end = self.calc_biggest_span((new_start,new_end),
                                                     self.double)
                 self.plugin.set_selection(start, end)
@@ -425,6 +446,6 @@ class SelectManager(Rule):
         """
         if spana == spanb: return spana
         if self.text.compare(spana[0], "<", spanb[0]):
-            return (spana[0],spanb[1])
+            return spana[0], spanb[1]
         else:
-            return (spanb[0],spana[1])
+            return spanb[0], spana[1]
