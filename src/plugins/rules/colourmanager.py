@@ -178,22 +178,18 @@ TokenInfo:type = tuple[Location,Token,TokenType]
 
 
 class Buffer(StringIO):
-    __slots__ = "_total_text", "_newlines"
+    __slots__ = "total_data", "_newlines"
 
     def __init__(self, data:str) -> Buffer:
         super().__init__(data)
-        self._total_data:str = data
+        self.total_data:str = data
         self._newlines:list[int] = [0] + \
                               [i for i,c in enumerate(data) if c == "\n"] + \
                                    [len(data)]
 
-    @property
-    def total_data(self) -> str:
-        return self._total_data
-
     def peek(self, size:Location) -> str:
         location:Location = super().tell()
-        return self._total_data[location:location+size]
+        return self.total_data[location:location+size]
 
     def closest_newlines(self, index:Location, *,
                          respect_slashes:bool) -> tuple[Location,Location]:
@@ -210,7 +206,7 @@ class Buffer(StringIO):
             while low_idx > 0:
                 start_text_idx:int = self._newlines[low_idx-1]
                 end_text_idx:int = self._newlines[low_idx]
-                line:str = self._total_data[start_text_idx:end_text_idx]
+                line:str = self.total_data[start_text_idx:end_text_idx]
                 slashes:int = len(line) - len(line.rstrip("\\"))
                 if not (slashes&1): break
                 low_idx -= 1
@@ -218,7 +214,7 @@ class Buffer(StringIO):
         return self._newlines[low_idx], self._newlines[idx]
 
     def __bool__(self) -> bool:
-        return super().tell() != len(self._total_data)
+        return super().tell() != len(self.total_data)
 
 
 not_alpha:Callable[str,bool] = lambda s: not s.isalpha()
@@ -306,18 +302,17 @@ class Tokeniser:
 
     def peek_token(self) -> Token:
         """
-        Peeks a token (identifier/number/indentation/any other character).
+        Peeks a token (indentation/identifier/number/any other character).
         This actually reads a token and caches it. We must remember
           to account for that in self.tell()
         """
         if self._peeked_token is None:
-            # Get data
             start:str = self._under.tell()
             self._peeked_token:str|None = self._pure_read_token()
-            if self._peeked_token:
-                # Update self._start_size_map/self._overrides
-                self._start_size_map.append((start,len(self._peeked_token)))
-                self._overrides[start] = "SYNC"*(self._peeked_token == "\n")
+            if not self._peeked_token: return ""
+            # Update self._start_size_map/self._overrides
+            self._start_size_map.append((start,len(self._peeked_token)))
+            self._overrides[start] = "SYNC"*(self._peeked_token == "\n")
         return self._peeked_token
 
     def skip_whitespaces(self, whitespaces:str) -> Token:
@@ -359,8 +354,8 @@ class Parser(Tokeniser):
         """
         Override this method using:
             * __bool__() -> bool
-            * curr_line_seen:str
-            * line_around(index:Location) -> str
+            * curr_line_seen(respect_slashes:bool=False) -> str
+            * line_around(index:Location, respect_slashes:bool=False) -> str
             * text_between(start:Location, end:Location) -> str
             * tell() -> Location
             * peek_token() -> Token
@@ -372,16 +367,17 @@ class Parser(Tokeniser):
             * skip() -> None
             * token_at(start:Location) -> Token
             * tokentype_at(start:Location) -> TokenType
-            * next_start(start:Location, *, offset:int) -> Optional[Location]
+            * next_start(start:Location) -> Optional[Location]
             * prev_start(start:Location) -> Optional[Location]
             * add_extra_pass(func:Callable[None]) -> None
-            * tokens_after(start:Location) -> Iterable[tuple[TokenInfo]]
-            * read_tokens() -> Iterable[tuple[TokenInfo]]
+            * tokens_after(start:Location) -> Iterable[TokenInfo]
+            * read_tokens() -> Iterable[TokenInfo]
             * read_wait_for(tokens:Iterable[str], settype:Optional[TokenType],
                             *, ignoretypes:Iterable[str]=()) -> Token
             * add_extra_pass(func:Callable[None]) -> None
 
         Tokens returned from `peek_token` are:
+            * Indentation (spaces/tabs concatenated)
             * Identifiers (see `isidentifier` arg in `__init__`)
             * Numbers (see `isnumber` arg in `__init__`)
             * All other characters are returned as separate tokens
@@ -446,10 +442,7 @@ class Parser(Tokeniser):
         Return a token at the location. The buffer is not consumed. Location
           must be before or at `self.tell()`
         """
-        if start < 0:
-            return ""
-        if start == self.tell():
-            return self.peek_token()
+        if start < 0: return ""
         return self.text_between(start, self.next_start(start))
 
     def tokentype_at(self, start:Location) -> TokenType:
@@ -461,22 +454,18 @@ class Parser(Tokeniser):
         """
         return self._overrides[start]
 
-    def next_start(self, start:Location, *, offset:int=0) -> Location|None:
+    def next_start(self, start:Location) -> Location|None:
         """
         Returns the location where the next token starts. The token must
           have been read by `self.read()` first otherwise it returns `None`
         """
-        # if self._start_size_map[~offset][0] < start: return None
+        if self._start_size_map[-1][0] < start: return None
         idx:int = bisect.bisect_left(self._start_size_map, (start,))
-        if idx+offset >= len(self._start_size_map):
-            # Out of range
-            return None
-        # Check `start` is a valid token start
         if self._start_size_map[idx][0] != start:
             raise IndexError("Invalid token start location")
         # Since we store (start,size) tuples, we can just sum them to
         #   figure out the end which is the start for the next token
-        return sum(self._start_size_map[idx+offset])
+        return sum(self._start_size_map[idx])
 
     def prev_start(self, start:Location) -> Location|None:
         """
@@ -485,6 +474,8 @@ class Parser(Tokeniser):
         """
         if start == 0: return None
         idx:int = bisect.bisect_left(self._start_size_map, (start,))
+        if self._start_size_map[idx][0] != start:
+            raise IndexError("Invalid token start location")
         return self._start_size_map[idx-1][0]
 
     def tokens_after(self, start:Location=0) -> Iterable[TokenInfo]:
@@ -500,7 +491,7 @@ class Parser(Tokeniser):
             token:Token = self._under.total_data[start:start+size]
             yield start, token, self._overrides[start]
 
-    def read_tokens(self) -> Iterable[tuple[TokenInfo]]:
+    def read_tokens(self) -> Iterable[TokenInfo]:
         """
         Start peeking at tokens after they have been read by `self.read`.
         This yields tuples of (start,token,tokentype). This is useful for
@@ -541,6 +532,8 @@ class Parser(Tokeniser):
             token:Token = self.peek_token()
             if (token in tokens) or (not token):
                 return token
+            elif token == "\n" and (not waiting_for_newline):
+                self.set(f"no-sync-{settype}")
             else:
                 if settype is None:
                     self.read()
