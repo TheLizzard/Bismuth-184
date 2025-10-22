@@ -103,7 +103,7 @@ class SaveLoadManager(Rule):
 
     def do(self, on:str, shift:bool, data:str) -> Break:
         if on == "<force-open>":
-            self.text.filepath:str = data
+            self.text.filepath:str = os.path.realpath(data)
             self._internal_open(reload=False)
             return False
 
@@ -121,14 +121,14 @@ class SaveLoadManager(Rule):
                                    filetypes=self.FILE_TYPES,
                                    master=self.text)
                 if not file: return True
-                self.text.filepath:str = file
+                self.text.filepath:str = os.path.realpath(file)
             self._save()
             return True
 
         if on == "control-o":
             file:str = askopen(filetypes=self.FILE_TYPES, master=self.text)
             if not file: return True
-            self.text.filepath:str = file
+            self.text.filepath:str = os.path.realpath(file)
             if self.text.edit_modified():
                 title:str = "Discard changes to this file?"
                 msg:str = "You haven't saved this file. Are you sure you\n" \
@@ -170,8 +170,8 @@ class SaveLoadManager(Rule):
         # Actual save
         if not self._can_write():
             return None
-        self.text.filesystem_data:str = self.text.get("1.0", "end") \
-                                                 .rstrip("\n")
+        filesystem_data:str = self._remove_newline(self.text.get("1.0", "end"))
+        self.text.filesystem_data:str = filesystem_data
         if NO_SAVE:
             print("Stopping save")
         else:
@@ -214,12 +214,12 @@ class SaveLoadManager(Rule):
             if not allow: return False
         # Read the file
         with open(self.text.filepath, "rb") as file:
-            data:bytes = file.read().rstrip(b"\r\n")
+            data:bytes = file.read()
         # Make sure there are no illegal characters
         data:str|None = self._security(data, decode=True)
         if data is None: return False
         # Delete old
-        current_data:str = self.text.get("1.0", "end -1c").rstrip("\r\n")
+        current_data:str = self._remove_newline(self.text.get("1.0", "end"))
         if current_data != data:
             if self.text.compare("1.0", "!=", "end -1c"):
                 self.text.delete("1.0", "end")
@@ -238,7 +238,7 @@ class SaveLoadManager(Rule):
         # Get state
         filepath:str = self.text.filepath
         modified:bool = self.text.edit_modified()
-        data:str = self.text.get("1.0", "end").rstrip("\n")
+        data:str = self._remove_newline(self.text.get("1.0", "end"))
         saved_data:str = self.text.filesystem_data
         xview:str = str(self.text.xview()[0])
         yview:str = str(self.text.yview()[0])
@@ -269,7 +269,7 @@ class SaveLoadManager(Rule):
 
     def _set_state_save(self, filepath:str, modified:bool, data:str,
                         saved_data:str) -> None:
-        self.text.filepath:str = filepath
+        self.text.filepath:str = os.path.realpath(filepath)
         self.text.filesystem_data:str = saved_data
         opened:bool = False
         # Check for merge conflict
@@ -280,9 +280,8 @@ class SaveLoadManager(Rule):
                          center=True, icon="warning", center_widget=self.text)
             elif modified:
                 with open(self.text.filepath, "rb") as fd:
-                    filedata:bytes = fd.read() \
-                                       .replace(b"\r\n", b"\n") \
-                                       .rstrip(b"\n")
+                    filedata:bytes = self._remove_newline(fd.read(),
+                                                          binary=True)
                 if saved_data.encode("utf-8") != filedata:
                     title:str = "Merge Conflict"
                     msg:str = f"The file {self.text.filepath} has been\n" \
@@ -312,7 +311,7 @@ class SaveLoadManager(Rule):
                 assert isinstance(data, bytes), "if decode, data must be bytes"
                 data:str = data.decode("utf-8")
             assert isinstance(data, str), "Pass in decode=True"
-            data:str = data.replace("\r\n", "\n").removesuffix("\n")
+            data:str = self._remove_newline(data)
             char:str = _get_first_non_printable(data)
             if char:
                 raise UnicodeError(f"{char=!r} isn't accepted by the security")
@@ -331,6 +330,13 @@ class SaveLoadManager(Rule):
                      center=True, center_widget=self.text)
             self.text.after(10, self.text.event_generate, "<<Close-Tab>>")
             return None
+
+    @staticmethod
+    def _remove_newline(text:str|bytes, *, binary:bool=False) -> str|bytes:
+        if binary:
+            return text.replace(b"\r\n", b"\n").removesuffix(b"\n")
+        else:
+            return text.replace("\r\n", "\n").removesuffix("\n")
 
 
 # Security

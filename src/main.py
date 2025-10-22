@@ -235,6 +235,7 @@ class App:
         """
         Open a file/folder with this editor
         """
+        path:str = os.path.realpath(path)
         if os.path.isfile(path):
             self.open_tab(path)
         elif os.path.isdir(path):

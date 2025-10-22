@@ -326,9 +326,9 @@ class Tokeniser:
         output:Token = self._under.read(1)
         if output:
             # Indentation
-            if output in (" ", "\t"):
+            if output in " \t":
                 while True:
-                    if self._under.peek(1) not in (" ", "\t"): break
+                    if self._under.peek(1) not in " \t": break
                     output += self._under.read(1)
                 return output
             # Identifier
@@ -424,8 +424,7 @@ class Parser(Tokeniser):
         else:
             assert isinstance(end, Location), "TypeError"
         while start < end:
-            tokentype:TokenType = self._overrides[start]
-            if tokentype not in ignoretypes:
+            if not (ignoretypes and (self._overrides[start] in ignoretypes)):
                 self.set(replace_tokentype, start)
             start:Location = self.next_start(start)
 
@@ -519,7 +518,8 @@ class Parser(Tokeniser):
             index:Location = end
 
     def read_wait_for(self, tokens:Iterable[str], settype:TokenType=None, *,
-                      ignoretypes:Iterable[str]=()) -> Token:
+                      ignoretypes:Iterable[str]=(),
+                      read_func:Callable[None]=None) -> Token:
         """
         Calls `self.read()` until the next token is in the `tokens` iterable
           passed in. If `settype` is passed in, this function behaves like
@@ -527,6 +527,8 @@ class Parser(Tokeniser):
         Returns the next token (guaranteed to be empty or one of `tokens`)
         """
         assert isinstance(settype, TokenType|None), "TypeError"
+        if read_func is None:
+            read_func:Callable[None] = self.read
         waiting_for_newline:bool = "\n" in tokens
         while True:
             token:Token = self.peek_token()
@@ -536,10 +538,10 @@ class Parser(Tokeniser):
                 self.set(f"no-sync-{settype}")
             else:
                 if settype is None:
-                    self.read()
+                    read_func()
                 else:
                     start:Location = self.tell()
-                    self.read()
+                    read_func()
                     self.set_from(settype, start, ignoretypes=ignoretypes)
 
     # Used by ColourManager

@@ -142,7 +142,7 @@ class Parser(BaseParser):
                     if self.peek_token() != ":":
                         return None
                 # Search for the next colon or command keyword
-                waiting_for:set[str] = {":","]","}",")","else"} | CMD_KWS
+                waiting_for:set[str] = {":","]","}",")","else","\n"} | CMD_KWS
                 while True:
                     token:Token = self.read_wait_for(waiting_for)
                     if token == ":":
@@ -246,14 +246,14 @@ class Parser(BaseParser):
         # Numbers
         elif CHECK_NUMBERS and isnumber(token):
             self.set("number") # Leading -/+ signs aren't part of the token
-        # Respect slashes at the end of the line
-        elif token == "\n":
-            line:str = self.curr_line_seen()
-            slashes:int = len(line) - len(line.rstrip("\\"))
-            if slashes&1:
-                self.set("no-sync-slashes") # "\n"
-            else:
-                self.skip() # "\n"
+        # Line continuations
+        elif token == "\\":
+            self.skip() # Read the "\"
+            token:Token = self.peek_token()
+            if token == "\n":
+                self.set("no-sync-backslash") # Read the "\n"
+            elif token == "\\":
+                self.set("backslash") # Read the next "\"
         # Default
         else:
             self.skip()
@@ -270,7 +270,7 @@ class Parser(BaseParser):
         # Inside the brackets
         while True:
             token:Token = self.read_wait_for({")", ":"})
-            if (token == "\n") or (not token):
+            if not token:
                 return None
             elif token == ")":
                 break
