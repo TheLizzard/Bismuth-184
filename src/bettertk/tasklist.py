@@ -184,7 +184,7 @@ class TaskList(tk.Frame):
 
 
 class TaskListWindow(BetterTk):
-    __slots__ = "tasklist", "autoclose"
+    __slots__ = "tasklist", "autoclose", "_finished"
 
     def __init__(self, master:tk.Misc=None, *, autoclose:bool=False,
                  display_text:Callable[str,None]=None,
@@ -192,12 +192,21 @@ class TaskListWindow(BetterTk):
         def default_display_text(text:str) -> None:
             tell(self, title="Info", message=text, multiline=True, icon="info")
 
+        self._finished:bool = False
+        def _check_autoclose_loop() -> None:
+            if not self._finished:
+                self.after(100, _check_autoclose_loop)
+                return None
+            if self.autoclose:
+                self.destroy()
+
         super().__init__(master)
         kwargs["display_text"] = display_text or default_display_text
         self.autoclose:bool = autoclose
         self.tasklist:TaskList = TaskList(self, **kwargs)
         self.tasklist.pack(fill="both", expand=True)
         self.tasklist.on_finished = self._maybe_autoclose
+        _check_autoclose_loop()
 
     def add(self, task_name:str, func:Callable[Success,str|None]) -> None:
         self.tasklist.add(task_name, func)
@@ -206,8 +215,7 @@ class TaskListWindow(BetterTk):
         self.tasklist.start()
 
     def _maybe_autoclose(self) -> None:
-        if self.autoclose:
-            super().destroy()
+        self._finished:bool = True
 
 
 if __name__ == "__main__":

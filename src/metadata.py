@@ -1,2 +1,2 @@
-__version__:str = "5.0.7"
+__version__:str = "5.0.8"
 __author__:str = "TheLizzard"
