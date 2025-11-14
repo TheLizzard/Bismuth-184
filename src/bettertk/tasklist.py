@@ -35,7 +35,7 @@ class TaskList(tk.Frame):
                 "_spinner", "_correct", "_wrong", "_sprite_size", \
                 "_continue_on_fail", "_display_text", \
                 "_idx", "_widgets", "_tasks", \
-                "_done_setup"
+                "_done_setup", "_waiting"
 
     def __init__(self, master:tk.Misc=None, **kwargs:dict) -> TaskList:
         self._done_setup:bool = False
@@ -50,6 +50,7 @@ class TaskList(tk.Frame):
         self._sprite_size:int = 13
         # State variables
         self._idx:int = 0
+        self._waiting:bool = False
         self._widgets:list[tuple[tk.Misc,tk.Misc]] = []
         self._tasks:list[tuple[str,Callable]] = []
         # Create self and configure
@@ -166,6 +167,8 @@ class TaskList(tk.Frame):
                 if self._idx < len(self._tasks):
                     self._next()
                 else:
+                    if self._waiting:
+                        self.quit()
                     self.on_finished()
 
         idx, self._idx = self._idx, self._idx+1
@@ -178,6 +181,10 @@ class TaskList(tk.Frame):
         thread:Thread = Thread(target=call, daemon=True)
         thread.start()
         wait_done()
+
+    def wait(self) -> None:
+        self._waiting:bool = True
+        super().mainloop()
 
     def on_finished(self) -> None:
         pass
@@ -208,14 +215,17 @@ class TaskListWindow(BetterTk):
         self.tasklist.on_finished = self._maybe_autoclose
         _check_autoclose_loop()
 
+    def _maybe_autoclose(self) -> None:
+        self._finished:bool = True
+
     def add(self, task_name:str, func:Callable[Success,str|None]) -> None:
         self.tasklist.add(task_name, func)
 
     def start(self) -> None:
         self.tasklist.start()
 
-    def _maybe_autoclose(self) -> None:
-        self._finished:bool = True
+    def wait(self) -> None:
+        self.tasklist.wait()
 
 
 if __name__ == "__main__":
@@ -232,4 +242,4 @@ if __name__ == "__main__":
     tl.add("Sleep 2", task_sleep(2))
     tl.add("Sleep 1", task_sleep(1))
     tl.start()
-    tl.mainloop()
+    tl.wait()
