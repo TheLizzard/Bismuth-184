@@ -24,6 +24,11 @@ WIDTH:int = 16
 HEIGHT:int = 16
 MimeType:type = str
 
+MIMETYPE_MAP:dict[MimeType:MimeType] = {
+    "text/x-sh":                   "application/x-shellscript",
+    "application/x-iso9660-image": "application/x-iso.png",
+}
+
 
 _ICON_PATHS:list[str] = []
 for icon_path in ICON_PATHS:
@@ -55,13 +60,15 @@ def mimetype_from_shebang(shebang:str) -> MimeType:
     if ("python" in shebang) or ("pypy" in shebang):
         return "text/x-python"
     if "sh" in shebang:
-        return "application/x-shellscript"
+        return "text/x-sh"
 
 _CACHE:dict[tk.Misc:dict[MimeType:ImageTk.PhotoImage]] = defaultdict(dict)
 def get_sprite(master:tk.Misc, filepath:str) -> ImageTk.PhotoImage:
     cache:dict[str:ImageTk.PhotoImage] = _CACHE[master]
     # Get mimetype
     mimetype, _ = guess_type(filepath)
+    if (mimetype is None) and filepath.endswith(".run"):
+        mimetype:MimeType = "text/x-sh"
     # If no mimetype, try looking at the shebang
     if mimetype is None:
         try:
@@ -71,6 +78,7 @@ def get_sprite(master:tk.Misc, filepath:str) -> ImageTk.PhotoImage:
                     mimetype:MimeType = mimetype_from_shebang(shebang)
         except (UnicodeDecodeError, OSError):
             pass
+    mimetype:MimeType = MIMETYPE_MAP.get(mimetype, mimetype)
     # Handle known mimetype
     mimetype:MimeType = mimetype or UNKNOWN_MIMETYPE
     # If in cache

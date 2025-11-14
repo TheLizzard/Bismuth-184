@@ -14,8 +14,9 @@ except:
 # Use `compgen -k` to build this list
 KEYWORDS:set[str] = {
     "break", "case", "continue", "coproc", "do", "done", "elif",
-    "else", "esac", "fi", "for", "function", "if", "in", "select",
-    "then", "time", "until", "while",
+    "else", "esac", "fi", "for", "function", "if", "select",
+    "then", "time", "until", "while", "return",
+    # "in" is special
 }
 
 SIGNALS_TRAPS:set[str] = {
@@ -26,17 +27,35 @@ SIGNALS_TRAPS:set[str] = {
     "SIGPOLL", "SIGPROF", "SIGSYS", "SIGEMT", "SIGSTKFLT", "SIGCLD",
     "SIGWINCH", "SIGPWR",
     # Trap signals
-    "ERR", "EXIT", "DEBUG", "RETURN",
+    "ERR", "EXIT", "DEBUG", "RETURN", "HUP", "INT", "QUIT", "TSTP",
 }
 
 PROGRAMS:set[str] = {
     # Common Linux utils
-    "grep", "awk", "sed", "cat", "ls", "true", "false", "tee",
-    "printf", "dd", "echo", "head", "tail", "cut", "sudo", "date",
-    "swapon", "swapoff", "lsblk", "xargs", "chmod", "chown",
-    "chgrp", "chroot", "mkswap", "mkdir", "mount", "tar", "rm",
-    "rmdir", "cp", "mv", "realpath", "readlink", "dirname", "ln",
-    "basename", "git", "ls", "find", "wc", "", "", "", "", "", "",
+    "adduser", "ar", "ash", "awk", "basename", "beep", "blkid", "cal",
+    "cat", "chgrp", "chmod", "chown", "chpasswd", "chroot", "chrt",
+    "chvt", "cksum", "clear", "cmp", "cp", "cpio", "cut", "date", "dd",
+    "deallocvt", "delgroup", "deluser", "depmod", "df", "diff",
+    "dirname", "dos2unix", "dpkg", "du", "echo", "eject", "env",
+    "expand", "expr", "false", "fdflush", "fdisk", "find", "findfs",
+    "fold", "free", "fsck", "fsync", "fuser", "getopt", "getty", "git",
+    "grep", "gzip", "head", "hexdump", "hostid", "hostname", "hwclock",
+    "id", "ifconfig", "ifdown", "ifup", "insmod", "ionice", "ip",
+    "ipaddr", "iplink", "iproute", "iptunnel", "kill", "killall", "last",
+    "length", "less", "ln", "loadfont", "loadkmap", "login", "logname",
+    "ls", "lsattr", "lsblk", "lsmod", "man", "md5sum", "mesg", "mkdir",
+    "mkdosfs", "mkfifo", "mkpasswd", "mkswap", "mktemp", "modprobe",
+    "more", "mount", "mountpoint", "mv", "nc", "netstat", "nice", "nohup",
+    "openvt", "passwd", "patch", "pidof", "ping", "ping6", "pivot_root",
+    "pkill", "printenv", "printf", "ps", "pwd", "read", "readlink",
+    "realpath", "renice", "reset", "resize", "rm", "rmdir", "rmmod",
+    "sed", "seq", "setconsole", "setfont", "sh", "sha1sum", "sha256sum",
+    "sha512sum", "showkey", "sleep", "softlimit", "sort", "split", "stat",
+    "strings", "stty", "su", "sudo", "sum", "swapoff", "swapon",
+    "switch_root", "sync", "tail", "tar", "tee", "test", "time", "top",
+    "touch", "tr", "true", "tsort", "tty", "umount", "uname", "uniq",
+    "uptime", "usleep", "uuencode", "vlock", "watch", "watchdog", "wc",
+    "which", "who", "whoami", "xargs", "yes",
     "", "", "",
     # Signals and traps
     *SIGNALS_TRAPS,
@@ -46,13 +65,15 @@ PROGRAMS:set[str] = {
     "enable", "eval", "exec", "exit", "export", "fc", "fg",
     "getopts", "hash", "help", "history", "jobs", "let", "local",
     "logout", "mapfile", "popd", "pushd", "read", "readarray",
-    "readonly", "return", "set", "shift", "shopt", "source",
-    "suspend", "times", "trap", "type", "typeset", "ulimit",
-    "umask", "unalias", "unset", "wait",
+    "readonly", "set", "shift", "shopt", "source", "suspend",
+    "times", "trap", "type", "typeset", "ulimit", "umask", "unalias",
+    "unset", "wait",
 }
 PROGRAMS.discard("")
 
-SPECIAL_VARIABLES:set[str] = set("#@*?$!-")
+SPECIAL_VARS:set[str] = set("#@*?$!-")
+NEW_STATEMENT_BEFORE:set[str] = {";", "\n", "(", "|", "&", "", "!"}
+PROGRAM_PROGRAMS:set[str] = {"sudo", "which"}
 
 
 class ColourConfig(BaseColourConfig):
@@ -74,20 +95,16 @@ class ColourConfig(BaseColourConfig):
 VARIABLE_IGNORE_TYPES:set[str] = {"cmd-substitution"}
 
 IDENTIFIER_REGEX:str = (
-                         r"^" # Begining of the string
-                         r"(?:" + # One of
-                             "|".join((
-                                         r"[^\W\d]", # Unicode letter/_
-                                         r"\[",      # [
-                                         r"\]",      # ]
-                                     )) + r")"
-                         r"[" # Followed by any number of
-                             r"\w" # Unicode letter/digit/_
-                             r"\[" # [
-                             r"\]" # ]
-                         r"]*"
-                         r"$" # End of string
-                       )
+    r"^" + # Begining of the string
+    r"(?:" + # One of
+        "|".join([
+            r"[^\W\d]",            # Unicode letter/"_"
+        ]) + r")" +
+    r"[" + # Followed by any number of
+        r"\w" +            # Unicode letter/digit/"_"
+    r"]*" +
+    r"$" # End of string
+)
 IDENTIFIER_REGEX:str = re.compile(IDENTIFIER_REGEX)
 
 def isidentifier(text:str) -> bool:
@@ -100,26 +117,64 @@ class Parser(BaseParser):
     def __init__(self) -> Parser:
         super().__init__(isidentifier=isidentifier, isnumber=str.isdigit)
 
+    def prev_token_line(self) -> tuple[Token,TokenType]:
+        prev:Location = self.tell()
+        while prev:
+            prev:Location = self.prev_start(prev)
+            if prev is None: break
+            prev_token:Token = self.token_at(prev)
+            if prev_token == "\n":
+                prev:Location = self.prev_start(prev)
+                if prev is None: break
+                prev_token:Token = self.token_at(prev)
+                if prev_token == "\\": continue
+                return "\n", self.tokentype_at(prev)
+            elif not prev_token.strip(" \t"):
+                continue
+            return prev_token, self.tokentype_at(prev)
+        return "", ""
+
     def read(self) -> None:
         token:Token = self.peek_token()
         # print("in:", (token,))
         if not token: return None
         if token in KEYWORDS: # Keywords
-            line:str = self.curr_line_seen(respect_slashes=True).strip(" \t")
-            if line.endswith(";"):
-                line:str = ""
-            self.set("identifier" if line else "keyword")
+            tokentype:TokenType = "identifier"
+            prev_token, prev_type = self.prev_token_line()
+            if prev_token in NEW_STATEMENT_BEFORE:
+                tokentype:TokenType = "keyword"
+            elif prev_type == "keyword":
+                if prev_token in {"then", "do"}:
+                    tokentype:TokenType = "keyword"
+            self.set(tokentype)
+            if (tokentype == "keyword") and (token in ("for", "case")):
+                self.skip_whitespaces(" \t") # Eat spaces
+                self.read()
+                self.skip_whitespaces(" \t") # Eat spaces
+                if self.peek_token() == "in":
+                    self.set("keyword")
         elif token in PROGRAMS: # Programs
-            prog:bool = False
-            line:list[str] = self.curr_line_seen(respect_slashes=True).split()
-            prev_token:Token = line[-1] if line else ""
+            isprogram:bool = False
+            prev_token, prev_type = self.prev_token_line()
+            if prev_token in NEW_STATEMENT_BEFORE:
+                isprogram:bool = True
+            if (prev_type == "keyword") and (prev_token not in ("for","in")):
+                isprogram:bool = True
             if token in SIGNALS_TRAPS:
-                prog:bool = True
-            elif prev_token[-1:] in ("", ";", "\n", "(", "|"):
-                prog:bool = True
-            elif prev_token in ("&&", "||", "if"):
-                prog:bool = True
-            self.set("program" if prog else "identifier")
+                isprogram:bool = True
+            if (prev_type == "program") and (prev_token in PROGRAM_PROGRAMS):
+                isprogram:bool = True
+            start:Location = self.tell()
+            self.set("identifier")
+            if isprogram and (self.peek_token() != "="):
+                self.set("program", start)
+                # Programs are allowed to have "-" in their names
+                while True:
+                    token:Token = self.peek_token()
+                    if not (isidentifier(token) or (token == "-")): break
+                    if token == "=": break
+                    if not token: break
+                    self.set("program")
         elif token == "#": # Comment
             self.set("comment") # Read the "#"
             while self.peek_token() != "\n": # Newline not in comment
@@ -145,15 +200,34 @@ class Parser(BaseParser):
                 self.skip()
         elif token in "'\"": # String
             self.read_string()
-        elif token in ("[","[["): # test command
-            close:str = "]" * len(token)
-            self.set("program")
-            if self.read_wait_for({close,"&&","||",";"}) == close:
-                self.set("program")
+        elif token == "[":
+            prev_token:Token = self.prev_token().strip(" \t")
+            if prev_token not in NEW_STATEMENT_BEFORE:
+                self.skip()
+            else:
+                self.set("program") # Read the first "["
+                double:bool = self.peek_token() == "["
+                if double:
+                    self.set("program") # Read the second "["
+                while True:
+                    token:Token = self.read_wait_for({"[","]",";"})
+                    if token in ";": break
+                    if (token == "[") or self.prev_token().strip(" \t"):
+                        self.skip()
+                        continue
+                    start:Location = self.tell()
+                    self.skip()
+                    if double:
+                        if self.peek_token() != "]": continue
+                        self.set("program")
+                    self.set("program", start)
+                    break
         elif token == "\\":
             self.skip()
             if self.peek_token() == "\n":
                 self.set("no-sync-backslash")
+            else:
+                self.skip()
         else: # Default
             self.skip()
 
@@ -183,7 +257,7 @@ class Parser(BaseParser):
             elif self.isidentifier("_" + token): # "-flag"
                 self.set("flag")
             elif token == "=": # "--flag=value"
-                self.set("flag")
+                self.set("flag") # Should this be coloured?
                 break
             else:
                 break
@@ -200,15 +274,13 @@ class Parser(BaseParser):
                 break
             elif token == "\n":
                 self.set("string")
-                if single != "'": # Newlines only stop double quote strings
-                    break
             elif token == "\\":  # Slash+Character
                 self.set("string") # Read the slash
                 self.set("string") # Read the token after the \ (might be \n)
             elif token == single: # On string-closing
                 self.set("string")
                 break
-            elif token == "$":
+            elif (token == "$") and (single == '"'):
                 curr:Location = self.tell()
                 begining_of_string:bool = curr == string_start
                 tokentype:str = self._read_dollar()
@@ -248,17 +320,23 @@ class Parser(BaseParser):
             if token == "}":
                 self.set("variable") # Read the "}"
                 return "variable"
-            if self.isidentifier(token):
+            token_is_var:bool = self.isidentifier(token) or \
+                                token.isdigit() or \
+                                (token in SPECIAL_VARS)
+            if token_is_var:
                 self.set("variable")
                 start:Location = self.tell()
                 while True:
-                    token:Token = self.read_wait_for({"}","\n","#","$"},
+                    token:Token = self.read_wait_for({"}","\n","#","$","\\"},
                                                      settype="string",
                                              ignoretypes=VARIABLE_IGNORE_TYPES)
                     if token == "#":
                         self.set("string")
                     elif token == "$":
                         self.read()
+                    elif token == "\\":
+                        self.set("string") # "\"
+                        self.set("string") # Token after "\"
                     elif token == "}":
                         self.set("variable") # Read the "}"
                         break
@@ -266,7 +344,7 @@ class Parser(BaseParser):
                         break
             return "variable"
         # $0/$@/$#/···
-        elif token.isdigit() or (token in SPECIAL_VARIABLES):
+        elif token.isdigit() or (token in SPECIAL_VARS):
             self.set("variable", dollar_start)
             self.set("variable") # Read the token
             return "variable"
@@ -274,8 +352,28 @@ class Parser(BaseParser):
         elif token == "(":
             self.set("cmd-substitution", dollar_start)
             self.set("cmd-substitution") # Read the "("
-            if self.read_wait_for({")"}) == ")":
+            double:bool = self.peek_token() == "(" # $((...))
+            if double:
                 self.set("cmd-substitution")
+            while True:
+                token:Token = self.read_wait_for({")","\\"})
+                if not token: break
+                if token == "\\":
+                    # On "\\"
+                    self.read() # Read the "\\"
+                    self.read() # Read the token after the "\\"
+                else:
+                    # On ")"
+                    if double:
+                        start:Location = self.tell()
+                        self.skip()
+                        if self.peek_token() == ")":
+                            self.set("cmd-substitution", start) # Read the ")"
+                            self.set("cmd-substitution") # Read the second ")"
+                            break
+                    else:
+                        self.set("cmd-substitution") # Read the ")"
+                        break
             return "cmd-substitution"
         # Incomplete variable
         else:
@@ -286,9 +384,13 @@ class Parser(BaseParser):
 
     def _read_here_doc(self, start:Location) -> None:
         assert self.text_between(start, self.tell()) == "<<", "InternalError"
-        self.set("here-doc", start) # Read the first <
-        self.set("here-doc", start+1) # Read the second <
-        if ignore_tabs := (self.peek_token() == "-"):
+        self.set("here-doc", start) # Read the first "<"
+        self.set("here-doc", start+1) # Read the second "<"
+        token:Token = self.peek_token()
+        if token == "<": # Here-strings
+            self.set("here-doc") # Read the third "<"
+            return None
+        if ignore_tabs := (token == "-"):
             self.set("here-doc") # Read the dash in "<<-"
         self.skip_whitespaces(" \t") # Eat spaces
         start:Location = self.tell()

@@ -74,5 +74,4 @@ class ColourManager(BaseColourManager):
 
     def init(self) -> None:
         self.tagdefs:dict[str,str] = ColourConfig()
-        self.idprog = re.compile(r"\s+(\w+)")
         self.prog = make_pat()

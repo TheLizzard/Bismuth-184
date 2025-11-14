@@ -7,10 +7,10 @@ import os
 
 try:
     from .explorer import Explorer, isfile, isfolder, SELECTED_COLOUR
-    from .base_explorer import NEW_ITEM_NAME, MAX_ITEMS_ITENT
+    from .base_explorer import NEW_ITEM_NAME, MAX_ITEMS_ITENT, Item
 except ImportError:
     from explorer import Explorer, isfile, isfolder, SELECTED_COLOUR
-    from base_explorer import NEW_ITEM_NAME, MAX_ITEMS_ITENT
+    from base_explorer import NEW_ITEM_NAME, MAX_ITEMS_ITENT, Item
 from bettertk import BetterTk, IS_UNIX, IS_WINDOWS
 from bettertk.messagebox import askyesno, tell
 import bettertk

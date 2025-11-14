@@ -13,6 +13,11 @@ from .baserule import Rule, SHIFT, ALT, CTRL
 NO_SAVE:bool = False # For debug only
 
 
+def realpath(path:str) -> str:
+    if not path: return ""
+    return os.path.realpath(path)
+
+
 class SaveLoadManager(Rule):
     __slots__ = "text"
     REQUESTED_LIBRARIES:list[tuple[str,bool]] = []
@@ -78,8 +83,11 @@ class SaveLoadManager(Rule):
             return False
         if not os.path.exists(self.text.filepath):
             return False
-        with open(self.text.filepath, "rb") as file:
-            filesystem_data:bytes = file.read()
+        try:
+            with open(self.text.filepath, "rb") as file:
+                filesystem_data:bytes = file.read()
+        except OSError:
+            return False
         if not filesystem_data:
             return False
         filesystem_data:str = self._security(filesystem_data, decode=True)
@@ -103,7 +111,7 @@ class SaveLoadManager(Rule):
 
     def do(self, on:str, shift:bool, data:str) -> Break:
         if on == "<force-open>":
-            self.text.filepath:str = os.path.realpath(data)
+            self.text.filepath:str = realpath(data)
             self._internal_open(reload=False)
             return False
 
@@ -121,14 +129,14 @@ class SaveLoadManager(Rule):
                                    filetypes=self.FILE_TYPES,
                                    master=self.text)
                 if not file: return True
-                self.text.filepath:str = os.path.realpath(file)
+                self.text.filepath:str = realpath(file)
             self._save()
             return True
 
         if on == "control-o":
             file:str = askopen(filetypes=self.FILE_TYPES, master=self.text)
             if not file: return True
-            self.text.filepath:str = os.path.realpath(file)
+            self.text.filepath:str = realpath(file)
             if self.text.edit_modified():
                 title:str = "Discard changes to this file?"
                 msg:str = "You haven't saved this file. Are you sure you\n" \
@@ -175,10 +183,17 @@ class SaveLoadManager(Rule):
         if NO_SAVE:
             print("Stopping save")
         else:
-            with open(self.text.filepath, "wb") as file:
-                if self.text.filesystem_data: # Empty text => empty file
-                    file.write(self.text.filesystem_data.encode("utf-8"))
-                    file.write(b"\n") # https://stackoverflow.com/q/72271
+            try:
+                with open(self.text.filepath, "wb") as file:
+                    if self.text.filesystem_data: # Empty text => empty file
+                        file.write(self.text.filesystem_data.encode("utf-8"))
+                        file.write(b"\n") # https://stackoverflow.com/q/72271
+            except OSError as error:
+                msg:str = "Failed to save because of:\n" + \
+                          repr(error)
+                telluser(self.text, title="Error", message=msg, icon="error",
+                         center=True, center_widget=self.text)
+                return None
         self.text.event_generate("<<Saved-File>>")
 
     def _internal_open(self, *, reload:bool) -> None:
@@ -189,6 +204,10 @@ class SaveLoadManager(Rule):
             self.plugin.move_insert(insert)
             self.text.xview("moveto", xview)
             self.text.yview("moveto", yview)
+        elif reload:
+            msg:str = "File was deleted"
+            telluser(self.text, title="Error", icon="error", message=msg,
+                     center=True, center_widget=self.text)
         else:
             self.text.after(10, self.text.event_generate, "<<Close-Tab>>")
 
@@ -269,15 +288,22 @@ class SaveLoadManager(Rule):
 
     def _set_state_save(self, filepath:str, modified:bool, data:str,
                         saved_data:str) -> None:
-        self.text.filepath:str = os.path.realpath(filepath)
+        self.text.filepath:str = realpath(filepath)
         self.text.filesystem_data:str = saved_data
         opened:bool = False
         # Check for merge conflict
         if self.text.filepath:
             if not self._can_read():
-                msg:str = f"The file {self.text.filepath}\ncan't be read."
+                msg:str = f"The file {self.text.filepath}\n"
+                if not os.path.exists(self.text.filepath):
+                    msg += "no longer exists"
+                elif os.path.isfile(self.text.filepath):
+                    msg += "can't be read"
+                else:
+                    msg += "is a folder or a broken link"
                 telluser(self.text, title="Can't read file", message=msg,
                          center=True, icon="warning", center_widget=self.text)
+                return None
             elif modified:
                 with open(self.text.filepath, "rb") as fd:
                     filedata:bytes = self._remove_newline(fd.read(),

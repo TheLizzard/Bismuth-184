@@ -10,7 +10,7 @@ import os
 OLD_CWD_PATH:str = os.getcwd()
 os.chdir(os.path.dirname(os.path.abspath(os.path.realpath(__file__))))
 
-from file_explorer.expanded_explorer import ExpandedExplorer, isfolder
+from file_explorer.expanded_explorer import ExpandedExplorer, isfolder, Item
 from bettertk.betterframe import make_bind_frame
 from bettertk.betterframe import BetterFrame
 from bettertk.betterscrollbar import BetterScrollBarVertical, \
@@ -240,9 +240,7 @@ class App:
             self.open_tab(path)
         elif os.path.isdir(path):
             path:str = os.path.abspath(path)
-            getpath = lambda item: item.fullpath
-            added:list[str] = list(map(getpath, self.explorer.root.children))
-            if path not in added:
+            if path not in self._get_explorer_added():
                 self.explorer.add(path, expand=True)
         else:
             raise RuntimeError(f"Unknown type for {path!r}")
@@ -301,7 +299,14 @@ class App:
         path:str = askdirectory(master=self.root)
         if not path:
             return None
+        if path in self._get_explorer_added():
+            return None
         self.explorer.add(path, expand=True)
+
+    def _get_explorer_added(self) -> list[str]:
+        # Must return a list because order matters
+        item_getpath:Callable[Item,str] = lambda item: item.fullpath
+        return list(map(item_getpath, self.explorer.root.children))
 
     # Expand folder in explorer
     def _explorer_expand(self, expanded:list[str]=None) -> None:
@@ -338,8 +343,7 @@ class App:
                     text._report_exception()
 
     def _get_explorer_state(self) -> tuple[list[str],list[str]]:
-        getpath = lambda item: item.fullpath
-        added:list[str] = list(map(getpath, self.explorer.root.children))
+        added:list[str] = self._get_explorer_added()
         expanded:list[str] = []
         for item, _ in self.explorer.root.recurse_children(withself=False):
             if isfolder(item) and item.expanded:

@@ -77,6 +77,7 @@ CMD_KWS:set[str] = {"assert", "with", "async", "def", "class", "break",
 KWS_WITH_COLON:set[str] = {"lambda", "while", "if", "for", "else", "def",
                            "class", "elif", "try", "except", "finally",
                            "with"}
+NOT_AFTER_SOFT_KW:set[str] = set(":.,;=^&|@~)]}")
 KDS_WITH_IMMEDIATE_COLON:set[str] = {"else", "finally", "try"}
 
 SPACES:str = " \t"
@@ -192,9 +193,13 @@ class Parser(BaseParser):
             else: # Type annotation
                 self.set("type-annotation", start) # ":"
                 self.read_type_annotation({"\n","="})
+        # Check for {...} so f-strings work properly
+        elif (not CHECK_TYPE_ANNOTATIONS) and (token == "{"):
+            self.skip()
+            if self.read_wait_for("}") == "}":
+                self.skip()
         # Comment
         elif token == "#":
-            self.set("comment") # "#"
             while self.peek_token() != "\n": # Newline not in comment
                 self.set("comment")
         # Strings:
@@ -202,10 +207,10 @@ class Parser(BaseParser):
             start:Location = self.tell()
             self.set("identifier") # Jump over the string prefix
             new_token:Token = self.peek_token()
-            if new_token in ("'", '"'):
+            if new_token in "'\"":
                 self.set("string", start) # String prefix
                 self.read_string(token)
-        elif token in ("'", '"'):
+        elif token in "'\"":
             self.read_string()
         # Match soft-keyword (MATCH_SOFTKW)
         elif token == "match":
@@ -216,13 +221,13 @@ class Parser(BaseParser):
                 self.skip() # `match` but we aren't sure if keyword
                 self.skip_whitespaces(SPACES)
                 new_token:Token = self.peek_token()
-                if new_token in set(":,;=^&|@~)]}"):
+                if new_token in NOT_AFTER_SOFT_KW:
                     self.set("identifier", start)
                 elif new_token in self.keywords: # match followed by a keyword
                     self.set("identifier", start)
                 else:
                     self.set("keyword", start)
-        # Case soft keyword
+        # Case soft-keyword
         elif token == "case":
             if self.curr_line_seen(respect_slashes=True).rstrip(" \t"):
                 self.set("identifier")
@@ -231,7 +236,7 @@ class Parser(BaseParser):
                 self.skip() # `case` but we aren't sure if keyword
                 self.skip_whitespaces(SPACES)
                 new_token:Token = self.peek_token()
-                if new_token in set(":,;=^&|@~)]}"):
+                if new_token in NOT_AFTER_SOFT_KW:
                     self.set("identifier", start)
                 elif new_token in self.keywords: # case followed by a keyword
                     self.set("identifier", start)
@@ -305,7 +310,7 @@ class Parser(BaseParser):
     def read_string(self, prefix:Token="") -> None:
         fstring:bool = "f" in prefix
         single:Token = self.peek_token()
-        assert single in ("'", '"'), "InternalError"
+        assert single in "'\"", "InternalError"
         self.set("string") # starting quote
         triple:bool = False
         # Check for empty string/triple quotes
@@ -322,7 +327,7 @@ class Parser(BaseParser):
                 break
             elif (not triple) and (token == "\n"): # Newline if not triple
                 break
-            elif token == "\\":  # Slash + character
+            elif token == "\\": # Slash + character
                 self.set("string") # "\"
                 if fstring and (self.peek_token() in "{}"):
                     continue # Curly brackets cannot be escaped with a \
@@ -412,7 +417,6 @@ class ColourManager(BaseColourManager):
 
     def init(self) -> None:
         self.tagdefs:dict[str,str] = ColourConfig()
-        self.idprog = re.compile(r"\s+(\w+)")
         self.prog = Regex(Parser())
         # self.prog = make_pat()
 

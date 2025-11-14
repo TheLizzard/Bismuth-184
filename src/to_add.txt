@@ -18,6 +18,13 @@ Editor:
 * Control-m doesn't remove marks that are on empty lines
 * Adding a shebang to an unsaved file should switch to the correct plugin
 * png/jpeg/pdf viewer
+* BetterText scrolling vertically while scrolled >max horizontally => bug
+* BetterText.see end of longest line when not tk.Text.see, doesn't scroll enough
+* BetterText writing to the longest visible (not actually the longest) line snaps the view
+* If file deleted while closed, empty Untitled page shows up
+* "Ln: XX Col: XX" in `BarManager` doesn't play nice with "𒀃"
+* Saving a file should update it's icon in the file explorer
+* Renaming a file/folder in the explorer should update the paths in notebook
 
 IPC:
 * Remove psutil dependency for checking if process exists

@@ -62,7 +62,7 @@ class ColourManager(Rule, ColorDelegator):
     def init(self) -> None:
         self.tagdefs:dict[str,str] = ColourConfig({"word":{}})
         self.idprog = re.compile(r"\s+(\w+)")
-        self.prog = re.compile(r"\b(?P<word>\w+)\b", re.M|re.S)
+        self.prog = re.compile(r"\b(?P<word>\w+)\b|(?P<SYNC>\n)", re.M|re.S)
 
     def __getattr__(self, key:str) -> object:
         return getattr(self.text, key)
@@ -112,14 +112,14 @@ class ColourManager(Rule, ColorDelegator):
         return False
 
     def notify_range(self, start:str, end:str|None=None) -> None:
-        if start == "1.0":
-            if (not end) or self.text.compare(end, "==", "end"):
-                self.text.update_idletasks()
-                # Shortcut for colouring in the whole textbox
-                super().removecolors()
-                self._add_tags_in_section(self.text.get("1.0","end"), "1.0")
-                return None
-        super().notify_range(start, end)
+        end:str = end or "end"
+        if (start == "1.0") and self.text.compare(end, "==", "end"):
+            # Shortcut for colouring in the whole textbox
+            self.text.update_idletasks()
+            super().removecolors()
+            self._add_tags_in_section(self.text.get("1.0","end"), "1.0")
+        else:
+            super().notify_range(start, end)
 
     def _add_tag(self, start:int, end:int, head:str, tag:str) -> None:
         start_idx:str = self.text.index(f"{head}+{start:d}c")
@@ -129,7 +129,7 @@ class ColourManager(Rule, ColorDelegator):
         if DEBUG:
             s = perf_counter()
             self.lines = getattr(self, "lines", 0) + chars.count('\n')
-            print(f"+{chars.count('\n')} more lines (total={self.lines}):")
+            print(f"+{chars.count(chr(10))} more lines (total={self.lines}):")
 
         if isinstance(self.prog, Regex):
             head_start:int = 0
@@ -406,7 +406,7 @@ class Parser(Tokeniser):
             index:Location = curr
         else:
             assert isinstance(index, Location), "TypeError"
-        self._overrides[index] = tokentype # Add to overrides
+        self._overrides[index] = tokentype
         if index == curr:
             self.skip() # Advance buffer
 
@@ -452,6 +452,14 @@ class Parser(Tokeniser):
             Unneeded since `self.set_from` takes in `ignoretypes` parameter
         """
         return self._overrides[start]
+
+    def prev_token(self) -> Token:
+        """
+        Return the previous token that ends at `self.tell()`
+        """
+        start:Location = self.tell()
+        if start == 0: return ""
+        return self.token_at(self.prev_start(start))
 
     def next_start(self, start:Location) -> Location|None:
         """
@@ -529,12 +537,11 @@ class Parser(Tokeniser):
         assert isinstance(settype, TokenType|None), "TypeError"
         if read_func is None:
             read_func:Callable[None] = self.read
-        waiting_for_newline:bool = "\n" in tokens
         while True:
             token:Token = self.peek_token()
             if (token in tokens) or (not token):
                 return token
-            elif token == "\n" and (not waiting_for_newline):
+            elif token == "\n":
                 self.set(f"no-sync-{settype}")
             else:
                 if settype is None:

@@ -11,6 +11,7 @@ DEBUG_UNDO_REDO:bool = False
 TIME_DELAY_UNDO_SEP:int = 300
 ORIG_LOC:tuple[str] = ("colorizer", "percolator", "redir", "orig")
 
+
 class UndoManager(Rule):
     __slots__ = "text", "old_undo", "old_separators", "old_maxundo", \
                 "paused", "after_id", "modified_since_last_sep", \

@@ -6,18 +6,22 @@ from typing import Callable
 import tkinter as tk
 
 
-ALL_SPRITE_NAMES:set[str] = {"pause-green", "pause-black",
-                             "play-green", "play-black",
-                             "exclam-red", "exclam-orange", "exclam-blue",
-                             "x-red", "x-orange",
-                             "restart", "restart-blue", "restart-black",
-                             "warning",
-                             "io-red",
-                             "plus-black", "plus-grey",
-                             "gear-white", "gear-grey",
-                             "spinner1", "spinner2", "spinner3", "spinner4",
-                             "spinner5", "spinner6",
-                             "spinner6-black"}
+ALL_SPRITE_NAMES:set[str] = {
+    "pause-green", "pause-black",
+    "play-green", "play-black",
+    "exclam-red", "exclam-orange", "exclam-blue",
+    "x-red", "x-orange",
+    "i-red", "i-orange", "i-blue", "i-black",
+    "tick-green", "tick-black",
+    "restart", "restart-blue", "restart-black",
+    "warning",
+    "io-red",
+    "plus-black", "plus-grey",
+    "gear-white", "gear-grey",
+    "spinner1", "spinner2", "spinner3", "spinner4",
+    "spinner5", "spinner6",
+    "spinner6-black",
+}
 
 SPRITES_REMAPPING:dict[str:str] = {"stop":"exclam-orange",
                                    "info":"exclam-blue",
@@ -368,7 +372,6 @@ def draw_warning(s, y1, y2, y3, w, size, bg:Colour) -> DrawImage:
     y1, y2, y3 = y1/256*size, y2/256*size, y3/256*size
     s, w = s/256*size, w/256*size
     image:DrawImage = DrawImage(size)
-
     tx1 = (size-s)/2
     tx2 = size-tx1
     tx3 = (tx1+tx2)/2
@@ -376,7 +379,6 @@ def draw_warning(s, y1, y2, y3, w, size, bg:Colour) -> DrawImage:
     ty1 = ty2 = size-tx1
     ly1 = y1+ty3+w/2
     ly2 = y2+ty3-w/2
-
     image.draw_triangle((tx1,ty1), (tx2,ty2), (tx3,ty3), colour=bg)
     image.draw_rounded_line((size>>1,ly1), (size>>1,ly2), w, colour=BLACK)
     image.draw_circle((size>>1,y3+ty3+w/2), w/2, colour=BLACK)
@@ -386,6 +388,17 @@ def draw_test(size) -> DrawImage:
     image:DrawImage = DrawImage(size)
     image.draw_circle((size>>1,size>>1), 100, colour=WHITE)
     image.draw_circumference((size>>1,size>>1), 0, 80, 90, 180, colour=BLACK)
+    return image
+
+def draw_tick(x1,y1, x2,y2, x3,y3, w, br, size, bg:Colour) -> DrawImage:
+    x1, y1 = x1/256*size, y1/256*size
+    x2, y2 = x2/256*size, y2/256*size
+    x3, y3 = x3/256*size, y3/256*size
+    br, w = br/256*size, w/256*size
+    image:DrawImage = DrawImage(size)
+    image.draw_circle((size>>1,size>>1), br, colour=bg)
+    image.draw_rounded_line((x1,y1), (x2,y2), w, colour=WHITE)
+    image.draw_rounded_line((x2,y2), (x3,y3), w, colour=WHITE)
     return image
 
 # TODO
@@ -527,6 +540,21 @@ def init(*, size:int, compute_size:int=None, crop:bool=True,
     if "exclam-red" in sprites_wanted:
         sprites["exclam-red"] = draw_exclam(75, 135, 20, 15, 100,
                                                size, bg=RED)
+    if "i-red" in sprites_wanted:
+        sprites["i-red"] = draw_exclam(185, 125, 20, 15, 100, size, bg=RED)
+    if "i-orange" in sprites_wanted:
+        sprites["i-orange"] = draw_exclam(185, 125, 20, 15, 100, size,
+                                          bg=ORANGE)
+    if "i-blue" in sprites_wanted:
+        sprites["i-blue"] = draw_exclam(185, 125, 20, 15, 100, size, bg=BLUE)
+    if "i-black" in sprites_wanted:
+        sprites["i-black"] = draw_exclam(185, 125, 20, 15, 100, size, bg=BLACK)
+    if "tick-green" in sprites_wanted:
+        sprites["tick-green"] = draw_tick(75,145, 110,180, 190,100,
+                                          15, 100, size, bg=DGREEN)
+    if "tick-black" in sprites_wanted:
+        sprites["tick-black"] = draw_tick(75,145, 110,180, 190,100,
+                                          15, 100, size, bg=BLACK)
     if "x-red" in sprites_wanted:
         sprites["x-red"] = draw_x(65, 15, 100, size, bg=RED)
     if any(name.startswith("spinner") for name in sprites_wanted):
@@ -634,12 +662,13 @@ class TkSpriteCache:
 
 if __name__ == "__main__":
     size:int = 256>>1
-    wanted:set[str] = {"exclam-blue",
-                       "gear-white", "gear-grey",
+    wanted:set[str] = {"gear-grey",
                        "warning",
                        "x-red",
                        "plus-grey",
-                       "restart-blue", "restart-black"}
+                       "restart",
+                       "i-red",
+                       "tick-green", "tick-black",}
 
     root = tk.Tk()
     root.geometry("+0+0")
@@ -654,7 +683,7 @@ if __name__ == "__main__":
         image = sprites[name]
         im = tk.Label(root, bd=0, highlightthickness=0, bg="black", image=image)
         im.grid(row=0, column=i)
-        im.bind("<Button-1>", lambda e: print(e.x, e.y))
+        im.bind("<Button-1>", lambda e: print(e.x*256//size, e.y*256//size))
         label = tk.Label(root, text=name, bg="black", fg="white")
         label.grid(row=1, column=i, sticky="ew")
 
@@ -684,10 +713,10 @@ if __name__ == "__main__":
 
         im = tk.Label(root, bd=0, highlightthickness=0, bg="black")
         im.grid(row=0, column=i)
-        im.bind("<Button-1>", lambda e: print(e.x, e.y))
+        im.bind("<Button-1>", lambda e: print(e.x*256//size, e.y*256//size))
         label = tk.Label(root, text=name, bg="black", fg="white")
         label.grid(row=1, column=i, sticky="ew")
-        set_image_callback = lambda img, im=im:im.config(image=img)
+        set_image_callback = lambda img, im=im: im.config(image=img)
         gif:GifDisplay = sprites.display_gif(name, DELAY, set_image_callback)
         gif.start()
 

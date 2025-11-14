@@ -1,79 +1,73 @@
 from __future__ import annotations
-from idlelib.colorizer import matched_named_groups, idprog
-import os.path
+from shutil import which
 
-from ..runmanager import RunManager as BaseRunManager
-from .colourmanager import make_pat
+from ..runmanager import RunManager as BaseRunManager, PRINTF
+from ..helpers.compiler import Compiler
 
 
+EXE:str = which("gcc")
 WARNINGS:tuple[str] = ("-Wall", "-Wextra", "-Wshadow", "-Warray-bounds",
                        "-Wdangling-else", "-Wnull-dereference",
                        "-Wswitch-enum", "-Wformat-security", "-Wuninitialized",
                        "-Wconversion", "-Wpointer-arith")
+DEFAULT_FLAGS:list[str] = [
+                       "-flto=5", # Link Time Optimisation
+                       "-O3",
+                       "-std=c17",
+                       "-funroll-all-loops",
+                          ] + list(WARNINGS)
 DEBUG_MODE:bool = True
+if DEBUG_MODE:
+    # https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html
+    DEFAULT_FLAGS += [
+                       # Retain source code debugging/symbol info
+                       "-g",
+                       # Exports source code symbols
+                       "-rdynamic",
+                       # Detect memoty leaks
+                       "-fsanitize=leak",
+                       # Detect user-after-frees
+                       "-fsanitize=address",
+                       # Detect undefined behavior
+                       "-fsanitize=undefined",
+                       # Detect use-after-scope
+                       "-fsanitize-address-use-after-scope",
+                     ]
+
+
+GET_INCLUDES_CMD:list[str] = [EXE, "-MT", "", "-MM", "-MG"]
+
+HEADER_EXTS:set[str] = {".h"}
+SRC_EXTS:set[str] = {".c"}
+
 
 class RunManager(BaseRunManager):
-    __slots__ = ()
+    __slots__ = "libs"
 
     RUN:list[str] = ["{tmp}/executable"]
 
-    def compile(self, *, print_str:str="") -> bool:
-        file:str = self.text.filepath
-        if not file.endswith(".c"):
-            return False
-        files:set[str] = set()
-        RunManager.get_c_files(file, files)
-        files:list[str] = list(filter(os.path.exists, files))
-        command:list[str] = ["gcc", *WARNINGS, "-o", "{tmp}/executable", "-O3",
-                             *files, "-lm", "-funroll-all-loops"]
-        if DEBUG_MODE:
-            command += ["-g", "-rdynamic"]
-        return super().compile(print_str=print_str, command=command)
-
-    @staticmethod
-    def get_c_files(filepath:str, results:set) -> None:
-        if filepath.endswith(".c"):
-            header, c = filepath.removesuffix(".c")+".h", filepath
+    def compile(self) -> bool:
+        for ext in SRC_EXTS:
+            if self.text.filepath.endswith(ext): break
         else:
-            header, c = filepath, filepath.removesuffix(".h")+".c"
-        if c in results:
-            return None
-        results.add(c)
-        RunManager.get_headers(c, results)
-        RunManager.get_headers(header, results)
+            return False
+        compiler:Compiler = Compiler(self.effective_cwd, DEFAULT_FLAGS, EXE,
+                                     GET_INCLUDES_CMD, HEADER_EXTS, SRC_EXTS)
+        compiler.add_root(self.text.filepath)
+        command:list[str] = compiler.get_cmd()
+        if compiler.links:
+            super().set_env_var("LIBRARY_PATH", set(compiler.links))
+            super().set_env_var("LD_LIBRARY_PATH", set(compiler.links))
+        cmd:str = " ".join(command) + "\n"
+        self.term.queue([*PRINTF, self.center("Pre-Compiling", "-")],
+                        condition=(0).__eq__)
+        self.term.queue([*PRINTF, cmd], condition=(0).__eq__)
+        if compiler.error:
+            msg:str = compiler.error + "\n"
+            self.term.queue([*PRINTF, msg], condition=(0).__eq__)
+            return False
+        return super().compile(command=command,
+                               print_str=self.center("Compiling", "-"))
 
-    @staticmethod
-    def get_headers(filepath:str, results:set[str]) -> None:
-        folder:str = os.path.dirname(filepath)
-        for header in RunManager._get_headers(filepath):
-            if header in results:
-                continue
-            RunManager.get_c_files(os.path.join(folder, header), results)
-
-    @staticmethod
-    def _get_headers(filepath:str) -> set[str]:
-        if not os.path.exists(filepath):
-            return set()
-        with open(filepath, "r") as file:
-            code:str = file.read()
-        includes:set[str] = set()
-        last_include_start:int = None
-        for m in PROG.finditer(code):
-            for name, matched_text in matched_named_groups(m):
-                a, b = m.span(name)
-                if name == "include":
-                    last_include_start:int = b
-                if name == "string":
-                    if last_include_start == a:
-                        include:str = code[a:b]
-                        if include.startswith('"') or include.endswith('"'):
-                            include:str = include.removeprefix('"') \
-                                                 .removesuffix('"')
-                        elif include.startswith("<") or include.endswith(">"):
-                            include:str = include.removeprefix("<") \
-                                                 .removesuffix(">")
-                        includes.add(include)
-        return includes
-
-
-PROG = make_pat()
+    def execute(self, args:Iterable[str]) -> None:
+        super().execute(args, print_str=self.center("Running", "-"))

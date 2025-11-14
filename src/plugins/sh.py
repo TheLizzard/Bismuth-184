@@ -18,7 +18,7 @@ EXECUTABLE:int = stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH
 
 class ShPlugin(BasePlugin):
     __slots__ = ()
-    DEFAULT_CODE:str = '#!/bin/bash\nset -e\n\necho "Hello world"'
+    DEFAULT_CODE:str = '#!/bin/bash\nset -euo pipefail\n\necho "Hello world"'
 
     def __init__(self, *args:tuple) -> PythonPlugin:
         rules:list[Rule] = [
