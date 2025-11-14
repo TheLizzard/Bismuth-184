@@ -5,9 +5,11 @@ import tkinter as tk
 try:
     from .terminaltk.sprites.creator import TkSpriteCache
     from .bettertk import BetterTk
+    from .messagebox import tell
 except ImportError:
     from terminaltk.sprites.creator import TkSpriteCache
     from bettertk import BetterTk
+    from messagebox import tell
 
 
 class TaskList(tk.Frame):
@@ -185,8 +187,13 @@ class TaskListWindow(BetterTk):
     __slots__ = "tasklist", "autoclose"
 
     def __init__(self, master:tk.Misc=None, *, autoclose:bool=False,
+                 display_text:Callable[str,None]=None,
                  **kwargs:dict) -> TaskListWindow:
+        def default_display_text(text:str) -> None:
+            tell(self, title="Info", message=text, multiline=True, icon="info")
+
         super().__init__(master)
+        kwargs["display_text"] = display_text or default_display_text
         self.autoclose:bool = autoclose
         self.tasklist:TaskList = TaskList(self, **kwargs)
         self.tasklist.pack(fill="both", expand=True)
@@ -209,11 +216,11 @@ if __name__ == "__main__":
     def task_sleep(sleep_time:float) -> Callable:
         def inner() -> tuple[Success,str|None]:
             sleep(sleep_time)
-            return True
+            return True, "Hello world"
             return sleep_time <= 1, str(sleep_time)
         return inner
 
-    tl:TaskList = TaskListWindow(display_text=print, autoclose=True)
+    tl:TaskList = TaskListWindow(autoclose=True)
     tl.add("Sleep 2", task_sleep(2))
     tl.add("Sleep 1", task_sleep(1))
     tl.start()
