@@ -4,8 +4,10 @@ import tkinter as tk
 
 try:
     from .terminaltk.sprites.creator import TkSpriteCache
+    from .bettertk import BetterTk
 except ImportError:
     from terminaltk.sprites.creator import TkSpriteCache
+    from bettertk import BetterTk
 
 
 class TaskList(tk.Frame):
@@ -109,15 +111,27 @@ class TaskList(tk.Frame):
         pass # TODO
 
     def add(self, task_name:str, func:Callable[Success,str|None]) -> None:
-        idx:int = len(self._widgets) - 1
+        idx:int = len(self._widgets)
         bg:str = self.cget("bg")
+        sep:dict = dict(bd=0, highlightthickness=0, width=1, height=1,
+                        bg=self._fg)
+        # Top separator
+        if not idx:
+            tk.Canvas(self, **sep).grid(row=2+2*idx, column=1, columnspan=3,
+                                        sticky="ew")
         # Create widgets
         label:tk.Label = tk.Label(self, fg=self._fg, bg=bg, text=task_name,
                                   font=self._font)
-        label.grid(row=2+idx, column=1, sticky="w")
+        label.grid(row=3+2*idx, column=1, sticky="w")
         spinner:tk.Button = tk.Button(self, bd=0, highlightthickness=0, bg=bg,
                                       relief="flat", activebackground=bg)
-        spinner.grid(row=2+idx, column=2, sticky="ew")
+        spinner.grid(row=3+2*idx, column=3, sticky="ew")
+        # Separators
+        for col in (0, 2, 4):
+            tk.Canvas(self, **sep).grid(row=3+2*idx, column=col, rowspan=1,
+                                        sticky="ns")
+        tk.Canvas(self, **sep).grid(row=4+2*idx, column=1, columnspan=3,
+                                    sticky="ew")
         # Update state
         self._widgets.append((label, spinner))
         self._tasks.append((task_name, func))
@@ -149,6 +163,8 @@ class TaskList(tk.Frame):
             if success or self._continue_on_fail:
                 if self._idx < len(self._tasks):
                     self._next()
+                else:
+                    self.on_finished()
 
         idx, self._idx = self._idx, self._idx+1
         self._state:int = 0 # Waiting
@@ -161,6 +177,31 @@ class TaskList(tk.Frame):
         thread.start()
         wait_done()
 
+    def on_finished(self) -> None:
+        pass
+
+
+class TaskListWindow(BetterTk):
+    __slots__ = "tasklist", "autoclose"
+
+    def __init__(self, master:tk.Misc=None, *, autoclose:bool=False,
+                 **kwargs:dict) -> TaskListWindow:
+        super().__init__(master)
+        self.autoclose:bool = autoclose
+        self.tasklist:TaskList = TaskList(self, **kwargs)
+        self.tasklist.pack(fill="both", expand=True)
+        self.tasklist.on_finished = self._maybe_autoclose
+
+    def add(self, task_name:str, func:Callable[Success,str|None]) -> None:
+        self.tasklist.add(task_name, func)
+
+    def start(self) -> None:
+        self.tasklist.start()
+
+    def _maybe_autoclose(self) -> None:
+        if self.autoclose:
+            super().destroy()
+
 
 if __name__ == "__main__":
     from time import sleep
@@ -172,13 +213,8 @@ if __name__ == "__main__":
             return sleep_time <= 1, str(sleep_time)
         return inner
 
-    root:tk.Tk = tk.Tk()
-    root.geometry("150x150")
-
-    tl:TaskList = TaskList(root, display_text=print)
-    tl.pack(fill="both", expand=True)
+    tl:TaskList = TaskListWindow(display_text=print, autoclose=True)
     tl.add("Sleep 2", task_sleep(2))
     tl.add("Sleep 1", task_sleep(1))
     tl.start()
-
-    root.mainloop()
+    tl.mainloop()
