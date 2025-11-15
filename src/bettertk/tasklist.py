@@ -52,8 +52,9 @@ class TaskList(tk.Frame):
         self._sprite_size:int = 13
         # State variables
         self._idx:int = 0
-        self._success:bool = False
+        self._state:int = 0 # 0 => 1(running) => 2(done)
         self._waiting:bool = False
+        self._success:Success = False
         self._widgets:list[tuple[tk.Misc,tk.Misc]] = []
         self._tasks:list[tuple[str,Callable]] = []
         # Create self and configure
@@ -143,22 +144,25 @@ class TaskList(tk.Frame):
         self._tasks.append((task_name, func))
 
     def start(self) -> None:
+        if self._state != 0:
+            raise RuntimeError("Already started")
+        self._state:int = 1
         self._next()
 
     def _next(self) -> None:
         success, text = True, None
 
         def call() -> None:
-            nonlocal success, text
+            nonlocal success, text, _state
             result:object = func()
             if isinstance(result, bool):
                 result:tuple[bool,str|None] = (result, None)
             success, text = result
-            self._state:int = 1 # Done
+            _state = 1 # Done
 
         def wait_done() -> None:
-            nonlocal success, text, name
-            if self._state == 0:
+            nonlocal success, text, name, _state
+            if _state == 0:
                 self.after(100, wait_done)
                 return None
             gif.stop()
@@ -172,14 +176,16 @@ class TaskList(tk.Frame):
                 else:
                     if self._waiting:
                         self.quit()
-                    self._success:bool = True
+                    self._state:int = 2
+                    self._success:Success = True
                     self.on_finished_success()
             else:
-                self._success:bool = False
+                self._state:int = 2
+                self._success:Success = False
                 self.on_finished_fail()
 
         idx, self._idx = self._idx, self._idx+1
-        self._state:int = 0 # Waiting
+        _state:int = 0 # Waiting
         name, func = self._tasks[idx]
         label, spinner = self._widgets[idx]
         gif = self._sprites.display_gif(self._spinner, 300,
@@ -190,8 +196,11 @@ class TaskList(tk.Frame):
         wait_done()
 
     def wait(self) -> Success:
-        self._waiting:bool = True
-        super().mainloop()
+        if self._state != 2:
+            self._waiting:bool = True
+            if self._state == 0:
+                super().after(1, self.start)
+            super().mainloop()
         return self._success
 
     def on_finished_success(self) -> None:
@@ -246,13 +255,11 @@ if __name__ == "__main__":
     def task_sleep(sleep_time:float) -> Callable:
         def inner() -> tuple[Success,str|None]:
             sleep(sleep_time)
-            # return True, "Hello world"
-            return sleep_time <= 1, str(sleep_time)
+            return sleep_time > 1, str(sleep_time)
         return inner
 
     tl:TaskList = TaskListWindow(autoclose=True)
     tl.add("Sleep 2", task_sleep(2))
     tl.add("Sleep 1", task_sleep(1))
     tl.start()
-    success:Success = tl.wait()
-    print(success)
+    print(tl.wait())
