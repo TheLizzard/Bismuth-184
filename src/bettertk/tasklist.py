@@ -12,6 +12,8 @@ except ImportError:
     from messagebox import tell
 
 
+Success:type = bool
+
 class TaskList(tk.Frame):
     """
     A list of tasks. Each task has a name and is associated with a
@@ -35,7 +37,7 @@ class TaskList(tk.Frame):
                 "_spinner", "_correct", "_wrong", "_sprite_size", \
                 "_continue_on_fail", "_display_text", \
                 "_idx", "_widgets", "_tasks", \
-                "_done_setup", "_waiting"
+                "_done_setup", "_waiting", "_success"
 
     def __init__(self, master:tk.Misc=None, **kwargs:dict) -> TaskList:
         self._done_setup:bool = False
@@ -50,6 +52,7 @@ class TaskList(tk.Frame):
         self._sprite_size:int = 13
         # State variables
         self._idx:int = 0
+        self._success:bool = False
         self._waiting:bool = False
         self._widgets:list[tuple[tk.Misc,tk.Misc]] = []
         self._tasks:list[tuple[str,Callable]] = []
@@ -169,7 +172,11 @@ class TaskList(tk.Frame):
                 else:
                     if self._waiting:
                         self.quit()
-                    self.on_finished()
+                    self._success:bool = True
+                    self.on_finished_success()
+            else:
+                self._success:bool = False
+                self.on_finished_fail()
 
         idx, self._idx = self._idx, self._idx+1
         self._state:int = 0 # Waiting
@@ -182,11 +189,15 @@ class TaskList(tk.Frame):
         thread.start()
         wait_done()
 
-    def wait(self) -> None:
+    def wait(self) -> Success:
         self._waiting:bool = True
         super().mainloop()
+        return self._success
 
-    def on_finished(self) -> None:
+    def on_finished_success(self) -> None:
+        pass
+
+    def on_finished_fail(self) -> None:
         pass
 
 
@@ -208,11 +219,12 @@ class TaskListWindow(BetterTk):
                 self.destroy()
 
         super().__init__(master)
+        super().resizable(False, False)
         kwargs["display_text"] = display_text or default_display_text
         self.autoclose:bool = autoclose
         self.tasklist:TaskList = TaskList(self, **kwargs)
         self.tasklist.pack(fill="both", expand=True)
-        self.tasklist.on_finished = self._maybe_autoclose
+        self.tasklist.on_finished_success = self._maybe_autoclose
         _check_autoclose_loop()
 
     def _maybe_autoclose(self) -> None:
@@ -224,8 +236,8 @@ class TaskListWindow(BetterTk):
     def start(self) -> None:
         self.tasklist.start()
 
-    def wait(self) -> None:
-        self.tasklist.wait()
+    def wait(self) -> Success:
+        return self.tasklist.wait()
 
 
 if __name__ == "__main__":
@@ -234,7 +246,7 @@ if __name__ == "__main__":
     def task_sleep(sleep_time:float) -> Callable:
         def inner() -> tuple[Success,str|None]:
             sleep(sleep_time)
-            return True, "Hello world"
+            # return True, "Hello world"
             return sleep_time <= 1, str(sleep_time)
         return inner
 
@@ -242,4 +254,5 @@ if __name__ == "__main__":
     tl.add("Sleep 2", task_sleep(2))
     tl.add("Sleep 1", task_sleep(1))
     tl.start()
-    tl.wait()
+    success:Success = tl.wait()
+    print(success)
