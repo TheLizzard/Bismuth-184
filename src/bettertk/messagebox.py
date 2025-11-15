@@ -83,7 +83,7 @@ class Popup(BetterTk):
 class Tell(Popup):
     __slots__ = ()
 
-    def __init__(self, master:tk.Misc|None, title:str, message:str, *, icon:str,
+    def __init__(self, master:tk.Misc|None, *, title:str, message:str, icon:str,
                  center:bool=True, center_widget:tk.Misc=None, block:bool=True,
                  multiline:bool=False, iconphoto_default:bool=False) -> Tell:
         super().__init__(master, title=title, icon=icon, center=center,
@@ -127,15 +127,25 @@ class Tell(Popup):
                 widget.bind(event, lambda e: self._destroy())
 
 
-class YesNoQuestion(Popup):
+class MultipleChoiceQuestion(Popup):
+    """
+    A multiple choice popup. The `options`, `title`, `message` and `icon` must
+      be provided. If `default` isn't provided, `option[0]` is used.
+    If the user presses the enter/space key, the default is returned.
+    If the user presses escape/closes the popup, `None` is returned.
+    """
+
     __slots__ = "result"
 
-    def __init__(self, master:tk.Misc|None, title:str, message:str, *, icon:str,
+    def __init__(self, master:tk.Misc|None, *, title:str, message:str, icon:str,
                  center_widget:tk.Misc=None, iconphoto_default:bool=False,
-                 default:str="yes", center:bool=True) -> YesNoQuestion:
+                 center:bool=True, options:list[str],
+                 default:str=None) -> MultipleChoiceQuestion:
+        if default is None:
+            default:str = options[0]
         assert isinstance(default, str), "TypeError"
-        assert default in ("yes", "no"), "ValueError"
-        self.result:bool = None
+        assert default in options, "ValueError"
+        self.result:str = None
         super().__init__(master, title=title, icon=icon, center=center,
                          center_widget=center_widget, block=True,
                          iconphoto_default=iconphoto_default)
@@ -144,7 +154,7 @@ class YesNoQuestion(Popup):
         right_frame.pack(side="right", fill="both", expand=True)
 
         b_frame = tk.Frame(right_frame, **FRAME_KWARGS)
-        b_frame.pack(side="bottom", anchor="e", expand=True)
+        b_frame.pack(side="bottom", anchor="e", expand=True, padx=10, pady=15)
 
         width, height = self.image.size
         icon = tk.Canvas(self, **FRAME_KWARGS, width=width, height=height)
@@ -152,42 +162,50 @@ class YesNoQuestion(Popup):
         icon.create_image(0, 0, anchor="nw", image=self.tk_image)
 
         text = tk.Label(right_frame, text=message, bg="black", fg="white")
-        text.pack(side="top", padx=15, pady=15)
+        text.pack(side="top", padx=15, pady=(15,0))
 
-        yes = tk.Button(b_frame, text="Yes", **BUTTON_KWARGS,
-                        width=7, command=self.yes_clicked)
-        no = tk.Button(b_frame, text="No", **BUTTON_KWARGS,
-                       width=7, command=self.no_clicked)
-        yes.pack(side="left", anchor="e", padx=5, pady=(5, 20))
-        no.pack(side="left", anchor="e", padx=15, pady=(5, 20))
+        max_option_width:int = max(map(len, options))
+        for option in options:
+            cmd = lambda *e, opt=option: self.selected(opt)
+            but = tk.Button(b_frame, text=option, **BUTTON_KWARGS, command=cmd,
+                            width=max_option_width)
+            but.pack(side="left", anchor="e", padx=5)
+            for event in ("<Return>", "<KP_Enter>", "<Escape>"):
+                but.bind(event, cmd)
 
-        default_widget:tk.Button = yes if default == "yes" else no
-        for widget in (self, yes):
-            for event in ("<Return>", "<KP_Enter>", "<Escape>"):
-                widget.bind(event, lambda e: self.yes_clicked())
-        for widget in (no,):
-            for event in ("<Return>", "<KP_Enter>", "<Escape>"):
-                widget.bind(event, lambda e: self.no_clicked())
+        cmd = lambda *e: self.selected(default)
+        for event in ("<Return>", "<KP_Enter>", "<space>"):
+            self.bind(event, cmd)
+        self.bind("<Escape>", lambda e: self._destroy())
 
         super().mainloop()
 
-    def yes_clicked(self) -> None:
-        self.result:bool = True
+    def selected(self, option:str) -> None:
+        self.result:str = option
         self._destroy()
 
-    def no_clicked(self) -> None:
-        self.result:bool = False
-        self._destroy()
-
-    def get(self) -> None:
+    def get(self) -> str:
         return self.result
 
 
-def askyesno(master:tk.Misc|None=None, *args:tuple, **kwargs:dict) -> bool|None:
-    return YesNoQuestion(master, *args, **kwargs).get()
+class YesNoQuestion(MultipleChoiceQuestion):
+    __slots__ = "result"
 
-def tell(master:tk.Misc|None=None, *args, block:bool=True, **kwargs) -> None:
-    tell:Tell = Tell(master, *args, block=block, **kwargs)
+    def __init__(self, master:tk.Misc=None, **kwargs:dict) -> YesNoQuestion:
+        super().__init__(master, **kwargs, options=["yes","no"])
+
+    def get(self) -> bool:
+        return super().get() == "yes"
+
+
+def askyesno(master:tk.Misc|None=None, **kwargs:dict) -> bool|None:
+    return YesNoQuestion(master, **kwargs).get()
+
+def askmulti(master:tk.Misc|None=None, **kwargs:dict) -> bool|None:
+    return MultipleChoiceQuestion(master, **kwargs).get()
+
+def tell(master:tk.Misc|None=None, block:bool=True, **kwargs) -> None:
+    tell:Tell = Tell(master, block=block, **kwargs)
     if block:
         tell.mainloop()
 
@@ -212,6 +230,7 @@ if __name__ == "__main__":
 
     msg:str = 'Are you sure you want to delete "Hi.txt"?'
     result = askyesno(root, title="Delete file?", message=msg, icon="warning")
+    print(result)
 
     if result:
         msg:str = 'You deleted "Hi.txt"?'
