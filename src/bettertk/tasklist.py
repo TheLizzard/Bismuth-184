@@ -56,7 +56,7 @@ class TaskList(tk.Frame):
         self._waiting:bool = False
         self._success:Success = False
         self._widgets:list[tuple[tk.Misc,tk.Misc]] = []
-        self._tasks:list[tuple[str,Callable]] = []
+        self._tasks:list[tuple[str,Callable,bool]] = []
         # Create self and configure
         super().__init__(master, bg="black")
         self.config(**kwargs)
@@ -117,7 +117,8 @@ class TaskList(tk.Frame):
     def _redraw(self) -> None:
         pass # TODO
 
-    def add(self, task_name:str, func:Callable[Success,str|None]) -> None:
+    def add(self, task_name:str, func:Callable[Success,str|None], *,
+            threaded:bool=True) -> None:
         idx:int = len(self._widgets)
         bg:str = self.cget("bg")
         sep:dict = dict(bd=0, highlightthickness=0, width=1, height=1,
@@ -141,7 +142,7 @@ class TaskList(tk.Frame):
                                     sticky="ew")
         # Update state
         self._widgets.append((label, spinner))
-        self._tasks.append((task_name, func))
+        self._tasks.append((task_name, func, threaded))
 
     def start(self) -> None:
         if self._state != 0:
@@ -186,13 +187,16 @@ class TaskList(tk.Frame):
 
         idx, self._idx = self._idx, self._idx+1
         _state:int = 0 # Waiting
-        name, func = self._tasks[idx]
+        name, func, threaded = self._tasks[idx]
         label, spinner = self._widgets[idx]
         gif = self._sprites.display_gif(self._spinner, 300,
                                         lambda img: spinner.config(image=img))
         gif.start()
         thread:Thread = Thread(target=call, daemon=True)
-        thread.start()
+        if threaded:
+            thread.start()
+        else:
+            thread.run()
         wait_done()
 
     def wait(self) -> Success:
@@ -239,8 +243,9 @@ class TaskListWindow(BetterTk):
     def _maybe_autoclose(self) -> None:
         self._finished:bool = True
 
-    def add(self, task_name:str, func:Callable[Success,str|None]) -> None:
-        self.tasklist.add(task_name, func)
+    def add(self, task_name:str, func:Callable[Success,str|None], *,
+            threaded:bool=True) -> None:
+        self.tasklist.add(task_name, func, threaded=threaded)
 
     def start(self) -> None:
         self.tasklist.start()
@@ -252,14 +257,19 @@ class TaskListWindow(BetterTk):
 if __name__ == "__main__":
     from time import sleep
 
-    def task_sleep(sleep_time:float) -> Callable:
+    def task_sleep(sleep_time:float, tkinter:bool) -> Callable:
         def inner() -> tuple[Success,str|None]:
-            sleep(sleep_time)
+            if tkinter:
+                tl.after(sleep_time*1000, tl.quit)
+                tl.mainloop()
+            else:
+                sleep(sleep_time)
             return sleep_time > 1, str(sleep_time)
         return inner
 
     tl:TaskList = TaskListWindow(autoclose=True)
-    tl.add("Sleep 2", task_sleep(2))
-    tl.add("Sleep 1", task_sleep(1))
+    tl.add("Sleep 2", task_sleep(2, True), threaded=False)
+    tl.add("Sleep 2", task_sleep(2, False))
+    tl.add("Sleep 1", task_sleep(1, False))
     tl.start()
     print(tl.wait())
