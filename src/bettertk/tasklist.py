@@ -25,12 +25,12 @@ class TaskList(tk.Frame):
     Options:
         bg, background, fg, foreground, font, display_text
     Options only on __init__:
-        continue_on_fail, wait_sprite, tick_sprite,
-        cross_sprite, sprite_size
+        wait_sprite, tick_sprite, warn_sprite, cross_sprite, sprite_size
+        continue_on_fail
 
     Methods:
-        add(name:str, func:Callable[tuple[bool,str|None]]) -> None
-        start() -> None
+        add(name:str, func:Callable[tuple[Success|None,str|None]|Success|None])
+        start()
     """
 
     __slots__ = "_sprites", "_fg", "_font", \
@@ -48,13 +48,14 @@ class TaskList(tk.Frame):
         self._fg:str = "white"
         self._spinner:str = "spinner6-black"
         self._correct:str = "tick-green"
+        self._zero:str = "warning"
         self._wrong:str = "x-red"
         self._sprite_size:int = 13
         # State variables
         self._idx:int = 0
         self._state:int = 0 # 0 => 1(running) => 2(done)
         self._waiting:bool = False
-        self._success:Success = False
+        self._success:Success = True
         self._widgets:list[tuple[tk.Misc,tk.Misc]] = []
         self._tasks:list[tuple[str,Callable,bool]] = []
         # Create self and configure
@@ -82,6 +83,8 @@ class TaskList(tk.Frame):
                 self._sprite_size = kwargs.pop(key)
             elif key == "tick_sprite" and (not self._done_setup):
                 self._correct = kwargs.pop(key)
+            elif key == "warn_sprite" and (not self._done_setup):
+                self._zero = kwargs.pop(key)
             elif key == "cross_sprite" and (not self._done_setup):
                 self._wrong = kwargs.pop(key)
             elif key == "wait_sprite" and (not self._done_setup):
@@ -104,6 +107,8 @@ class TaskList(tk.Frame):
             return self._sprite_size
         if key == "tick_sprite":
             return self._correct
+        if key == "warn_sprite":
+            return self._zero
         if key == "cross_sprite":
             return self._wrong
         if key == "wait_sprite":
@@ -156,8 +161,8 @@ class TaskList(tk.Frame):
         def call() -> None:
             nonlocal success, text, _state
             result:object = func()
-            if isinstance(result, bool):
-                result:tuple[bool,str|None] = (result, None)
+            if isinstance(result, bool|None):
+                result:tuple[Success|None,str|None] = (result, None)
             success, text = result
             _state = 1 # Done
 
@@ -167,22 +172,26 @@ class TaskList(tk.Frame):
                 self.after(100, wait_done)
                 return None
             gif.stop()
-            sprite:str = self._correct if success else self._wrong
+            if success:
+                sprite:str = self._correct
+            elif success is None:
+                sprite:str = self._zero
+            else:
+                sprite:str = self._wrong
             spinner.config(image=self._sprites[sprite])
             if text:
                 spinner.config(command=lambda: self._display_text(text))
-            if success or self._continue_on_fail:
+            self._success &= bool(success)
+            if (success is not False) or self._continue_on_fail:
                 if self._idx < len(self._tasks):
                     self._next()
-                else:
+                elif self._success:
                     if self._waiting:
                         self.quit()
                     self._state:int = 2
-                    self._success:Success = True
                     self.on_finished_success()
             else:
                 self._state:int = 2
-                self._success:Success = False
                 self.on_finished_fail()
 
         idx, self._idx = self._idx, self._idx+1
@@ -258,18 +267,18 @@ if __name__ == "__main__":
     from time import sleep
 
     def task_sleep(sleep_time:float, tkinter:bool) -> Callable:
-        def inner() -> tuple[Success,str|None]:
+        def inner() -> tuple[Success|None,str|None]|None:
             if tkinter:
-                tl.after(sleep_time*1000, tl.quit)
+                tl.after(int(sleep_time*1000), tl.quit)
                 tl.mainloop()
             else:
                 sleep(sleep_time)
-            return sleep_time > 1, str(sleep_time)
+            return True, str(sleep_time)
         return inner
 
     tl:TaskList = TaskListWindow(autoclose=True)
-    tl.add("Sleep 2", task_sleep(2, True), threaded=False)
-    tl.add("Sleep 2", task_sleep(2, False))
+    tl.add("Sleep 2", task_sleep(1.5, True), threaded=False)
+    tl.add("Sleep 2", task_sleep(1, False))
     tl.add("Sleep 1", task_sleep(1, False))
     tl.start()
     print(tl.wait())
