@@ -276,7 +276,10 @@ class Parser(BaseParser):
                 self.set("string")
             elif token == "\\":  # Slash+Character
                 self.set("string") # Read the slash
-                self.set("string") # Read the token after the \ (might be \n)
+                if single != "'":
+                    # In bash, you can't escape single quotes in single
+                    #   quote strings
+                    self.set("string") # Read the token after the \ (can be \n)
             elif token == single: # On string-closing
                 self.set("string")
                 break

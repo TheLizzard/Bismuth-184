@@ -585,10 +585,9 @@ class NotebookPage(TabNotch):
                 number:str = getattr(event, "keysym", None)
                 if not isinstance(number, str): return None
                 if number not in set("123456789"): return None
-                if CONTROL_NUMBERS_RESTRICT:
-                    idx:int = min(len(self.pages), int(number)) - 1
-                else:
-                    idx:int = int(number) - 1
+                idx:int = int(number) - 1
+                if not CONTROL_NUMBERS_RESTRICT:
+                    idx:int = min(len(self.pages)-1, idx)
                 if 0 <= idx < self.notches.number_of_pages:
                     self.notches.focus_idx(idx)
                 return "break"
