@@ -26,11 +26,14 @@ class TaskList(tk.Frame):
         bg, background, fg, foreground, font, display_text
     Options only on __init__:
         wait_sprite, tick_sprite, warn_sprite, cross_sprite, sprite_size
-        continue_on_fail
+        continue_on_fail grab_set
 
     Methods:
         add(name:str, func:Callable[tuple[Success|None,str|None]|Success|None])
         start()
+
+    Properties:
+        idx:int # The index of the next task to be run
     """
 
     __slots__ = "_sprites", "_fg", "_font", \
@@ -60,11 +63,21 @@ class TaskList(tk.Frame):
         self._tasks:list[tuple[str,Callable,bool]] = []
         # Create self and configure
         super().__init__(master, bg="black")
-        self.config(**kwargs)
+        self.config(**{"grab_set":True, **kwargs})
         self.grid_columnconfigure(1, weight=1)
         self._sprites:TkSpriteCache = TkSpriteCache(self,
                                                     size=self._sprite_size)
         self._done_setup:bool = True
+
+    @property
+    def idx(self) -> int:
+        return self._idx
+
+    def _toplevel(self) -> tk.Toplevel|tk.Tk:
+        widget:tk.Misc = self
+        while not isinstance(widget, tk.Tk|tk.Toplevel|BetterTk):
+            widget:tk.Misc = widget.master
+        return widget
 
     def config(self, **kwargs:dict) -> None:
         for key, value in list(kwargs.items()):
@@ -79,18 +92,24 @@ class TaskList(tk.Frame):
                 self._redraw()
             elif key == "display_text":
                 self._display_text = kwargs.pop(key)
-            elif key == "sprite_size" and (not self._done_setup):
+            elif (key == "sprite_size") and (not self._done_setup):
                 self._sprite_size = kwargs.pop(key)
-            elif key == "tick_sprite" and (not self._done_setup):
+            elif (key == "tick_sprite") and (not self._done_setup):
                 self._correct = kwargs.pop(key)
-            elif key == "warn_sprite" and (not self._done_setup):
+            elif (key == "warn_sprite") and (not self._done_setup):
                 self._zero = kwargs.pop(key)
-            elif key == "cross_sprite" and (not self._done_setup):
+            elif (key == "cross_sprite") and (not self._done_setup):
                 self._wrong = kwargs.pop(key)
-            elif key == "wait_sprite" and (not self._done_setup):
+            elif (key == "wait_sprite") and (not self._done_setup):
                 self._spinner = kwargs.pop(key)
-            elif key == "continue_on_fail" and (not self._done_setup):
+            elif (key == "continue_on_fail") and (not self._done_setup):
                 self._continue_on_fail = kwargs.pop(key)
+            elif (key == "grab_set") and (not self._done_setup):
+                if not kwargs.pop("grab_set"): continue
+                try:
+                    self._toplevel().grab_set()
+                except tk.TclError:
+                    pass
         if kwargs:
             super().config(kwargs)
 
@@ -262,23 +281,30 @@ class TaskListWindow(BetterTk):
     def wait(self) -> Success:
         return self.tasklist.wait()
 
+    @property
+    def idx(self) -> int:
+        return self.tasklist.idx
+
 
 if __name__ == "__main__":
     from time import sleep
 
     def task_sleep(sleep_time:float, tkinter:bool) -> Callable:
         def inner() -> tuple[Success|None,str|None]|None:
+            print(f"Starting {tl.idx-1}")
             if tkinter:
                 tl.after(int(sleep_time*1000), tl.quit)
                 tl.mainloop()
             else:
                 sleep(sleep_time)
-            return True, str(sleep_time)
+            print(f"Ending {tl.idx-1}")
+            return True if sleep_time > 1 else None, str(sleep_time)
         return inner
 
-    tl:TaskList = TaskListWindow(autoclose=True)
-    tl.add("Sleep 2", task_sleep(1.5, True), threaded=False)
-    tl.add("Sleep 2", task_sleep(1, False))
+    master:tk.Tk = tk.Tk()
+    tk.Button(master, text="Button").pack()
+    tl:TaskList = TaskListWindow(master, autoclose=True)
+    tl.add("Sleep 2", task_sleep(2, True), threaded=False)
+    tl.add("Sleep 2", task_sleep(2, False))
     tl.add("Sleep 1", task_sleep(1, False))
-    tl.start()
     print(tl.wait())

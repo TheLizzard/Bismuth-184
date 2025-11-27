@@ -73,7 +73,7 @@ PROGRAMS.discard("")
 
 SPECIAL_VARS:set[str] = set("#@*?$!-")
 NEW_STATEMENT_BEFORE:set[str] = {";", "\n", "(", "|", "&", "", "!"}
-PROGRAM_PROGRAMS:set[str] = {"sudo", "which"}
+PROGRAM_PROGRAMS:set[str] = {"sudo", "which", "exec"}
 
 
 class ColourConfig(BaseColourConfig):

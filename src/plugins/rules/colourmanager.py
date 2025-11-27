@@ -52,6 +52,8 @@ class ColourManager(Rule, ColorDelegator):
                            "<<Raw-After-Insert>>", "<<Raw-After-Delete>>",
                          )
         super().__init__(plugin, text, ons=evs)
+        # Note cpython issues: #84564 and #135052
+        self.idprog = re.compile(r"[ \t]+(?:(?:\\\n)?[ \t]*)*([^\W\d]\w+)")
         self.delegate:tk.Text = text
         self.coloriser:bool = False
         self.text:tk.Text = text
@@ -60,9 +62,8 @@ class ColourManager(Rule, ColorDelegator):
         self.init()
 
     def init(self) -> None:
-        self.tagdefs:dict[str,str] = ColourConfig({"word":{}})
-        self.idprog = re.compile(r"\s+(\w+)")
         self.prog = re.compile(r"\b(?P<word>\w+)\b|(?P<SYNC>\n)", re.M|re.S)
+        self.tagdefs:dict[str,str] = ColourConfig({"word":{}})
 
     def __getattr__(self, key:str) -> object:
         return getattr(self.text, key)
@@ -290,6 +291,10 @@ class Tokeniser:
         return text
 
     def text_between(self, start:Location, end:Location) -> str:
+        """
+        Returns the text between `start` and `end`. It acts like string
+          indexing for indices that are out of bounds
+        """
         return self._under.total_data[start:end]
 
     def tell(self) -> Location:
@@ -315,12 +320,18 @@ class Tokeniser:
             self._overrides[start] = "SYNC"*(self._peeked_token == "\n")
         return self._peeked_token
 
-    def skip_whitespaces(self, whitespaces:str) -> Token:
+    def skip_whitespaces(self, whitespaces:str, *,
+                         slash_newline:bool=True) -> Token:
         """
-        Skips whitespaces
+        Skips whitespaces. Skips over slash newlines if `slash_newline`
         """
-        while self and (not self.peek_token().strip(whitespaces)):
-            self.skip()
+        while True:
+            while self and (not self.peek_token().strip(whitespaces)):
+                self.skip()
+            start:Location = self.tell()
+            if self.text_between(start, start+2) != "\\\n": break
+            self.skip() # Skip the "\"
+            self.set("no-sync-slash-newline") # Skip the "\n"
 
     def _pure_read_token(self) -> Token:
         output:Token = self._under.read(1)

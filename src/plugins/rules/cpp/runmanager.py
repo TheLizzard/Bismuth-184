@@ -15,8 +15,8 @@ DEFAULT_FLAGS:list[str] = [
                        "-O3",
                        "-std=c++20",
                        "-funroll-all-loops",
-                       "-lmpfr", # GNU Multiple Precision Float Library
-                       "-lgmp", # GNU Multiple Precision Arithmetic Library
+                       # "-lmpfr", # GNU Multiple Precision Float Library
+                       # "-lgmp", # GNU Multiple Precision Arithmetic Library
                        "-lm", # C++ Maths Library (not too sure?)
                           ] + list(WARNINGS)
 DEBUG_MODE:bool = True
