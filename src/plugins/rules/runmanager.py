@@ -108,7 +108,8 @@ class RunManager(Rule):
 
         if (self.term is None) or (not self.term.running()):
             self.term = TerminalTk(self.widget)
-            self.term.bind("<<Closing-Terminal>>", self.cleanup)
+            # Nothing generates this event...
+            # self.term.bind("<<Closing-Terminal>>", self.cleanup)
             print_str:str = self.center("Starting", "=")
         else:
             self.term.queue_clear(stop_cur_proc=True)

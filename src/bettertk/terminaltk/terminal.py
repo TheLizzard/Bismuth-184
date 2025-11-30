@@ -1,7 +1,7 @@
 from __future__ import annotations
 from threading import Thread, Event as _Event
+from subprocess import Popen, PIPE, DEVNULL
 from time import sleep, perf_counter
-from subprocess import Popen, PIPE
 from signal import SIGTERM
 import sys
 import os
@@ -68,11 +68,17 @@ else:
     ...
 
 
-def timeout(timeout:float, interval:float, check_exit:Callable[bool]) -> bool:
+TimedOut:type = bool
+
+def timeout(timeout:float|int, check_exit:Callable[bool], *,
+            interval:float|int=0) -> TimedOut:
+    assert callable(check_exit), "TypeError"
+    assert isinstance(timeout, float|int), "TypeError"
+    assert isinstance(interval, float|int), "TypeError"
+    interval:float = interval or (timeout / 20)
     start:float = perf_counter()
     while perf_counter()-start < timeout:
-        if check_exit():
-            return False
+        if check_exit(): return False
         sleep(interval)
     return True
 
@@ -83,7 +89,8 @@ def invert(func:Callable) -> Callable:
 
 def kill_proc(send_signal:Callable[int,None], is_alive:Callable[bool]) -> None:
     send_signal(SIGTERM)
-    if timeout(1, 0.05, invert(is_alive)): # 1 sec for cleanup before SIGKILL
+    # 0.2 sec for cleanup before SIGKILL
+    if timeout(0.2, invert(is_alive)):
         if SIGKILL is not None:
             send_signal(SIGKILL)
 
@@ -156,17 +163,16 @@ class BaseTerminal:
         slave_cmd:str = SLAVE_CMD.format(self.ipc.name, SELF_PID)
         command:str = self.str_rreplace_once(command, "%command%", slave_cmd)
         self.proc:Popen = Popen(command, env=env, shell=True, stdout=PIPE,
-                                stderr=PIPE)
+                                stderr=PIPE, stdin=DEVNULL)
         self._running:bool = True
         def is_ready() -> bool:
             return (self.slave_pid is not None) or \
                    (self.proc.poll() is not None)
-        if timeout(2, 0.05, is_ready):
+        if timeout(2, is_ready):
             raise RuntimeError("Slave didn't report its pid")
         if self.proc.poll() is not None:
-            raise RuntimeError("Xterm closed too quickly. Do you have it " \
-                               "installed? If you do, you might have a " \
-                               "problem with its installation.")
+            raise RuntimeError("Xterm closed too quickly. " \
+                               "Do you have it installed?")
 
     def close(self) -> None:
         if self.running():
@@ -266,9 +272,9 @@ class KonsoleTerminal(BaseTerminal):
 AVAILABLE_TERMS:list[type[BaseTerminal]] = [
                                              XTermTerminal,
                                              DebugXTermTerminal,
-                                             KonsoleTerminal, # not working
+                                             KonsoleTerminal,   # not working
                                              GnomeTermTerminal, # sep window
-                                             ConhostTerminal, # sep window
+                                             ConhostTerminal,   # sep window
                                            ]
 
 if IS_UNIX:

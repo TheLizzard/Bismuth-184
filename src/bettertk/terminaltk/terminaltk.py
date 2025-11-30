@@ -1,7 +1,7 @@
 from __future__ import annotations
 from time import sleep, perf_counter
+from threading import Thread, RLock
 from PIL import Image, ImageTk
-from threading import Thread
 from typing import Callable
 import tkinter as tk
 import signal
@@ -48,6 +48,7 @@ class TerminalFrame(tk.Frame):
         self._to_call:list[Callable] = []
         self.started:bool = False
         self._cmd_queue:list[tuple[Cmd,CmdPredicate]] = []
+        self._state_lock:RLock = RLock()
         super().__init__(master, bg="black", bd=0, highlightthickness=0,
                          **kwargs)
         super().focus_set()
@@ -85,48 +86,48 @@ class TerminalFrame(tk.Frame):
         self.term.bind(event, handler, threaded=threaded)
 
     def _on_resize(self, event:tk.Event) -> None:
-        self.term.resize(width=super().winfo_width(),
-                         height=super().winfo_height())
+        width, height = super().winfo_width(), super().winfo_height()
+        self.term.resize(width=width, height=height)
 
     def queue(self, cmd:Cmd, condition:CmdPredicate=lambda*x:1) -> None:
         if not self.started:
             raise RuntimeError("First call .start() after grid managering us")
         assert callable(cmd) or isinstance(cmd, tuple|list), "TypeError"
-        self._cmd_queue.append((cmd, condition))
-        if self.curr_cmd is None:
-            self._queue()
+        assert callable(condition), "TypeError"
+        with self._state_lock:
+            self._cmd_queue.append((cmd, condition))
+            if self.curr_cmd is None:
+                self._queue()
 
     def _queue(self, event:Event=None) -> None:
-        self.curr_cmd:Cmd = None
-        if len(self._cmd_queue) == 0:
-            return None
-        cmd, predicate = self._cmd_queue[0]
-        if event is not None:
-            if not predicate(event.data):
-                return None
-        self._cmd_queue.pop(0)
-        self.curr_cmd = self._last_cmd = cmd
-        if callable(cmd):
-            self._to_call.append(cmd)
-            self._queue()
-        else:
-            self.send_event("run", data=cmd)
+        with self._state_lock:
+            self.curr_cmd:Cmd = None
+            if len(self._cmd_queue) == 0: return None
+            cmd, predicate = self._cmd_queue[0]
+            if (event is not None) and (not predicate(event.data)): return None
+            self._cmd_queue.pop(0)
+            self.curr_cmd = self._last_cmd = cmd
+            if callable(cmd):
+                self._to_call.append(cmd)
+                self.queue()
+            else:
+                self.send_event("run", data=cmd)
 
     def restart(self) -> None:
-        if self.curr_cmd is not None:
-            return None
-        if self._last_cmd is None:
-            return None
-        self._cmd_queue.insert(0, (self._last_cmd, lambda*x:1))
-        self._queue()
+        with self._state_lock:
+            if self.curr_cmd is not None: return None
+            if self._last_cmd is None: return None
+            self._cmd_queue.insert(0, (self._last_cmd, lambda*x:1))
+            self._queue()
 
     def _raise_error(self, event:Event) -> None:
         raise RuntimeError(f"Slave reported error: {event.data!r}")
 
-    def queue_clear(self, stop_cur_proc:bool) -> None:
-        self._cmd_queue.clear()
-        if stop_cur_proc and (self.curr_cmd is not None):
-            kill_proc(self.send_signal, lambda: self.curr_cmd)
+    def queue_clear(self, *, stop_cur_proc:bool) -> None:
+        with self._state_lock:
+            self._cmd_queue.clear()
+            if stop_cur_proc and (self.curr_cmd is not None):
+                kill_proc(self.send_signal, lambda: self.curr_cmd)
 
 
 class TerminalTk(BetterTk):

@@ -227,6 +227,7 @@ class Explorer:
         name = tk.Label(frame, text=item.purename, bg="black", fg="white",
                         anchor="w", font=self.font)
         name.grid(row=1, column=4, sticky="news")
+        frame.grid_columnconfigure(4, weight=1)
         frame.name = name
         return frame
 
