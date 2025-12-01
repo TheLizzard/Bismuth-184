@@ -16,6 +16,7 @@ except ImportError:
     import serialiser
 
 
+TimeStamp:type = float
 EventType:type = str
 Threaded:type = bool
 Location:type = str
@@ -171,28 +172,38 @@ class TmpFilesystem:
 
 
 class Event:
-    __slots__ = "type", "data", "_from"
+    __slots__ = "type", "data", "_from", "timestamp"
 
     def __init__(self, type:EventType, data:object=None,
-                 _from:Location="unknown") -> Event:
+                 _from:Location="unknown", timestamp:TimeStamp=None) -> Event:
         assert_type(type, EventType, "type")
         assert_type(_from, Location, "_from")
         self._from:Location = _from
         self.type:EventType = type
         self.data:object = data
+        if timestamp is None:
+            self.timestamp:TimeStamp = datetime.now().timestamp()
+        else:
+            assert_type(timestamp, TimeStamp, "timestamp")
+            self.timestamp:TimeStamp = timestamp
 
     def __repr__(self) -> str:
-        return f"Event[{id(self)}]({self.type!r}, data={self.data!r}, " \
-               f"_from={self._from!r})"
+        return f"Event[{id(self)}]({self.type!r}, {self.data=!r}, " \
+               f"{self._from=}, {self.timestamp=})"
 
     def serialise(self, **kwargs:dict) -> dict:
+        # This is a sanity check for `serialiser.register`
         assert_type(self, Event, "event")
-        return {"type":self.type, "from":self._from, "data":self.data}
+        return {"type":self.type, "from":self._from, "data":self.data,
+                "timestamp":self.timestamp}
 
     @classmethod
     def deserialise(Class:type, data:dict, **kwargs:dict) -> Event:
         assert_type(data, dict, "data")
-        return Event(data.pop("type"), data.pop("data"), data.pop("from"))
+        return Event(type=data.pop("type", "<deserialisation error>"),
+                     data=data.pop("data", ""),
+                     _from=data.pop("from", -1),
+                     timestamp=data.pop("timestamp", 0))
 
 serialiser.register(Event, "ipc.Event", Event.serialise, Event.deserialise)
 
@@ -263,7 +274,7 @@ class IPC:
                 try:
                     log(f"sending {event=!r} to {SELF_PID}", 1)
                     self._send_data(pid, data, timeout=timeout)
-                except (FileExistsError,ProcessLookupError) as error:
+                except (FileExistsError, ProcessLookupError) as error:
                     if not ignore_bad_pids:
                         raise error
 
@@ -425,8 +436,8 @@ class IPC:
         assert not self.dead, "IPC already closed"
         log(f"checking for msgs", 2)
         # For each file in our folder:
-        # Note that we must make sure that the files are interated in order
-        for filename in sorted(self._fs.listfiles(self._root)):
+        events:list[Event] = []
+        for filename in self._fs.listfiles(self._root):
             # Get the path
             path:str = self._fs.join(self._root, filename)
             # If we read and decode the data correctly, delete the file. Assume
@@ -434,12 +445,18 @@ class IPC:
             # anyone to write to that file anyways
             try:
                 with self._fs.open(path, "r", lock=False) as file:
-                    data:str = file.read()
+                    data:bytes = file.read()
                 event:Event = serialiser.loads(data)
                 assert_type(event, Event, "event")
             except (TypeError, ValueError, UnicodeDecodeError):
+                ### TODO: Tell user we received a malformed message
+                ###   the file might be a partial serialisation since
+                #     File.write isn't atomic
                 continue
             self._fs.removefile(path)
+            events.append(event)
+        # Sort events based on their timestamp
+        for event in sorted(events, key=lambda event: event.timestamp):
             self._got_event(event)
 
     def _on_init(self) -> None:
@@ -492,7 +509,6 @@ class IPC:
         # Write and flush message
         with file:
             file.write(data)
-            file.flush()
         log(f"wrote message to {pid=}", 4)
         log(f"sending signal to {pid=}", 4)
         # Try to notify the pid that a new message has been sent

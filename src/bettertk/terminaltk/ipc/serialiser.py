@@ -153,9 +153,13 @@ def enc_dumps(obj:object, **kwargs:dict) -> bytes:
     return dumps(obj, **kwargs).encode("utf-8")
 
 def loads(data:str, **kwargs:dict) -> object:
+    # Raises:
+    #   TypeError
+    #   ValueError
+    #   json.decoder.JSONDecodeError (a type of ValueError)
     return _loads(json.loads(data), **kwargs)
 
-def enc_loads(data:object, **kwargs:dict) -> bytes:
+def enc_loads(data:bytes, **kwargs:dict) -> object:
     return loads(data.decode("utf-8"), **kwargs)
 
 

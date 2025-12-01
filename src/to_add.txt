@@ -35,7 +35,7 @@ SaveLoadManager:
 IPC:
 * Remove psutil dependency for checking if process exists
 * Use semaphores on Windows instead of events (CreateSemaphoreA/WaitForSingleObject/ReleaseSemaphore)
-* Add timestamps to messages so we can ensure they arrive in the correct order
+* terminal.py@kill_proc waits 0.2 sec before sending the next signal (SIGTERM, SIGHUP, SIGKILL) but the messages take longer than that to arrive :/
 
 Terminal:
 * Add confirm close prompt when closing a running proc
