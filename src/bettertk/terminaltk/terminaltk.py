@@ -47,6 +47,7 @@ class TerminalFrame(tk.Frame):
         self.curr_cmd = self._last_cmd = self.term = None
         self._to_call:list[Callable] = []
         self.started:bool = False
+        self._ignore_exit_code:bool = False
         self._cmd_queue:list[tuple[Cmd,CmdPredicate]] = []
         self._state_lock:RLock = RLock()
         super().__init__(master, bg="black", bd=0, highlightthickness=0,
@@ -104,14 +105,21 @@ class TerminalFrame(tk.Frame):
             self.curr_cmd:Cmd = None
             if len(self._cmd_queue) == 0: return None
             cmd, predicate = self._cmd_queue[0]
-            if (event is not None) and (not predicate(event.data)): return None
+            if not self._ignore_exit_code:
+                if (event is not None) and (not predicate(event.data)):
+                    return None
+            self._ignore_exit_code:bool = False
             self._cmd_queue.pop(0)
             self.curr_cmd = self._last_cmd = cmd
             if callable(cmd):
                 self._to_call.append(cmd)
                 self.queue()
             else:
-                self.send_event("run", data=cmd)
+                if (cmd[0] == "print!") and (len(cmd) > 1):
+                    self.send_event("print", data=" ".join(cmd[1:]))
+                    self._queue() # prints don't generate "finished" events
+                else:
+                    self.send_event("run", data=cmd)
 
     def restart(self) -> None:
         with self._state_lock:
@@ -127,6 +135,7 @@ class TerminalFrame(tk.Frame):
         with self._state_lock:
             self._cmd_queue.clear()
             if stop_cur_proc and (self.curr_cmd is not None):
+                self._ignore_exit_code:bool = True
                 kill_proc(self.send_signal, lambda: self.curr_cmd)
 
 

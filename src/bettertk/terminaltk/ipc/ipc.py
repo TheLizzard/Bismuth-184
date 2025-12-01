@@ -28,13 +28,19 @@ ATTEMPTS:int = 100 # Part of timeout process
 
 if environ.get("IPC_LOG_PATH", None):
     LOG:File|None = open(environ.get("IPC_LOG_PATH"), "a+")
+    try:
+        LOG_LEVEL:int = int(environ.get("IPC_LOG_LEVEL"))
+    except (TypeError, ValueError):
+        LOG_LEVEL:int = 1
 else:
     LOG:File|None = None
 
-def log(text:str) -> None:
-    if not LOG: return None
+def log(text:str, log_level:int) -> None:
+    assert isinstance(text, str), "TypeError"
+    assert isinstance(log_level, int), "TypeError"
+    if (not LOG) or (log_level > LOG_LEVEL): return None
     timestamp:str = datetime.now().strftime("%Y/%m/%d@%H:%M:%S")
-    LOG.write(f"[{timestamp} {SELF_PID}]: {text}\n")
+    LOG.write(f"[{timestamp} {SELF_PID}]/{log_level}: {text}\n")
     LOG.flush()
 
 
@@ -251,18 +257,18 @@ class IPC:
 
         def inner(pid:int) -> None:
             if pid == SELF_PID:
-                log(f"sending event[{id(event)}] to {SELF_PID}")
+                log(f"sending {event=!r} to {SELF_PID}", 1)
                 self._got_event(event)
             else:
                 try:
-                    log(f"event[{id(event)}] to {pid}")
+                    log(f"sending {event=!r} to {SELF_PID}", 1)
                     self._send_data(pid, data, timeout=timeout)
                 except (FileExistsError,ProcessLookupError) as error:
                     if not ignore_bad_pids:
                         raise error
 
         event:Event = Event(event, data, _from=self._root)
-        log(f"creating {event!r}")
+        log(f"creating {event!r}", 4)
         data:bytes = serialiser.dumps(event).encode("utf-8")
         threads:list[Thread] = []
         for pid in self.find_where(where):
@@ -298,7 +304,7 @@ class IPC:
         assert_type(threaded, Threaded, "threaded")
         with self._bindings_lock:
             self._bindings[event].append((threaded,handler))
-        log(f"bound to {event!r}")
+        log(f"bound to {event!r}", 3)
         if not self._bound:
             self._add_listener() # Adds the listener for all events
             self._bound:bool = True
@@ -319,7 +325,7 @@ class IPC:
                     if h == handler:
                         self._bindings[event].pop(i)
                         return None
-        log(f"unbound from {event!r}")
+        log(f"unbound from {event!r}", 3)
 
     def find_where(self, where:Location) -> set[Pid]:
         """
@@ -349,7 +355,7 @@ class IPC:
             else:
                 raise NotImplementedError(f"Invalid location={where!r} - " \
                                           f"read documentation")
-        log(f"find_where({where=!r}) => {locs}")
+        log(f"find_where({where=!r}) => {locs}", 4)
         return locs
 
     def _got_event(self, event:Event) -> None:
@@ -362,12 +368,12 @@ class IPC:
         non_threaded_handlers:list[Handler] = []
         # In threaded handlers, ignore the return value
         bindings:list = self._bindings[event.type] + self._bindings[""]
-        log(f"got event {event!r}")
+        log(f"got event {event!r}", 1)
         for (threaded,handler) in reversed(bindings):
             if handler is not None:
                 if threaded:
                     log(f"calling threaded binding for " \
-                        f"event[{id(event)}] ({handler!r})")
+                        f"event[{id(event)}] ({handler!r})", 2)
                     Thread(target=handler, args=(event,), daemon=True).start()
                 else:
                     non_threaded_handlers.append(handler)
@@ -383,7 +389,7 @@ class IPC:
             handlers, event = self._call_queue.pop(0)
             for handler in handlers:
                 log(f"calling queued binding for " \
-                    f"event[{id(event)}] ({handler!r})")
+                    f"event[{id(event)}] ({handler!r})", 2)
                 ret:Break|None = handler(event)
                 if ret: break
 
@@ -405,7 +411,7 @@ class IPC:
 
     def close(self, close_signals:bool=False) -> None:
         assert not self.dead, "IPC already closed"
-        log(f"closing down")
+        log(f"closing down", 1)
         _sig_to_ipc.pop(self.sig)
         self.dead:bool = True
         # signal only works in main thread of the main interpreter
@@ -417,9 +423,10 @@ class IPC:
 
     def _check_got_data(self) -> None:
         assert not self.dead, "IPC already closed"
-        log(f"Checking for msgs")
+        log(f"checking for msgs", 2)
         # For each file in our folder:
-        for filename in self._fs.listfiles(self._root):
+        # Note that we must make sure that the files are interated in order
+        for filename in sorted(self._fs.listfiles(self._root)):
             # Get the path
             path:str = self._fs.join(self._root, filename)
             # If we read and decode the data correctly, delete the file. Assume
@@ -468,7 +475,7 @@ class IPC:
         assert not self.dead, "IPC already closed"
         delay:float = timeout/ATTEMPTS # in milliseconds
         # Try to find a free file for the message
-        log(f"writing message to {pid=}")
+        log(f"writing message to {pid=}", 3)
         while True:
             try:
                 file:File|None = self._fs.get_free_file(str(pid), "%d%d.msg",
@@ -486,8 +493,8 @@ class IPC:
         with file:
             file.write(data)
             file.flush()
-        log(f"wrote message to {pid=}")
-        log(f"sending signal to {pid=}")
+        log(f"wrote message to {pid=}", 4)
+        log(f"sending signal to {pid=}", 4)
         # Try to notify the pid that a new message has been sent
         while True:
             try:
@@ -501,7 +508,7 @@ class IPC:
             if timeout <= 0:
                 raise ProcessLookupError("Cannot notify pid of new message " \
                                          "because pid isn't listening")
-        log(f"sent signal to {pid=}")
+        log(f"sent signal to {pid=}", 3)
 
 
 def assert_type(obj:T|object, T:type, what:str=None) -> None:

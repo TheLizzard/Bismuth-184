@@ -15,7 +15,7 @@
       +-----------------------------------------------------------------+
       | ready    |            | Whenever ready for events               |
       | finished | int        | Process finished, exit code in data     |
-      | running  |            | Responce to "run"                       |
+      | running  |            | Responce to "run" (not guaranteed)      |
       | exit     |            | Responce to "exit" at exit              |
       | error    | str        | An error occured, error msg in data     |
       | ping     |            | Send a ping, master should pong         |
@@ -39,12 +39,12 @@ import os
 
 
 Break:type = bool
-def rm_event(func:"Callable[Break|None]") -> "Callable[ipc.Event,Break|None]":
+def rm_event(func:Callable[T]) -> Callable[[object],T]:
     """
     A higher order function that takes a function that takes no args
     and returns a function that takes 1 arg that is ignored
     """
-    def inner(event:"ipc.Event") -> "Break|None":
+    def inner(event:object) -> T:
         return func()
     return inner
 
@@ -56,19 +56,27 @@ class Slave:
         self._dead_event:_Event = _Event()
         self.proc:Popen = None
         self.ipc:IPC = ipc
-        # Set up bindings:
+        # Set up threaded bindings:
         bind = lambda event, handler: ipc.bind(event, handler, threaded=True)
-        bind("run", self.run)
-        bind("pause", rm_event(self.pause))
-        bind("unpause", rm_event(self.unpause))
-        bind("signal", lambda event: self._send_signal(event.data))
-        bind("print", lambda event: print(event.data, end="", flush=True))
+        bind("print", self.print)
         bind("exit", rm_event(self._dead_event.set))
         bind("ping", lambda event: self.send("pong", event.data))
+        # Set up non-threaded bindings:
+        bind = lambda event, handler: ipc.bind(event, handler, threaded=False)
+        bind("pause", rm_event(self.pause))
+        bind("unpause", rm_event(self.unpause))
+        bind("run", lambda event: self._run(event.data))
+        bind("signal", lambda event: self._send_signal(event.data))
         # Tell master we are ready
         self.send("ready")
         # Die if master is dead
         Thread(target=self._die_with_master, daemon=True).start()
+        Thread(target=self._forever_call_queued_events, daemon=True).start()
+
+    def _forever_call_queued_events(self) -> None:
+        while True:
+            self.ipc.call_queued_events()
+            sleep(0.2)
 
     def _die_with_master(self) -> None:
         while self.ipc.find_where(MASTER_PID):
@@ -85,12 +93,6 @@ class Slave:
     def send(self, event:str, data:object=None) -> None:
         self.ipc.event_generate(event, where=MASTER_PID, data=data)
 
-    def run(self, event:Event) -> None:
-        if self.proc is not None:
-            self.send("error", "ProcAlreadyRunning")
-        else:
-            self._run(event.data)
-
     def pause(self) -> None:
         if os.name == "posix":
             self._send_signal(_signal.SIGSTOP)
@@ -103,6 +105,10 @@ class Slave:
         else:
             self.send("error", "NotImplementedError")
 
+    def print(self, event:ipc.Event) -> None:
+        log("printing", 1)
+        print(event.data, end="", flush=True)
+
     def _run(self, command:tuple[str]) -> None:
         if len(command) == 0:
             return self.send("error", "EmptyCommand")
@@ -110,16 +116,23 @@ class Slave:
             return self.cd(command)
         elif command[0] == "export":
             return self.export(command)
+        log(f"starting {command[0]}", 1)
+        if self.proc is not None:
+            self.send("error", "ProcAlreadyRunning")
+            return None
         try:
             self.proc:Popen = Popen(command, stdin=stdin, stdout=stdout,
                                     stderr=stderr, shell=False, env=os.environ)
         except FileNotFoundError:
             self.send("error", f"Invalid executable: {command[0]!r}")
+            self.proc:Popen = None
             return None
         self.send("running")
         def wait() -> None:
+            log("waiting proc", 1)
             self.proc.wait()
             exit_code:int = self.proc.poll()
+            log(f"proc exit_code = {exit_code}", 1)
             self.proc:Popen = None
             reset_stdin()
             self.send("finished", data=exit_code)
@@ -128,8 +141,8 @@ class Slave:
     def _send_signal(self, signal:_signal.Signals|int) -> None:
         if not isinstance(signal, _signal.Signals|int):
             return self.send("error", "InvalidSignal")
-        if self.proc is None:
-            return None
+        if self.proc is None: return None
+        log(f"sending signal {signal}", 1)
         self.proc.send_signal(signal)
 
     def cd(self, command:tuple[str]) -> None:
@@ -160,7 +173,10 @@ class Slave:
 
 
 try:
-    from ipc import IPC, Event, SIGUSR2, Location, close_all_ipcs
+    from ipc import IPC, Event, SIGUSR2, Location, close_all_ipcs, log as _log
+
+    def log(text:str, log_level:int) -> None:
+        _log(f"[SLAVE]: {text}", log_level)
 
     if os.name == "posix":
         # https://docs.python.org/3/library/termios.html#example

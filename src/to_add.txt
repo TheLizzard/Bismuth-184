@@ -35,6 +35,7 @@ SaveLoadManager:
 IPC:
 * Remove psutil dependency for checking if process exists
 * Use semaphores on Windows instead of events (CreateSemaphoreA/WaitForSingleObject/ReleaseSemaphore)
+* Add timestamps to messages so we can ensure they arrive in the correct order
 
 Terminal:
 * Add confirm close prompt when closing a running proc

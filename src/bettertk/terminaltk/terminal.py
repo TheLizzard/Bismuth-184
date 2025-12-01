@@ -2,14 +2,14 @@ from __future__ import annotations
 from threading import Thread, Event as _Event
 from subprocess import Popen, PIPE, DEVNULL
 from time import sleep, perf_counter
-from signal import SIGTERM
+import signal
 import sys
 import os
 
-try:
-    from signal import SIGKILL
-except ImportError:
-    SIGKILL = None
+
+SIGTERM:signal.Signals = getattr(signal, "SIGTERM", None)
+SIGKILL:signal.Signals = getattr(signal, "SIGKILL", None)
+SIGHUP:signal.Signals = getattr(signal, "SIGHUP", None)
 
 try:
     from .ipc import IPC, Event, pid_exists, SELF_PID, SIGUSR2, close_all_ipcs
@@ -88,11 +88,14 @@ def invert(func:Callable) -> Callable:
     return inverted
 
 def kill_proc(send_signal:Callable[int,None], is_alive:Callable[bool]) -> None:
-    send_signal(SIGTERM)
-    # 0.2 sec for cleanup before SIGKILL
-    if timeout(0.2, invert(is_alive)):
-        if SIGKILL is not None:
-            send_signal(SIGKILL)
+    if SIGTERM is not None:
+        send_signal(SIGTERM)
+        if not timeout(0.2, invert(is_alive)): return None
+    if SIGHUP is not None:
+        send_signal(SIGHUP)
+        if not timeout(0.2, invert(is_alive)): return None
+    if SIGKILL is not None:
+        send_signal(SIGKILL)
 
 
 TERMINAL_IPC:IPC = IPC("terminaltk", sig=SIGUSR2)

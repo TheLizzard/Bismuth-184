@@ -1,7 +1,7 @@
 from __future__ import annotations
 from shutil import which
 
-from ..runmanager import RunManager as BaseRunManager, PRINTF
+from ..runmanager import RunManager as BaseRunManager
 from ..helpers.compiler import Compiler
 
 
@@ -54,6 +54,8 @@ class RunManager(BaseRunManager):
             if self.text.filepath.endswith(ext): break
         else:
             return False
+        self.term.queue(["print!", self.center("Pre-Compiling", "-")],
+                        condition=(0).__eq__)
         compiler:Compiler = Compiler(self.effective_cwd, DEFAULT_FLAGS, EXE,
                                      GET_INCLUDES_CMD, HEADER_EXTS, SRC_EXTS)
         compiler.add_root(self.text.filepath)
@@ -62,12 +64,10 @@ class RunManager(BaseRunManager):
             super().set_env_var("LIBRARY_PATH", set(compiler.links))
             super().set_env_var("LD_LIBRARY_PATH", set(compiler.links))
         cmd:str = " ".join(command) + "\n"
-        self.term.queue([*PRINTF, self.center("Pre-Compiling", "-")],
-                        condition=(0).__eq__)
-        self.term.queue([*PRINTF, cmd], condition=(0).__eq__)
+        self.term.queue(["print!", cmd], condition=(0).__eq__)
         if compiler.error:
             msg:str = compiler.error + "\n"
-            self.term.queue([*PRINTF, msg], condition=(0).__eq__)
+            self.term.queue(["print!", msg], condition=(0).__eq__)
             return False
         return super().compile(command=command,
                                print_str=self.center("Compiling", "-"))
