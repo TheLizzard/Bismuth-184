@@ -18,6 +18,7 @@ ICONS:SpriteCache = SpriteCache(size=64, compute_size=256)
 
 
 def tk_center_window(r:tk.Tk) -> None:
+    r.update_idletasks()
     r.geometry(f"+{(r.winfo_screenwidth()-r.winfo_width()) // 2}" + \
                f"+{(r.winfo_screenheight()-r.winfo_height()) // 2}")
 
@@ -71,10 +72,10 @@ class Popup(BetterTk):
         return self
 
     def center(self, based_on:tk.Misc) -> None:
-        super().update_idletasks()
         if based_on == self:
             tk_center_window(self)
         else:
+            super().update_idletasks()
             x:int = based_on.winfo_rootx() + based_on.winfo_width()//2
             y:int = based_on.winfo_rooty() + based_on.winfo_height()//2
             x -= super().winfo_width()//2

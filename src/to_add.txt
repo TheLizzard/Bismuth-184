@@ -31,6 +31,8 @@ SaveLoadManager:
 * If file deleted while closed, empty Untitled page shows up
 * Saving a file should update it's icon in the file explorer
 * Saving file (after it has been written to with binary data), crashes the editor
+Sh/RunManager:
+* "$0" is wrong since we only `source` the file
 
 IPC:
 * Remove psutil dependency for checking if process exists
