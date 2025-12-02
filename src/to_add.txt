@@ -35,7 +35,7 @@ SaveLoadManager:
 IPC:
 * Remove psutil dependency for checking if process exists
 * Use semaphores on Windows instead of events (CreateSemaphoreA/WaitForSingleObject/ReleaseSemaphore)
-* terminal.py@kill_proc waits 0.2 sec before sending the next signal (SIGTERM, SIGHUP, SIGKILL) but the messages take longer than that to arrive :/
+* Corrupted messages don't notify the user
 
 Terminal:
 * Add confirm close prompt when closing a running proc
@@ -43,6 +43,7 @@ Terminal:
 * Add settings window
 * Add a clear terminal button? (can't think of an icon for that)
 * Printing ANSI characters to resize the terminal doesn't work
+* terminal.py@kill_proc waits 0.2 sec before sending the next signal (SIGTERM, SIGHUP, SIGKILL) but the messages take longer than that to arrive :/
 
 Notebook:
 * Control-t, Control-w, Control-Shift-w don't work when no tabs are open

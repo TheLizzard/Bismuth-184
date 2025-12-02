@@ -17,6 +17,11 @@ BUTTON_KWARGS = dict(activeforeground="white", activebackground="black",
 ICONS:SpriteCache = SpriteCache(size=64, compute_size=256)
 
 
+def tk_center_window(r:tk.Tk) -> None:
+    r.geometry(f"+{(r.winfo_screenwidth()-r.winfo_width()) // 2}" + \
+               f"+{(r.winfo_screenheight()-r.winfo_height()) // 2}")
+
+
 class Popup(BetterTk):
     __slots__ = "root", "image", "tk_image", "block"
 
@@ -28,7 +33,6 @@ class Popup(BetterTk):
                            "center is False"
         self.block:bool = block
         if master is None:
-            center:bool = False
             super().__init__(className=str(icon))
         else:
             super().__init__(master)
@@ -48,7 +52,10 @@ class Popup(BetterTk):
         except tk.TclError:
             pass
         if center:
-            base_widget:tk.Misc = center_widget or self.get_root(master)
+            base_widget:tk.Misc = center_widget or \
+                                  self.get_root(master) or \
+                                  self
+            # Use `after_idle(···)` instead of `after(1, ···)`???
             super().after(1, self.center, base_widget)
 
     def get_image(self, icon_name:str) -> Image.Image:
@@ -65,13 +72,17 @@ class Popup(BetterTk):
 
     def center(self, based_on:tk.Misc) -> None:
         super().update_idletasks()
-        x:int = based_on.winfo_rootx() + based_on.winfo_width()//2
-        y:int = based_on.winfo_rooty() + based_on.winfo_height()//2
-        x -= super().winfo_width()//2
-        y -= super().winfo_height()//2
-        super().geometry(f"+{x}+{y}")
+        if based_on == self:
+            tk_center_window(self)
+        else:
+            x:int = based_on.winfo_rootx() + based_on.winfo_width()//2
+            y:int = based_on.winfo_rooty() + based_on.winfo_height()//2
+            x -= super().winfo_width()//2
+            y -= super().winfo_height()//2
+            super().geometry(f"+{x}+{y}")
 
-    def get_root(self, widget:tk.Misc) -> tk.Tk|tk.Toplevel|BetterTk:
+    def get_root(self, widget:tk.Misc|None) -> tk.Tk|tk.Toplevel|BetterTk:
+        if widget is None: return None
         while True:
             if isinstance(widget, tk.Tk|tk.Toplevel|BetterTk):
                 return widget
@@ -224,14 +235,15 @@ if __name__ == "__main__":
         root.after(time*1000, root.quit)
         root.mainloop()
 
-    root = tk.Tk()
-    root.geometry("+170+50")
-    #root.withdraw()
+    root:tk.Misc|None = None
+    # root = tk.Tk()
+    # root.geometry("+170+50")
 
     msg:str = 'Are you sure you want to delete "Hi.txt"?'
-    result = askyesno(root, title="Delete file?", message=msg, icon="warning")
+    result = askyesno(root, title="Delete file?", message=msg, icon="warning",
+                      center=True)
     print(result)
 
     if result:
         msg:str = 'You deleted "Hi.txt"?'
-        tell(root, title="Deleted file", message=msg, icon="info")
+        tell(root, title="Deleted file", message=msg, icon="info", center=True)
