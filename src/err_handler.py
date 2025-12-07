@@ -115,6 +115,7 @@ class RunManager:
         self.funcs:list[tuple[Callable,bool]] = []
         self.started_exec:bool = False
 
+    # This is a singleton because of how `tk.Tk.report_callback_exception` works
     def __new__(Class:type, *args:tuple, **kwargs:dict) -> RunManager:
         singleton:Class|None = getattr(Class, "singleton", None)
         if singleton is None:

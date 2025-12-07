@@ -227,12 +227,18 @@ class TaskList(tk.Frame):
             thread.run()
         wait_done()
 
+    def destroy(self) -> None:
+        super().destroy()
+        if self._waiting:
+            super()._root().quit()
+
     def wait(self) -> Success:
         if self._state != 2:
             self._waiting:bool = True
             if self._state == 0:
                 super().after(1, self.start)
             super().mainloop()
+            self._waiting:bool = False
         return self._success
 
     def on_finished_success(self) -> None:
