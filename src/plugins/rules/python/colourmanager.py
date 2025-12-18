@@ -33,6 +33,7 @@ NUMBER_REGEX:re.Pattern = re.compile((
 ))
 VALID_NUMBER_ENDERS:set[str] = set("0123456789.eE")
 
+
 def isnumber(data:str) -> bool:
     if data[-1:] not in VALID_NUMBER_ENDERS: return False
     try:
@@ -106,31 +107,48 @@ if CHECK_FSTRING_BRACKETS:
     FSTRING_BARCKET_TOKENTYPE:str = "f-string-bracket"
 
 
+KEYWORDS:set[str] = set(keyword.kwlist)
+BUILTINS:set[str] = {i
+                      for i in dir(builtins)
+                      if (i not in KEYWORDS) and (not i.startswith("_"))
+                    }
+
+STRING_PREFIXES:set[str] = {"r","u","f","t","b",
+                            "fr","rf","tr","rt","br","rb"}
+
+
+""" # TODO
+Exports tags:
+    def/class   The identifier in a def/class statement respectively
+    identifier  An indentifier used
+    setident    An indentifier used in setting a variable
+
+Aliases:
+    def               definition (cyan)
+    class             definition (cyan)
+    identifier        none
+    setident          none
+    f-string-format   string
+    f-string-bracket  string
+"""
+
 class Parser(BaseParser):
-    __slots__ = "keywords", "builtins", "string_prefixes"
+    __slots__ = ()
 
     def __init__(self) -> Parser:
         super().__init__(isidentifier=str.isidentifier, isnumber=isnumber)
-        self.keywords:set[str] = set(keyword.kwlist)
-        self.builtins:set[str] = set()
-        for name in dir(builtins):
-            if name.startswith("_"): continue
-            if name in self.keywords: continue
-            self.builtins.add(name)
-        self.string_prefixes:set[str] = {"r","u","f","t","b",
-                                         "fr","rf","tr","rt","br","rb"}
 
     def read(self) -> None:
         token:Token = self.peek_token()
         if not token: return None
         # Keywords
-        if token in self.keywords:
+        if token in KEYWORDS:
             self.set("keyword")
             # Def/Class definition identifier
             if token in ("def", "class"):
                 self.skip_whitespaces(SPACES) # Eat spaces
                 if self.isidentifier(self.peek_token()):
-                    self.set("definition")
+                    self.set(token)
                 # Def type-annotations
                 if CHECK_TYPE_ANNOTATIONS and (token == "def"):
                     self.read_def_type_annotation()
@@ -160,7 +178,7 @@ class Parser(BaseParser):
                         self.set("keyword")
                     break # Command keyword so stop looking for ":"
         # Builtins
-        elif token in self.builtins:
+        elif token in BUILTINS:
             if self.curr_line_seen(respect_slashes=True)[-1:] == ".":
                 self.set("identifier")
             else:
@@ -203,7 +221,7 @@ class Parser(BaseParser):
             while self.peek_token() != "\n": # Newline not in comment
                 self.set("comment")
         # Strings:
-        elif token.lower() in self.string_prefixes:
+        elif token.lower() in STRING_PREFIXES:
             start:Location = self.tell()
             self.set("identifier") # Jump over the string prefix
             new_token:Token = self.peek_token()
@@ -223,7 +241,7 @@ class Parser(BaseParser):
                 new_token:Token = self.peek_token()
                 if new_token in NOT_AFTER_SOFT_KW:
                     self.set("identifier", start)
-                elif new_token in self.keywords: # match followed by a keyword
+                elif new_token in KEYWORDS: # match followed by a keyword
                     self.set("identifier", start)
                 else:
                     self.set("keyword", start)
@@ -238,7 +256,7 @@ class Parser(BaseParser):
                 new_token:Token = self.peek_token()
                 if new_token in NOT_AFTER_SOFT_KW:
                     self.set("identifier", start)
-                elif new_token in self.keywords: # case followed by a keyword
+                elif new_token in KEYWORDS: # case followed by a keyword
                     self.set("identifier", start)
                 elif new_token == "_": # case <underscore>
                     self.set("keyword", start)
@@ -417,8 +435,27 @@ class ColourManager(BaseColourManager):
 
     def init(self) -> None:
         self.tagdefs:dict[str,str] = ColourConfig()
-        self.prog = Regex(Parser())
-        # self.prog = make_pat()
+        self.aliases:dict[str:str] = {
+                                       "class": "definition",
+                                       "def": "definition",
+                                       "identifier": "none",
+                                       "setident": "none",
+                                       "f-string-format": "string",
+                                       "f-string-bracket": "string",
+                                     }
+        if True:
+            self.text.parser:Parser = Parser()
+            self.prog = Regex(self.text.parser)
+        else:
+            self.prog = make_pat()
+
+    def attach(self) -> None:
+        super().attach()
+        # Re-order tag colouring so that the correct tags are at the top
+        self.text.tag_raise("f-string-bracket", "string")
+        self.text.tag_raise("f-string-format", "string")
+        self.text.tag_raise("definition", "class")
+        self.text.tag_raise("definition", "def")
 
 
 FSTRINGS_COLOURED:bool = True

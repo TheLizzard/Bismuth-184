@@ -49,13 +49,13 @@ PROGRAMS:set[str] = {
     "openvt", "passwd", "patch", "pidof", "ping", "ping6", "pivot_root",
     "pkill", "printenv", "printf", "ps", "pwd", "read", "readlink",
     "realpath", "renice", "reset", "resize", "rm", "rmdir", "rmmod",
-    "sed", "seq", "setconsole", "setfont", "sh", "sha1sum", "sha256sum",
-    "sha512sum", "showkey", "sleep", "softlimit", "sort", "split", "stat",
-    "strings", "stty", "su", "sudo", "sum", "swapoff", "swapon",
-    "switch_root", "sync", "tail", "tar", "tee", "test", "time", "top",
-    "touch", "tr", "true", "tsort", "tty", "umount", "uname", "uniq",
-    "uptime", "usleep", "uuencode", "vlock", "watch", "watchdog", "wc",
-    "which", "who", "whoami", "xargs", "yes",
+    "script", "sed", "seq", "setconsole", "setfont", "sh", "sha1sum",
+    "sha256sum", "sha512sum", "showkey", "sleep", "softlimit", "sort",
+    "split", "stat", "strings", "stty", "su", "sudo", "sum", "swapoff",
+    "swapon", "switch_root", "sync", "tail", "tar", "tee", "test", "time",
+    "top", "touch", "tr", "true", "truncate", "tsort", "tty", "umount",
+    "uname", "uniq", "uptime", "usleep", "uuencode", "vlock", "watch",
+    "watchdog", "wc", "which", "who", "whoami", "xargs", "yes",
     "", "", "",
     # Signals and traps
     *SIGNALS_TRAPS,
@@ -72,7 +72,7 @@ PROGRAMS:set[str] = {
 PROGRAMS.discard("")
 
 SPECIAL_VARS:set[str] = set("#@*?$!-")
-NEW_STATEMENT_BEFORE:set[str] = {";", "\n", "(", "|", "&", "", "!"}
+NEW_STATEMENT_BEFORE:set[str] = {";", "\n", "(", "{", "|", "&", "", "!"}
 PROGRAM_PROGRAMS:set[str] = {"sudo", "which", "exec"}
 
 

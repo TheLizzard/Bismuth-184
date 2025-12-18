@@ -1,43 +1,44 @@
 Editor:
 * On Windows, the window grows horizontally each time the Bismuth-184 is opened
 * diff/png/jpeg/pdf viewer
-ControlIJKLManager:
+[ControlIJKLManager]
 * On Control-j and Control-l, undo moves insert to the end of the line
 * Control-j and Control-l move the viewport to the end of the longest line
-UMarkManager
+[UMarkManager]
 * Check if umarks are computationally expensive
 * Control-KP_8 and Control-KP_2 don't remove selections
 * Control-m doesn't remove marks that are on empty lines
-FindReplaceManager:
+[FindReplaceManager]
 * Implement the replace part of `FindReplaceManager`
 * `FindReplaceManager` removes hit tag when re-colouring
 * Unclosed bracket in `FindReplaceManager` with "whole word" fails text="a()\na(x)", search="a("
-SelectManager:
-* Tabs are counted as 1 character when pressing the arrows
+[SelectManager]
 * Control arrows don't account that "-" can be part of an int literal
+* Control arrows should count "???" as a full word
+* Tabs are counted as 1 character when pressing the arrows
 * Up/Down arrow keys don't work as expected with "no-wrap"
-CommentManager:
+[CommentManager]
 * Commenting a block with a comment inside it, uncomments the comment
-RunManager:
+[RunManager]
 * `RunManager` can't handle passing in args when running or custom compilation/running commands
-BracketManager:
+[BracketManager]
 * Rework `BasePlugin.find_bracket_match` to use `BasePlugin.text_replace_tag` or use the parser from ColourManager
 * Closing ] doesn't highlight correctly only when in string (only sometimes)
-BetterText:
+[BetterText]
 * BetterText scrolling vertically while scrolled >max horizontally => bug
 * BetterText.see end of longest line when not tk.Text.see, doesn't scroll enough
 * BetterText writing to the longest visible (not actually the longest) line snaps the view
-SaveLoadManager:
+[SaveLoadManager]
 * If file deleted while closed, empty Untitled page shows up
 * Saving a file should update it's icon in the file explorer
 * Saving file (after it has been written to with binary data), crashes the editor
-Sh/RunManager:
-* "$0" is wrong since we only `source` the file
+[Sh/RunManager]
+* When running, "$0" is wrong since we only `source` the file
 
 IPC:
 * Remove psutil dependency for checking if process exists
 * Use semaphores on Windows instead of events (CreateSemaphoreA/WaitForSingleObject/ReleaseSemaphore)
-* Corrupted messages don't notify the user
+* Corrupted/invalid messages don't notify the user
 
 Terminal:
 * Add confirm close prompt when closing a running proc
@@ -78,3 +79,10 @@ Minor things/Low priority/Impossible to fix:
 * A different `_handle_msg_loop` is started for each terminal.
 * "𒀃" is counted as 2 characters instead of 1 character in `BarManager`
 * Control(-Shift)?-z doesn't scroll if there is text selected
+
+LSP:
+* Look into language server protocols again (there are more and more official)
+[C/C++]
+    https://github.com/llvm/llvm-project/tree/main/clang-tools-extra/clangd
+[Python]
+    https://github.com/python-lsp/python-lsp-server

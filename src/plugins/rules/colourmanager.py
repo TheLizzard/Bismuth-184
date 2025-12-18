@@ -19,6 +19,7 @@ class ColourConfig(dict):
         super().__init__({
                            "SYNC":  dict(),
                            "TODO":  dict(),
+                           "none":  dict(),
                            "error": dict(),
                            "hit":   dict(background="blue", foreground="white"),
                            **kwargs
@@ -44,7 +45,7 @@ DEBUG:bool = False
 
 class ColourManager(Rule, ColorDelegator):
     __slots__ = "old_bg", "old_fg", "old_insertbg", "colorizer", "text", \
-                "coloriser"
+                "coloriser", "_keep_tags"
     REQUESTED_LIBRARIES:tuple[str] = [("insertdeletemanager",True)]
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> ColourManager:
@@ -57,9 +58,11 @@ class ColourManager(Rule, ColorDelegator):
         self.delegate:tk.Text = text
         self.coloriser:bool = False
         self.text:tk.Text = text
+        self.aliases:dict[str:str] = {}
         ColorDelegator.init_state(self)
         ColorDelegator.close(self)
         self.init()
+        self._keep_tags:set[str] = set(self.tagdefs) | set(self.aliases)
 
     def init(self) -> None:
         self.prog = re.compile(r"\b(?P<word>\w+)\b|(?P<SYNC>\n)", re.M|re.S)
@@ -135,11 +138,14 @@ class ColourManager(Rule, ColorDelegator):
         if isinstance(self.prog, Regex):
             head_start:int = 0
             for start, end, name in self.prog.finditer(chars):
-                if name not in self.tagdefs: continue
+                if name not in self._keep_tags: continue
                 assert head_start <= start < end, "OrderingError"
                 head:str = self.text.index(f"{head} +{start-head_start:d}c")
                 head_start:int = start
                 self._add_tag(start-head_start, end-head_start, head, name)
+                name:str = self.aliases.get(name, None)
+                if name:
+                    self._add_tag(start-head_start, end-head_start, head, name)
         else:
             for match in self.prog.finditer(chars):
                 for name, matched_text in match.groupdict().items():

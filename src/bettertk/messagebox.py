@@ -117,7 +117,7 @@ class Tell(Popup):
                                            highlightthickness=0)
             text_frame.pack(side="top", padx=15, pady=(15, 20))
             text = tk.Text(text_frame, font=("mono",10), bg="black", fg="white",
-                           width=80, height=20, wrap="none", takefocus=False)
+                           width=80, height=20, wrap="word", takefocus=False)
             text.insert("end", message)
             text.config(state="disabled")
             make_scrolled(text_frame, text, vscroll=True, hscroll=False)
