@@ -1,5 +1,6 @@
 from __future__ import annotations
 from threading import Thread
+from typing import Callable
 import tkinter as tk
 
 try:
@@ -12,7 +13,9 @@ except ImportError:
     from messagebox import tell
 
 
-Success:type = bool
+ESuccess:type = bool|None # Optional[bool]
+Task:type = Callable[[], ESuccess|tuple[ESuccess,str]]
+DisplayText:type = Callable[str,None]
 
 class TaskList(tk.Frame):
     """
@@ -20,7 +23,7 @@ class TaskList(tk.Frame):
     function. The function must return a tuple of:
         * A boolean (true if it succeeded, false otherwise)
         * A string or none (extra info to be shown)
-    The `display_text` option must be a `Callable[str,None]`
+    The `display_text` option must be a `DisplayText`
 
     Options:
         bg, background, fg, foreground, font, display_text
@@ -29,7 +32,7 @@ class TaskList(tk.Frame):
         continue_on_fail grab_set
 
     Methods:
-        add(name:str, func:Callable[tuple[Success|None,str|None]|Success|None])
+        add(name:str, func:Task)
         start()
 
     Properties:
@@ -40,12 +43,12 @@ class TaskList(tk.Frame):
                 "_spinner", "_correct", "_wrong", "_sprite_size", \
                 "_continue_on_fail", "_display_text", \
                 "_idx", "_widgets", "_tasks", \
-                "_done_setup", "_waiting", "_success"
+                "_done_setup", "_waiting", "esuccess"
 
-    def __init__(self, master:tk.Misc=None, **kwargs:dict) -> TaskList:
+    def __init__(self, master:tk.Misc=None, **kwargs:dict) -> None:
         self._done_setup:bool = False
         # Defaults
-        self._display_text:Callable[str,None] = lambda text: None
+        self._display_text:DisplayText = lambda text: None
         self._continue_on_fail:bool = False
         self._font:Font = "TkDefaultFont"
         self._fg:str = "white"
@@ -56,11 +59,11 @@ class TaskList(tk.Frame):
         self._sprite_size:int = 13
         # State variables
         self._idx:int = 0
-        self._state:int = 0 # 0 => 1(running) => 2(done)
+        self._state:int = 0 # 0(settingup) => 1(running) => 2(done)
         self._waiting:bool = False
-        self._success:Success = True
+        self.esuccess:ESuccess = True
         self._widgets:list[tuple[tk.Misc,tk.Misc]] = []
-        self._tasks:list[tuple[str,Callable,bool]] = []
+        self._tasks:list[tuple[str,Task,bool]] = []
         # Create self and configure
         super().__init__(master, bg="black")
         self.config(**{"grab_set":True, **kwargs})
@@ -141,8 +144,8 @@ class TaskList(tk.Frame):
     def _redraw(self) -> None:
         pass # TODO
 
-    def add(self, task_name:str, func:Callable[Success,str|None], *,
-            threaded:bool=True) -> None:
+    def add(self, task_name:str, func:Task, *, threaded:bool=True) -> None:
+        assert self._state == 0, "RuntimeError"
         idx:int = len(self._widgets)
         bg:str = self.cget("bg")
         sep:dict = dict(bd=0, highlightthickness=0, width=1, height=1,
@@ -169,49 +172,51 @@ class TaskList(tk.Frame):
         self._tasks.append((task_name, func, threaded))
 
     def start(self) -> None:
-        if self._state != 0:
-            raise RuntimeError("Already started")
+        assert self._state == 0, "RuntimeError"
         self._state:int = 1
         self._next()
 
     def _next(self) -> None:
-        success, text = True, None
+        assert self._state == 1, "RuntimeError"
+        esuccess, text = True, None
 
         def call() -> None:
-            nonlocal success, text, _state
+            nonlocal esuccess, text, _state
             result:object = func()
-            if isinstance(result, bool|None):
-                result:tuple[Success|None,str|None] = (result, None)
-            success, text = result
+            if isinstance(result, ESuccess):
+                result:tuple[ESuccess,str] = (result, "")
+            esuccess, text = result
             _state = 1 # Done
 
         def wait_done() -> None:
-            nonlocal success, text, name, _state
+            nonlocal esuccess, text, name, _state
             if _state == 0:
                 self.after(100, wait_done)
                 return None
+            # Update spinner
             gif.stop()
-            if success:
+            if esuccess:
                 sprite:str = self._correct
-            elif success is None:
+            elif esuccess is None:
                 sprite:str = self._zero
             else:
                 sprite:str = self._wrong
             spinner.config(image=self._sprites[sprite])
             if text:
                 spinner.config(command=lambda: self._display_text(text))
-            self._success &= bool(success)
-            if (success is not False) or self._continue_on_fail:
-                if self._idx < len(self._tasks):
-                    self._next()
-                elif self._success:
-                    if self._waiting:
-                        self.quit()
-                    self._state:int = 2
-                    self.on_finished_success()
+            # Update self.esuccess
+            if self.esuccess:
+                self.esuccess:ESuccess = esuccess
+            # Check if we should continue or not
+            _continue:bool = ((esuccess in (True,None)) or \
+                              self._continue_on_fail) and \
+                             (self._idx < len(self._tasks))
+            if _continue:
+                self._next()
             else:
+                if self._waiting: self.quit()
                 self._state:int = 2
-                self.on_finished_fail()
+                self.on_finished()
 
         idx, self._idx = self._idx, self._idx+1
         _state:int = 0 # Waiting
@@ -221,10 +226,7 @@ class TaskList(tk.Frame):
                                         lambda img: spinner.config(image=img))
         gif.start()
         thread:Thread = Thread(target=call, daemon=True)
-        if threaded:
-            thread.start()
-        else:
-            thread.run()
+        (thread.start if threaded else thread.run)()
         wait_done()
 
     def destroy(self) -> None:
@@ -232,38 +234,27 @@ class TaskList(tk.Frame):
         if self._waiting:
             super()._root().quit()
 
-    def wait(self) -> Success:
+    def wait(self) -> ESuccess:
         if self._state != 2:
+            assert not self._waiting, "Threaded tkinter is not allowed"
             self._waiting:bool = True
             if self._state == 0:
                 super().after(1, self.start)
             super().mainloop()
             self._waiting:bool = False
-        return self._success
+        return self.esuccess
 
-    def on_finished_success(self) -> None:
-        pass
-
-    def on_finished_fail(self) -> None:
+    def on_finished(self) -> None:
         pass
 
 
 class TaskListWindow(BetterTk):
-    __slots__ = "tasklist", "autoclose", "_finished"
+    __slots__ = "tasklist", "autoclose"
 
     def __init__(self, master:tk.Misc=None, *, autoclose:bool=False,
-                 display_text:Callable[str,None]=None,
-                 **kwargs:dict) -> TaskListWindow:
+                 display_text:DisplayText=None, **kwargs:dict) -> None:
         def default_display_text(text:str) -> None:
             tell(self, title="Info", message=text, multiline=True, icon="info")
-
-        self._finished:bool = False
-        def _check_autoclose_loop() -> None:
-            if not self._finished:
-                self.after(100, _check_autoclose_loop)
-                return None
-            if self.autoclose:
-                self.destroy()
 
         super().__init__(master)
         super().resizable(False, False)
@@ -271,20 +262,29 @@ class TaskListWindow(BetterTk):
         self.autoclose:bool = autoclose
         self.tasklist:TaskList = TaskList(self, **kwargs)
         self.tasklist.pack(fill="both", expand=True)
-        self.tasklist.on_finished_success = self._maybe_autoclose
-        _check_autoclose_loop()
+        self.tasklist.on_finished = self._maybe_autoclose
+        super().protocol("WM_DELETE_WINDOW", self._maybe_close)
+
+    def _maybe_close(self) -> None:
+        # Deny closing while tasks are running
+        if self.tasklist._state == 1: return None
+        super().destroy()
 
     def _maybe_autoclose(self) -> None:
-        self._finished:bool = True
+        assert self.tasklist._state == 2, "RuntimeError"
+        # If success is True, and autoclose and finished, close the window
+        if self.autoclose and self.tasklist.esuccess:
+            super().destroy()
 
-    def add(self, task_name:str, func:Callable[Success,str|None], *,
-            threaded:bool=True) -> None:
+    def add(self, task_name:str, func:Task, *, threaded:bool=True) -> None:
+        assert self.tasklist._state == 0, "RuntimeError"
         self.tasklist.add(task_name, func, threaded=threaded)
 
     def start(self) -> None:
+        assert self.tasklist._state == 0, "RuntimeError"
         self.tasklist.start()
 
-    def wait(self) -> Success:
+    def wait(self) -> ESuccess:
         return self.tasklist.wait()
 
     @property
@@ -295,8 +295,8 @@ class TaskListWindow(BetterTk):
 if __name__ == "__main__":
     from time import sleep
 
-    def task_sleep(sleep_time:float, tkinter:bool) -> Callable:
-        def inner() -> tuple[Success|None,str|None]|None:
+    def task_sleep(sleep_time:float, tkinter:bool) -> Task:
+        def inner() -> ESuccess|tuple[ESuccess,str]:
             print(f"Starting {tl.idx-1}")
             if tkinter:
                 tl.after(int(sleep_time*1000), tl.quit)
@@ -308,7 +308,7 @@ if __name__ == "__main__":
         return inner
 
     master:tk.Tk = tk.Tk()
-    tk.Button(master, text="Button").pack()
+    tk.Button(master, text="Button", command=lambda:print("Hi\r")).pack()
     tl:TaskList = TaskListWindow(master, autoclose=True)
     tl.add("Sleep 2", task_sleep(2, True), threaded=False)
     tl.add("Sleep 2", task_sleep(2, False))

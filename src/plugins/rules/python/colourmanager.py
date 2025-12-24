@@ -299,7 +299,8 @@ class Parser(BaseParser):
                 break
             elif token == ":":
                 self.set("type-annotation") # Set ":" keyword=>type-annotation
-                self.read_type_annotation({"\n",")","=",","})
+                self.read_type_annotation({"\n",")","=",",",":"})
+                if self.peek_token() == ":": self.skip()
             else:
                 raise NotImplementedError("Unreachable")
         # Closing bracket
@@ -323,7 +324,7 @@ class Parser(BaseParser):
         Read a type annotation and colour it accordingly
         """
         self.read_wait_for(ending_tokens | CMD_KWS, "type-annotation",
-                      ignoretypes=TYPE_ANNOTATION_IGNORETYPES)
+                           ignoretypes=TYPE_ANNOTATION_IGNORETYPES)
 
     def read_string(self, prefix:Token="") -> None:
         fstring:bool = "f" in prefix

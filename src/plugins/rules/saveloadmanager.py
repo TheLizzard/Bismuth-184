@@ -338,6 +338,16 @@ class SaveLoadManager(Rule):
                 data:str = data.decode("utf-8")
             assert isinstance(data, str), "Pass in decode=True"
             data:str = self._remove_newline(data)
+            modified:bool = False
+            for search, replace in TRANSLATIONS.items():
+                modified |= bool(data.count(search))
+                data:str = data.replace(search, replace)
+                modchar:str = search
+            if modified:
+                msg:str = f"Some characters where modified (eg. {modchar!r})" \
+                          f"\nto satisfy the security manager"
+                telluser(self.text, title="Modified characters", icon="warning",
+                         center=True, center_widget=self.text, message=msg)
             char:str = _get_first_non_printable(data)
             if char:
                 raise UnicodeError(f"{char=!r} isn't accepted by the security")
@@ -393,6 +403,11 @@ def _get_first_non_printable(string:str) -> str:
     if not _string_is_non_printable(string):
         return ""
     return _find_satisfying_char_binary_search(_string_is_non_printable, string)
+
+
+TRANSLATIONS:dict[str:str] = {
+    "\xa0": " ", # non-breaking space (NBSP)
+}
 
 
 SIZE_FACTOR:int = 1000

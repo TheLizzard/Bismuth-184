@@ -424,7 +424,7 @@ class Parser(BaseParser):
             if ignore_tabs:
                 line:str = line.lstrip("\t")
             if line == delimiter:
-                while self.peek_token() != "\n":
+                while self.peek_token() not in "\n":
                     self.set("here-doc")
                 break
 
