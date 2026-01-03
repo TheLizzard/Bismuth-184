@@ -87,6 +87,12 @@ TYPE_ANNOTATION_IGNORETYPES:set[str] = {"comment", "decorator"}
 # TYPE_ANNOTATION_IGNORETYPES += STRING_TYPES
 DECORATOR_IGNORETYPES:set[str] = {"keyword", "comment"} | STRING_TYPES
 
+BRACKETS:dict[str:str] = {"(":")", "[":"]", "{":"}"}
+BRACKETS_CLOSE:set[str] = set(BRACKETS.values())
+
+# Technically there are more but no-one uses them and they are bad practice
+TYPE_ANNOTATION_OPS:set [str] = {"and", "or", "|"}
+
 
 # To speed up parsing, only check for these if we need to
 config:dict[str:dict[str:str]] = ColourConfig()
@@ -139,6 +145,7 @@ class Parser(BaseParser):
         super().__init__(isidentifier=str.isidentifier, isnumber=isnumber)
 
     def read(self) -> None:
+        # If we use nows_peek_token here, `read_wait_for` will break
         token:Token = self.peek_token()
         if not token: return None
         # Keywords
@@ -146,8 +153,7 @@ class Parser(BaseParser):
             self.set("keyword")
             # Def/Class definition identifier
             if token in ("def", "class"):
-                self.skip_whitespaces(SPACES) # Eat spaces
-                if self.isidentifier(self.peek_token()):
+                if self.isidentifier(self.nows_peek_token()):
                     self.set(token)
                 # Def type-annotations
                 if CHECK_TYPE_ANNOTATIONS and (token == "def"):
@@ -158,7 +164,7 @@ class Parser(BaseParser):
                 # Shortcut for tokens that must be immediately followed by
                 #   a colon
                 if token in KDS_WITH_IMMEDIATE_COLON:
-                    if self.peek_token() != ":":
+                    if self.nows_peek_token() != ":":
                         return None
                 # Search for the next colon or command keyword
                 waiting_for:set[str] = {":","]","}",")","else","\n"} | CMD_KWS
@@ -167,7 +173,7 @@ class Parser(BaseParser):
                     if token == ":":
                         start:Location = self.tell()
                         self.skip()
-                        if self.peek_token() == "=":
+                        if self.nows_peek_token() == "=":
                             self.set("walrus-operator", start) # ":"
                             self.set("walrus-operator") # "="
                             continue # Continue looking for colon keyword
@@ -191,13 +197,13 @@ class Parser(BaseParser):
         # Colon as keyword
         elif CHECK_TYPE_ANNOTATIONS and (token in ("{", "[", "(")):
             open:str = token
-            close:str = {"(":")", "[":"]", "{":"}"}[open]
             self.set("container-bracket")
             while True:
-                waiting_for:set[str] = {close, "=", ",", ":"} | CMD_KWS
+                waiting_for:set[str] = {"=",",",":"} | CMD_KWS | BRACKETS_CLOSE
                 token:Token = self.read_wait_for(waiting_for)
-                if token == close:
-                    self.set("container-bracket")
+                if token in BRACKETS_CLOSE:
+                    if BRACKETS[open] == token:
+                        self.set("container-bracket")
                     break
                 elif token not in ("=", ",", ":"):
                     break
@@ -210,7 +216,8 @@ class Parser(BaseParser):
                 self.set("walrus-operator") # "="
             else: # Type annotation
                 self.set("type-annotation", start) # ":"
-                self.read_type_annotation({"\n","="})
+                self.read_type_annotation()
+                if self.nows_peek_token() in CMD_KWS: return None
         # Check for {...} so f-strings work properly
         elif (not CHECK_TYPE_ANNOTATIONS) and (token == "{"):
             self.skip()
@@ -237,8 +244,7 @@ class Parser(BaseParser):
             else:
                 start:Location = self.tell()
                 self.skip() # `match` but we aren't sure if keyword
-                self.skip_whitespaces(SPACES)
-                new_token:Token = self.peek_token()
+                new_token:Token = self.nows_peek_token()
                 if new_token in NOT_AFTER_SOFT_KW:
                     self.set("identifier", start)
                 elif new_token in KEYWORDS: # match followed by a keyword
@@ -252,8 +258,7 @@ class Parser(BaseParser):
             else:
                 start:Location = self.tell()
                 self.skip() # `case` but we aren't sure if keyword
-                self.skip_whitespaces(SPACES)
-                new_token:Token = self.peek_token()
+                new_token:Token = self.nows_peek_token()
                 if new_token in NOT_AFTER_SOFT_KW:
                     self.set("identifier", start)
                 elif new_token in KEYWORDS: # case followed by a keyword
@@ -267,7 +272,7 @@ class Parser(BaseParser):
         elif CHECK_IDENTIFIERS and self.isidentifier(token):
             self.set("identifier")
         # Numbers
-        elif CHECK_NUMBERS and isnumber(token):
+        elif CHECK_NUMBERS and self.isnumber(token):
             self.set("number") # Leading -/+ signs aren't part of the token
         # Line continuations
         elif token == "\\":
@@ -281,50 +286,76 @@ class Parser(BaseParser):
         else:
             self.skip()
 
-    def read_def_type_annotation(self) -> None:
+    def nows_peek_token(self) -> Token:
+        """
+        Skip whitespaces and then peek the next token
+        """
         self.skip_whitespaces(SPACES)
+        return self.peek_token()
+
+    def read_def_type_annotation(self) -> None:
         # Opening bracket
-        if self.peek_token() != "(": return None
+        if self.nows_peek_token() != "(": return None
         self.skip() # "("
         # Self argument if it's there
-        self.skip_whitespaces(SPACES)
-        if self.peek_token() == "self":
+        if self.nows_peek_token() == "self":
             self.set("self")
         # Inside the brackets
         while True:
-            token:Token = self.read_wait_for({")", ":"})
+            token:Token = self.read_wait_for({")",":"})
             if not token:
                 return None
             elif token == ")":
                 break
             elif token == ":":
                 self.set("type-annotation") # Set ":" keyword=>type-annotation
-                self.read_type_annotation({"\n",")","=",",",":"})
-                if self.peek_token() == ":": self.skip()
+                self.read_type_annotation()
+                if self.nows_peek_token() in CMD_KWS: return None
             else:
                 raise NotImplementedError("Unreachable")
         # Closing bracket
-        if self.peek_token() != ")":
+        if self.nows_peek_token() != ")":
             return None
         self.skip() # ")"
         # "->" type annotation
-        self.skip_whitespaces(SPACES)
         start:Location = self.tell()
-        if self.peek_token() == "-":
+        if self.nows_peek_token() == "-":
             self.skip()
-            if self.peek_token() == ">":
+            if self.nows_peek_token() == ">":
                 self.set("type-annotation-arrow", start)
                 self.set("type-annotation-arrow")
-                self.skip_whitespaces(SPACES)
                 # Return type annotation
-                self.read_type_annotation({"\n",":"})
+                self.read_type_annotation()
 
-    def read_type_annotation(self, ending_tokens:set[Token]) -> None:
+    def read_type_annotation(self) -> None:
         """
-        Read a type annotation and colour it accordingly
+        Read a type annotation and colour it accordingly.
+        Return the next token.
         """
-        self.read_wait_for(ending_tokens | CMD_KWS, "type-annotation",
-                           ignoretypes=TYPE_ANNOTATION_IGNORETYPES)
+        start:Location = self.tell()
+        # Read the first token
+        token:Token = self.nows_peek_token()
+        if (not self.isidentifier(token)) or (token in CMD_KWS):
+            if not (self.isnumber(token) or (token in "'\"")):
+                return None
+        self.read()
+        # Forever
+        while True:
+            # Try to read operator[] and operator|
+            token:Token = self.nows_peek_token()
+            if token in TYPE_ANNOTATION_OPS:
+                self.skip()
+                token:Token = self.nows_peek_token()
+                if (not self.isidentifier(token)) or (token in CMD_KWS):
+                    if not (self.isnumber(token) or (token in "'\"")):
+                        break
+                self.read()
+            elif token == "[":
+                self.read()
+            else:
+                break
+        # Colour everything from the start as a type annotation
+        self.set_from("type-annotation", start)
 
     def read_string(self, prefix:Token="") -> None:
         fstring:bool = "f" in prefix

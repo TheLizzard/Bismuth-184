@@ -12,9 +12,9 @@ DEFAULT_BASHRC:list[str] = [
 DEFAULT_BASHRC:list[str] = list(filter(os.path.exists,
                                        map(os.path.abspath, DEFAULT_BASHRC)))
 
-PREAMBLE:str = """
+PREAMBLE:str = """\
 failed_bashrc() {
-    echo -e "\x1b[91m[ERROR]: bashrc file failed: \x1b[92m$1\x1b[0m"
+    echo -e "\\x1b[91m[ERROR]: bashrc file failed: \\x1b[92m$1\\x1b[0m"
     exit 1
 }
 
@@ -23,23 +23,28 @@ _shell_shopt_opts="$(shopt -p)"
 
 restore_set_opt() {
     while IFS= read -r line; do
-        line="$(echo "$line" | tr "\t" " " | tr " " "\n")"
+        line="$(echo "$line" | tr "\t" " " | tr " " "\\n")"
         name="$(echo "$line" | head -1)"
         status="$(echo "$line" | tail -1)"
         case "$status" in
             on)  set -o "$name" ;;
             off) set +o "$name" ;;
             *) \
-                echo -e "\x1b[91m[ERROR]: \
-Unknown \x1b[92m$name\x1b[91m status: \x1b[92m$status\x1b[0m"
+                echo -e "\\x1b[91m[ERROR]: \
+Unknown \\x1b[92m$name\\x1b[91m status: \\x1b[92m$status\\x1b[0m"
         esac
     done <<< "$_shell_set_opts"
 }
 """
 
 POSTAMBLE:str = """
+# Reset `set -X`
 restore_set_opt || true
+# Reset `shopt -X`
 eval "$_shell_shopt_opts" || true
+# Reset traps
+for _sig in {1..31}; do trap - $_sig; done
+trap - ERR EXIT DEBUG
 """
 
 
@@ -72,10 +77,14 @@ class RunManager(BaseRunManager):
 
     def execute(self, args:Iterable[str]) -> None:
         tmp:str = self.tmp.name
+        with open(self.text.filepath, "rb") as src:
+            with open(tmp+"/program", "wb") as des:
+                des.write(b"trap 'return 1' ERR\n")
+                des.write(src.read())
         with AutoNewlines(open(f"{tmp}/bashrc", "w")) as file:
+            file.write(PREAMBLE)
             for bashrc in DEFAULT_BASHRC:
                 file.write(f"source {bashrc!r} || failed_bashrc {bashrc!r}")
-            file.write(PREAMBLE)
-            file.write(f"source {self.text.filepath!r} || true")
+            file.write(f"source {tmp+'/program'!r} || true")
             file.write(POSTAMBLE)
         super().execute(args)

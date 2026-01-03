@@ -57,6 +57,7 @@ PROGRAMS:set[str] = {
     "uname", "uniq", "uptime", "usleep", "uuencode", "vlock", "watch",
     "watchdog", "wc", "which", "who", "whoami", "xargs", "yes",
     "", "", "",
+    "dpkg-deb", "fakeroot",
     # Signals and traps
     *SIGNALS_TRAPS,
     # Builtins (compgen -b)
@@ -70,10 +71,13 @@ PROGRAMS:set[str] = {
     "unset", "wait",
 }
 PROGRAMS.discard("")
+PROGRAMS_START:set[str] = {p.split("-",1)[0] for p in PROGRAMS}
 
 SPECIAL_VARS:set[str] = set("#@*?$!-")
-NEW_STATEMENT_BEFORE:set[str] = {";", "\n", "(", "{", "|", "&", "", "!"}
+NEW_STATEMENT_BEFORE:set[str] = set(";\n({|&!") | {""}
 PROGRAM_PROGRAMS:set[str] = {"sudo", "which", "exec"}
+
+SPACES:str = " \t" # Can't be a set[str] because `str.strip`
 
 
 class ColourConfig(BaseColourConfig):
@@ -129,7 +133,7 @@ class Parser(BaseParser):
                 prev_token:Token = self.token_at(prev)
                 if prev_token == "\\": continue
                 return "\n", self.tokentype_at(prev)
-            elif not prev_token.strip(" \t"):
+            elif not prev_token.strip(SPACES):
                 continue
             return prev_token, self.tokentype_at(prev)
         return "", ""
@@ -148,33 +152,37 @@ class Parser(BaseParser):
                     tokentype:TokenType = "keyword"
             self.set(tokentype)
             if (tokentype == "keyword") and (token in ("for", "case")):
-                self.skip_whitespaces(" \t") # Eat spaces
+                self.skip_whitespaces(SPACES) # Eat spaces
                 self.read()
-                self.skip_whitespaces(" \t") # Eat spaces
+                self.skip_whitespaces(SPACES) # Eat spaces
                 if self.peek_token() == "in":
                     self.set("keyword")
-        elif token in PROGRAMS: # Programs
-            isprogram:bool = False
+        elif token in PROGRAMS_START: # Programs
+            # Get `prev_token`, `prev_type`, and `full_token`
             prev_token, prev_type = self.prev_token_line()
+            start:Location = self.tell()
+            full_token:str = token
+            while True:
+                self.set("identifier")
+                token:Token = self.peek_token()
+                if not token: break
+                if token == "=": return None
+                if not (isidentifier(token) or (token == "-")): break
+                full_token += token
+            if full_token not in PROGRAMS: return None
+            # Check if considered program using sematic analyser
+            isprogram:bool = False
             if prev_token in NEW_STATEMENT_BEFORE:
                 isprogram:bool = True
             if (prev_type == "keyword") and (prev_token not in ("for","in")):
                 isprogram:bool = True
-            if token in SIGNALS_TRAPS:
+            if full_token in SIGNALS_TRAPS:
                 isprogram:bool = True
             if (prev_type == "program") and (prev_token in PROGRAM_PROGRAMS):
                 isprogram:bool = True
-            start:Location = self.tell()
-            self.set("identifier")
-            if isprogram and (self.peek_token() != "="):
-                self.set("program", start)
-                # Programs are allowed to have "-" in their names
-                while True:
-                    token:Token = self.peek_token()
-                    if not (isidentifier(token) or (token == "-")): break
-                    if token == "=": break
-                    if not token: break
-                    self.set("program")
+            # If is program, set as such
+            if not isprogram: return None
+            self.set_from("program", start)
         elif token == "#": # Comment
             self.set("comment") # Read the "#"
             while self.peek_token() != "\n": # Newline not in comment
@@ -201,7 +209,7 @@ class Parser(BaseParser):
         elif token in "'\"": # String
             self.read_string()
         elif token == "[":
-            prev_token:Token = self.prev_token().strip(" \t")
+            prev_token:Token = self.prev_token().strip(SPACES)
             if prev_token not in NEW_STATEMENT_BEFORE:
                 self.skip()
             else:
@@ -212,7 +220,7 @@ class Parser(BaseParser):
                 while True:
                     token:Token = self.read_wait_for({"[","]",";"})
                     if token in ";": break
-                    if (token == "[") or self.prev_token().strip(" \t"):
+                    if (token == "[") or self.prev_token().strip(SPACES):
                         self.skip()
                         continue
                     start:Location = self.tell()
@@ -395,7 +403,7 @@ class Parser(BaseParser):
             return None
         if ignore_tabs := (token == "-"):
             self.set("here-doc") # Read the dash in "<<-"
-        self.skip_whitespaces(" \t") # Eat spaces
+        self.skip_whitespaces(SPACES) # Eat spaces
         start:Location = self.tell()
          # Read a token for the delimiter
         if self.peek_token() in ("'", '"'):
@@ -418,7 +426,7 @@ class Parser(BaseParser):
         while True:
             token:Token = self.read_wait_for({"\n"}, read_func=read_func)
             if not token: break
-            self.set("no-sync-here-doc") # Read the "\n"
+            self.set("inside-here-doc") # Read the "\n"
             # Check for delimiter
             line:str = self.line_around(self.tell())
             if ignore_tabs:

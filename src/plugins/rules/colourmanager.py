@@ -337,7 +337,7 @@ class Tokeniser:
             start:Location = self.tell()
             if self.text_between(start, start+2) != "\\\n": break
             self.skip() # Skip the "\"
-            self.set("no-sync-slash-newline") # Skip the "\n"
+            self.set("line-continuation") # Skip the "\n"
 
     def _pure_read_token(self) -> Token:
         output:Token = self._under.read(1)
@@ -561,12 +561,12 @@ class Parser(Tokeniser):
             elif token == "\n":
                 self.set(f"no-sync-{settype}")
             else:
-                if settype is None:
-                    read_func()
-                else:
+                if settype:
                     start:Location = self.tell()
                     read_func()
                     self.set_from(settype, start, ignoretypes=ignoretypes)
+                else:
+                    read_func()
 
     # Used by ColourManager
     def _master_read(self, text:str) -> Iterable[tuple[int,int,str]]:

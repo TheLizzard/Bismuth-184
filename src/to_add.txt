@@ -34,6 +34,8 @@ Editor:
 * Saving file (after it has been written to with binary data), crashes the editor
 [Sh/RunManager]
 * When running, "$0" is wrong since we only `source` the file
+[Sh/ColourManager]
+* `<(...)` isn't colorized at all
 
 IPC:
 * Remove psutil dependency for checking if process exists
