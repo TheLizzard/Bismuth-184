@@ -24,13 +24,9 @@ Editor:
 [BracketManager]
 * Rework `BasePlugin.find_bracket_match` to use `BasePlugin.text_replace_tag` or use the parser from ColourManager
 * Closing ] doesn't highlight correctly only when in string (only sometimes)
-[BetterText]
-* BetterText scrolling vertically while scrolled >max horizontally => bug
-* BetterText.see end of longest line when not tk.Text.see, doesn't scroll enough
-* BetterText writing to the longest visible (not actually the longest) line snaps the view
 [SaveLoadManager]
-* If file deleted while closed, empty Untitled page shows up
 * Saving a file should update it's icon in the file explorer
+* If file deleted while closed, empty Untitled page shows up
 * Saving file (after it has been written to with binary data), crashes the editor
 [Sh/RunManager]
 * When running, "$0" is wrong since we only `source` the file
