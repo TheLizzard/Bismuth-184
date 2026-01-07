@@ -91,7 +91,7 @@ BRACKETS:dict[str:str] = {"(":")", "[":"]", "{":"}"}
 BRACKETS_CLOSE:set[str] = set(BRACKETS.values())
 
 # Technically there are more but no-one uses them and they are bad practice
-TYPE_ANNOTATION_OPS:set [str] = {"and", "or", "|"}
+TYPE_ANNOTATION_OPS:set [str] = {"and", "or", "|", "."}
 
 
 # To speed up parsing, only check for these if we need to

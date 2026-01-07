@@ -33,8 +33,18 @@ notebook.CONTROL_NUMBERS_CONTROLS:bool = True
 notebook.CONTROL_NUMBERS_RESTRICT:bool = False
 notebook.HIDE_SCROLLBAR:bool = False
 
-TextClass = BetterText
-# TextClass = tk.Text
+
+def FakeBetterText(master:tk.Misc=None, **kwargs:dict):
+    kwargs.pop("cursor_room")
+    kwargs.pop("xscroll_speed")
+    kwargs.pop("yscroll_speed")
+    kwargs.pop("width")
+    kwargs.pop("height")
+    if "padx" in kwargs:
+        if isinstance(kwargs["padx"], tuple|list):
+            kwargs["padx"] = kwargs["padx"][0]
+    return tk.Text(master, **args)
+# BetterText = FakeBetterText
 
 
 def remove_duplicates(array:list[object]) -> list[object]:
@@ -54,7 +64,7 @@ class App:
     def __init__(self, ipc:IPC) -> App:
         self.expand_later:set[str] = set()
         self.add_later:list[str] = []
-        self.text_to_page:dict[BetterText:notebook.NotebookPage] = {}
+        self.text_to_page:dict[tk.Text:notebook.NotebookPage] = {}
         self.root:BetterTk = BetterTk(className="Bismuth-184")
         self.root.title("Bismuth-184")
         self.root.iconphoto(False, "sprites/Bismuth_184.ico")
@@ -136,7 +146,7 @@ class App:
             return "Untitled"
         return filepath.split("/")[-1].split("\\")[-1]
 
-    def page_to_text(self, page:notebook.NotebookPage) -> BetterText:
+    def page_to_text(self, page:notebook.NotebookPage) -> tk.Text:
         if page is None:
             return None
         for text, p in self.text_to_page.items():
@@ -145,12 +155,12 @@ class App:
         raise KeyError("InternalError")
 
     # Tab management
-    def new_tab(self) -> BetterText:
+    def new_tab(self) -> tk.Text:
         # Create page and add text box
         page:NotebookPage = self.notebook.tab_create()
         page.page_frame.config(bg="black") # Less eye burning
-        text:BetterText = TextClass(page.page_frame, highlightthickness=0, bd=0,
-                                    font=settings.editor.font)
+        text:tk.Text = BetterText(page.page_frame, highlightthickness=0, bd=0,
+                                  font=settings.editor.font, cursor_room=3)
         text.plugin:Plugin = None
         if isinstance(text, BetterText):
             text.assume_monospaced()
@@ -178,7 +188,7 @@ class App:
             event.widget.event_generate("<<Force-Set-Data>>",
                                         data=event.widget.plugin.DEFAULT_CODE)
 
-    def plugin_manage(self, text:BetterText) -> None:
+    def plugin_manage(self, text:tk.Text) -> None:
         old:Plugin = getattr(text, "plugin")
         for Plugin in plugins:
             if Plugin.can_handle(text.filepath):
@@ -204,7 +214,7 @@ class App:
         self.text_to_page[event.widget].rename(filename)
 
     def close_tab(self, page:NotebookPage) -> bool:
-        text:BetterText = self.page_to_text(page)
+        text:tk.Text = self.page_to_text(page)
         if text.edit_modified():
             title:str = "Close unsaved text?"
             msg:str = "Are you sure you want to\nclose this unsaved page?"
@@ -228,7 +238,7 @@ class App:
             if text.filepath == filepath:
                 page.focus()
                 return None
-        text:BetterText = self.new_tab()
+        text:tk.Text = self.new_tab()
         text.event_generate("<<Force-Open>>", data=filepath)
 
     def open(self, path:str) -> None:
@@ -257,7 +267,7 @@ class App:
         else:
             # Unimplemented - depricated
             true_explorer_frame:tk.Frame = self.explorer_frame.master_frame
-        curr_text:BetterText = self.page_to_text(self.notebook.curr_page)
+        curr_text:tk.Text = self.page_to_text(self.notebook.curr_page)
         curr_text_path:str = None if curr_text is None else curr_text.filepath
         # Update settings.explorer
         settings.explorer.width = true_explorer_frame.winfo_width()
@@ -325,14 +335,14 @@ class App:
     def _get_notebook_state(self) -> list[tuple]:
         opened:list[tuple] = []
         for page in self.notebook.iter_pages():
-            text:BetterText = self.page_to_text(page)
+            text:tk.Text = self.page_to_text(page)
             plugin_state:object = text.plugin.get_state()
             opened.append(plugin_state)
         return opened
 
     def _set_notebook_state(self, opened:list[tuple]) -> None:
         for i, plugin_state in enumerate(opened):
-            text:BetterText = self.new_tab()
+            text:tk.Text = self.new_tab()
             text.inserted_default:bool = True
             try:
                 text.plugin.set_state(plugin_state)
