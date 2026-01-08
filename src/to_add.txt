@@ -32,6 +32,8 @@ Editor:
 * When running, "$0" is wrong since we only `source` the file
 [Sh/ColourManager]
 * `<(...)` isn't colorized at all
+[TerminalTk]
+* TerminalTk very broken on Windows (conhost always return immediately, slave doesn't behave correctly)
 
 IPC:
 * Remove psutil dependency for checking if process exists

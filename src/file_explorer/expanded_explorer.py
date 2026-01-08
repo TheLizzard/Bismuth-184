@@ -29,7 +29,7 @@ elif IS_WINDOWS:
     SAFE_GIT:list[str] = None
     OPEN_GIT:list[str] = None
     from subprocess import DETACHED_PROCESS
-    DETACH_PROC_KWARGS:dict = dict(creation_flags=DETACHED_PROCESS)
+    DETACH_PROC_KWARGS:dict = dict(creationflags=DETACHED_PROCESS)
 else:
     OPEN_IN_EXPLORER:list[str] = None
     OPEN_DEFAULT:list[str] = None

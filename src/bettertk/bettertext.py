@@ -5,17 +5,28 @@ import tkinter as tk
 
 
 HORIZONTAL_DIRECTION:int = 0b1
+DEBUG_INVISIBLE_CHAR:bool = False
 DEBUG_ON_XSCROLL_CMD:bool = False
 DEBUG_SCROLLBAR:bool = False
 DEBUG_VIEWPORT:bool = False
 DEBUG_FREEZE:bool = False
 DEBUG_SEE:bool = False
 
+"""
+0  uses `-lmargin1` on a tag
+   maybe turn on `FIX_CURSOR_LPADX` but not performant
+1  uses `-padx` on the whole widget
+   adds same padding to the right of the widget but
+   unnoticeable for padding<5
+"""
+LEFT_PADX_FIX:int = 1
+FIX_CURSOR_LPADX:bool = False
 
-def print_traceback():
-    import traceback
-    traceback.print_stack()
-    print("="*80)
+
+# def print_traceback():
+#     import traceback
+#     traceback.print_stack()
+#     print("="*80)
 
 
 class DLineInfoWrapper:
@@ -69,7 +80,7 @@ class DLineInfoWrapper:
         if self._assume_monospaced:
             chars:str = self._text.get(tkline, f"{tkline} lineend")
             if chars and ("\t" not in chars): # if tab/s, don't store value
-                size:float = width/len(chars)
+                size:float = width / len(chars)
                 if (int(size) != size) and (not self._shown_monospace_err):
                     self._shown_monospace_err:bool = True
                     raise RuntimeError("Not a monospaced font but you called " \
@@ -142,6 +153,9 @@ GEOMETRY_METHODS:list[str] = [
 NOP:Callable = lambda *args: None
 BREAK:Callable = lambda *args: "break"
 
+INVISIBLE_CHAR:str = "#" if DEBUG_INVISIBLE_CHAR else "\u200b"
+BREAK:object = object()
+
 
 class BindTkFuncCall(Delegator):
     """
@@ -151,7 +165,9 @@ class BindTkFuncCall(Delegator):
         percolator.insertfilter(BindTkFuncCall(percolator, "see", ...))
 
     on_start return value:
-        If `on_start` returns `"break"`, the widget's function isn't called
+        If `on_start` returns `BREAK`, the widget's function isn't called
+        If `on_start` returns non-None, the arguments to the widget's function
+        are replaced with the returned tuple
     on_end return value:
         If `on_end` returns anything, it will replace the widget's function
         return value
@@ -168,31 +184,35 @@ class BindTkFuncCall(Delegator):
     def __init__(self, perc:Percolator, func:str, *,
                  on_start:Callable[None]=NOP,
                  on_end:Callable[None]=NOP) -> BindTkFuncCall:
+        assert isinstance(perc, Percolator), "TypeError"
+        assert isinstance(func, str), "TypeError"
+        assert func, "func must not be empty"
         super().__init__()
         self._on_start:Callable[None] = on_start
         self._on_end:Callable[None] = on_end
         # Find func/subfunc
-        self._func, *subfunc = func.split(" ", 1)
-        self._subfunc:str = (subfunc or ("",))[0]
-        # Redirect `self._func` to `self._call`
-        if self._func not in perc.redir._operations:
-            call_top:Callable = lambda *a: getattr(perc.top, self._func)(*a)
-            orig:Callable = perc.redir.register(self._func, call_top)
-            setattr(perc.bottom, self._func, orig)
-        setattr(self, self._func, self._call)
+        self._funcs:list[str] = func.split(" ")
+        base_func:str = self._funcs[0]
+        # Redirect `base_func` to `self._call`
+        if base_func not in perc.redir._operations:
+            call_top:Callable = lambda *a: getattr(perc.top, base_func)(*a)
+            orig:Callable = perc.redir.register(base_func, call_top)
+            setattr(perc.bottom, base_func, orig)
+        setattr(self, base_func, self._call)
 
     def _call(self, *args:tuple) -> object:
-        # Check if `self._func`/`self._subfunc` applies
-        call:bool = True
-        if len(args) == 0:
-            call:bool = not self._subfunc
-        elif self._subfunc:
-            call:bool = args[0] == self._subfunc
+        # Check if `self._funcs` applies
+        call:bool = all(a == b for a,b in zip(self._funcs[1:], args))
         # Call on_start
-        if call and (self._on_start(*args) == "break"):
-            return None
+        if call:
+            ret_val:object = self._on_start(*args)
+            if ret_val is BREAK: return None
+            if ret_val is not None:
+                assert isinstance(ret_val, tuple), \
+                       f"{self._on_start=} should return None, BREAK or a tuple"
+                args:tuple = ret_val
         # Call widget's method
-        result:object = getattr(self.delegate, self._func)(*args)
+        result:object = getattr(self.delegate, self._funcs[0])(*args)
         # Call on_end
         if call:
             on_end_result:object = self._on_end(*args)
@@ -245,6 +265,7 @@ class XViewFix(Delegator):
         if tags is None: tags:tuple[str] = ()
         self.delegate.insert(index, chars, tuple(tags)+("bettertext_text",))
         self._fix_dirty()
+        # `<<XViewFix-After-*>>` events must be fired after `_fix_dirty`
         self.delegate.event_generate("<<XViewFix-After-Insert>>")
 
     def delete(self, index1:str, index2:str|None=None) -> None:
@@ -252,6 +273,7 @@ class XViewFix(Delegator):
         self._on_before_delete(index1, index2)
         self.delegate.delete(index1, index2)
         self._fix_dirty()
+        # `<<XViewFix-After-*>>` events must be fired after `_fix_dirty`
         self.delegate.event_generate("<<XViewFix-After-Delete>>")
 
     # Add lines to dirty when the text is modified
@@ -289,9 +311,12 @@ class XViewFix(Delegator):
                 self.line_lengths.pop(low)
 
 
+assert LEFT_PADX_FIX in (0,1), "Invalid option"
+if LEFT_PADX_FIX == 1: FIX_CURSOR_LPADX:bool = False
+
 # On 4.6k lines (cpython's `tkinter/__init__.py`)
 #   0.07 sec (assuming monospaced font)
-#   0.54 sec (without assuming monospaced font)
+#   0.49 sec (without assuming monospaced font)
 class BetterText(tk.Text):
     """
     Description:
@@ -358,14 +383,34 @@ class BetterText(tk.Text):
         Further we have to bind to the (tcl/tk) `tk.Text edit undo` and
         `tk.Text edit redo` commands since they cause a recursion error
         for some reason (still looking into why).
+
+        Moving the text to the right using `lmargin1` has the problem
+        of not having any effect on an empty line iff it's the last line.
+        This is because `lmargin1` needs at least 1 character after it
+        to work. This is a problem because it means that `lpadx` cannot
+        be applied to the last line iff it's empty. To fix this, there
+        are 2 options (set using `LEFT_PADX_FIX:int`):
+        0  We use `lmargin1` and we get access to `FIX_CURSOR_LPADX`
+        1  We use `padx` on the widget and pray the user doesn't notice
+           that the same padding is also applied to the right side of the
+           text widget (fine for small values of `lpadx`)
+        Turning on `FIX_CURSOR_LPADX`, fixes the problem described above
+        by adding an invisible character to the last line iff it's empty.
+        But it creates new problems:
+            * Bad performance (~3x slower) (probably because of XViewFix
+                calling `.get` too many times - can be fixed by calling
+                `get` on the renamed widget command using `.delegator`)
+            * Breaks with undo/redo (can be fixed)
+            * Text indices from the end (eg. "end-2c") are broken
+        For normal use with small padding, just use `LEFT_PADX_FIX:=1`
     """
 
     def __init__(self, master:tk.Misc=None, **kwargs:dict) -> BetterText:
         # Defaults
         self._xscrollcmd:Callable = lambda *args: None
-        self._lpadx:int = 2
-        self._rpadx:int = 2
-        self._cursor_room:int = 1
+        self._lpadx:int = 3
+        self._rpadx:int = 3
+        self._cursor_room:int = 3
         self._xscroll_speed:int = 20
         self._yscroll_speed:int = 35
         # State
@@ -398,20 +443,23 @@ class BetterText(tk.Text):
             setattr(self, method, getattr(self._frame, method))
 
         # Add XViewFix/OnUndoCall
-        self.percolator:Percolator = Percolator(self)
+        self.percolator = perc = Percolator(self)
         self._xviewfix:XViewFix = XViewFix(self)
-        self.percolator.insertfilter(self._xviewfix)
-        self.percolator.insertfilter(BindTkFuncCall(self.percolator,
-                                                    "edit undo",
-                                                    on_start=self._freeze,
-                                                    on_end=self._unfreeze))
-        self.percolator.insertfilter(BindTkFuncCall(self.percolator,
-                                                    "edit redo",
-                                                    on_start=self._freeze,
-                                                    on_end=self._unfreeze))
-        self.percolator.insertfilter(BindTkFuncCall(self.percolator,
-                                                    "see",
-                                                    on_start=self.see))
+        perc.insertfilter(self._xviewfix)
+        perc.insertfilter(BindTkFuncCall(perc, "edit undo",
+                                         on_start=self._freeze,
+                                         on_end=self._unfreeze))
+        perc.insertfilter(BindTkFuncCall(perc, "edit redo",
+                                         on_start=self._freeze,
+                                         on_end=self._unfreeze))
+        perc.insertfilter(BindTkFuncCall(perc, "see", on_start=self.see))
+        if FIX_CURSOR_LPADX:
+            perc.insertfilter(BindTkFuncCall(perc, "mark set insert",
+                                             on_start=self._insert_changed))
+            perc.insertfilter(BindTkFuncCall(perc, "insert",
+                                             on_end=self._text_changed))
+            perc.insertfilter(BindTkFuncCall(perc, "delete",
+                                             on_end=self._text_changed))
 
         # Bind scrolling
         super().bind("<MouseWheel>", self._scroll_windows)
@@ -429,7 +477,12 @@ class BetterText(tk.Text):
             super().bind(event, _refresh_xscrollcmd, add=True)
 
         # First update
-        super().after(1, lambda: self._call_xscrollcmd(*self.xview()))
+        super().after(1, lambda: self.see("1.0"))
+
+        # For debugging:
+        if DEBUG_INVISIBLE_CHAR and FIX_CURSOR_LPADX:
+            super().tag_config("bettertext_invisible", foreground="white",
+                               background="red")
 
     # kwargs fixer
     def _fix_kwargs(self, kwargs:dict, *, can_update:bool=True) -> dict:
@@ -516,7 +569,7 @@ class BetterText(tk.Text):
         self._update_viewport(xoffset=self._xoffset)
         if DEBUG_FREEZE: print("unfree done")
 
-    # Enable/Disable
+    # BetterText API
     def enable(self) -> None:
         """
         Enables BetterText so it acts like a fixed tk.Text
@@ -524,14 +577,21 @@ class BetterText(tk.Text):
         wrap:str = self.cget("wrap")
         assert wrap == "none", "Disable wrap when enabling BetterText"
         self._disabled:bool = False
-        self._update_viewport(low=0.0)
+        if FIX_CURSOR_LPADX: self._text_changed() # Update invisible character
+        self._update_viewport(low=0.0) # Update viewport
 
     def disable(self) -> None:
         """
         Disables BetterText so it acts like a normal tk.Text
         """
         self._disabled:bool = True
+        # Reset viewport stuff
         super().config(padx=0)
+        if LEFT_PADX_FIX == 0:
+            super().tag_config("bettertext_text", lmargin1=0)
+        # Remove invisible character
+        start, end = self._get_invisible_range()
+        if start: super().delete(start, end)
 
     def assume_monospaced(self) -> None:
         self._xviewfix.assume_monospaced()
@@ -620,6 +680,61 @@ class BetterText(tk.Text):
                 print(f"Text tried to scroll {new_xoffset=}")
             self._update_viewport(xoffset=new_xoffset)
 
+    # On insert change, maybe add INVISIBLE_CHAR
+    def _insert_changed(self, _:str, __:str, insert:str) -> tuple[str,str,str]:
+        assert FIX_CURSOR_LPADX, "SanityCheck"
+        if self._disabled: return None
+        insert:str = super().index(insert)
+        start, _ = self._get_invisible_range()
+        if start and super().compare(insert, ">", start):
+            insert:str = start
+        return ("set", "insert", insert)
+
+    def _text_changed(self, *args:tuple) -> None:
+        """
+        Add INVISIBLE_CHAR to the last line if it's empty. Read implementation
+          details for more info
+        """
+        assert FIX_CURSOR_LPADX, "SanityCheck"
+        if self._disabled: return None
+        is_text:bool = bool(self.get("end-1l", "end-1c"))
+        start, end = self._get_invisible_range()
+        invis:bool = start is not None
+        if invis == is_text == False:
+            # If there is NO invisible character and there is NO text,
+            #   add an invisible character
+            super().insert("end-1c", INVISIBLE_CHAR, "bettertext_invisible")
+            super().mark_set("insert", "end-2c")
+        elif invis == is_text == True:
+            # If there IS an invisible character and there IS text,
+            #   remove the invisible character
+            super().delete(start, end)
+            # super().delete("end-2c", "end-1c") # Causes RecursionError
+
+    def _get_invisible_range(self) -> tuple[str,str]:
+        assert FIX_CURSOR_LPADX, "SanityCheck"
+        ranges:tuple[str,str]|None = super().tag_ranges("bettertext_invisible")
+        if not ranges: return (None, None)
+        return tuple(map(str, ranges))
+
+    # tk.Text.get changed implementation
+    def get(self, index1:str, index2:str=None) -> str:
+        """
+        Remove the INVISIBLE_CHAR from the last line. Read implementation
+          details for more info.
+        """
+        if self._disabled or (not FIX_CURSOR_LPADX):
+            return super().get(index1, index2)
+        # Get invisible range
+        index2:str = super().index(index2)
+        start, end = self._get_invisible_range()
+        # If no invisible range, return default
+        if start is None: return super().get(index1, index2)
+        # If invisible range, return requested text outside of it
+        if super().compare(index2, "<=", start):
+            return super().get(index1, index2)
+        return super().get(index1, start) + super().get(end, index2)
+
     # Helpers/xview
     def _round(self, x:float) -> int:
         # Round to the closest integer
@@ -631,9 +746,10 @@ class BetterText(tk.Text):
         Gets the maximum value for `_xoffset`
         The return value will always be at least 1
         """
-        if not self._xviewfix.line_lengths: return 1
-        return max(1, max(self._xviewfix.line_lengths)) + self._rpadx
+        if not self._xviewfix.line_lengths: return max(1, self._rpadx)
+        return max(1, max(self._xviewfix.line_lengths) + self._rpadx)
 
+    # tk.text.xview reimplementation
     def fixed_xview(self) -> tuple[str,str]:
         """
         This acts like tkinter.Text.xview with 0 arguments if the text
@@ -647,7 +763,7 @@ class BetterText(tk.Text):
         low:float = (self._xoffset+self._lpadx) / diff_range1
         low:float = max(low, 0.0)
         high:float = low + self._width/diff_range1
-        return str(low), str(min(high,1.0))
+        return str(low), str(min(high, 1.0))
 
     def xview(self, *args:tuple) -> tuple[str]|None:
         """
@@ -680,17 +796,17 @@ class BetterText(tk.Text):
             except ValueError:
                 raise ValueError(f"'xview scroll' expects an int/float")
             if what == "pixels":
-                self._scroll(int(size+0.5))
+                self._scroll(self._round(size))
             elif what == "units":
                 raise ValueError("'xview scroll XXX units' not implemented yet")
             elif what == "pages":
-                self._scroll(int(size*self._width+0.5))
+                self._scroll(self._round(size*self._width))
             else:
                 raise ValueError(f"Unknown unit {what!r} in 'xview scroll'")
             return None
         raise NotImplementedError(f"Implement {args!r}")
 
-    # See
+    # tk.text.see reimplementation
     def see(self, idx:str, *, no_xscroll:bool=False) -> str:
         """
         This acts like `tkinter.Text.see` with a hidden `no_xscroll`
@@ -698,7 +814,7 @@ class BetterText(tk.Text):
         """
         if no_xscroll or self._disabled:
             super().see(idx)
-            return "break"
+            return BREAK
 
         # Get info from text widget
         idx:str = super().index(idx)
@@ -748,7 +864,7 @@ class BetterText(tk.Text):
         assert diff >= 0, "SanityCheck"
         if diff == 0:
             super().xview("moveto", "0.0")
-            return "break"
+            return BREAK
 
         # Scrolling far
         if scroll_far:
@@ -758,8 +874,9 @@ class BetterText(tk.Text):
         new_xoffset:int = self._xoffset + diff*direction
         if DEBUG_SEE: print(f"{diff=} {direction=} {new_xoffset=}")
         self._update_viewport(xoffset=new_xoffset)
-        return "break"
+        return BREAK
 
+    # Updaing the viewport/scrollbar
     def _update_viewport(self, low:float=None, xoffset:int=None) -> None:
         """
         Scroll horizontally to match either the passed in low or xoffset
@@ -805,12 +922,16 @@ class BetterText(tk.Text):
         if canvasx >= 0:
             # If we are viewing the left side
             if DEBUG_VIEWPORT: print(end="<")
-            super().tag_config("bettertext_text", lmargin1=canvasx)
-            super().config(padx=0)
+            if LEFT_PADX_FIX == 0:
+                super().tag_config("bettertext_text", lmargin1=canvasx)
+                super().config(padx=0)
+            elif LEFT_PADX_FIX == 1:
+                super().config(padx=canvasx)
         else:
             # If we are viewing the right side
             if DEBUG_VIEWPORT: print(end=">")
-            super().tag_config("bettertext_text", lmargin1=0)
+            if LEFT_PADX_FIX == 0:
+                super().tag_config("bettertext_text", lmargin1=0)
             super().config(padx=canvasx)
 
     def _call_xscrollcmd(self, low:str, high:str) -> None:
@@ -832,11 +953,11 @@ if __name__ == "__main__":
     root.geometry("+0+0")
 
     text:BetterText = BetterText(root, width=400, height=200, undo=True,
-                                 padx=0, cursor_room=3)
+                                 padx=10, cursor_room=3)
     text.mark_set("insert", "1.0")
     text.pack(fill="both", expand=True)
     text.config(font=("DejaVu Sans Mono", 9, "normal", "roman"))
-    text.assume_monospaced()
+    # text.assume_monospaced()
 
     filepath:str = tk.__file__
     # filepath:str = join(dirname(dirname(dirname(__file__))), "bad.py")

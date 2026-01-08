@@ -119,8 +119,8 @@ class BaseTerminal:
         self.bind("ready", self._ready)
         self.start(into=into)
         assert self.sep_window is not None, "Set `sep_window` please"
-        assert self._running, "You must call \"self.run(command, env=env)\" " \
-                             'inside "self.start"'
+        assert self._running, 'You must call "self.run(command, env=env)" ' \
+                              'inside "self.start"'
         self._ready_event.wait()
         Thread(target=self.close_on_dead_slave, daemon=True).start()
 
@@ -174,8 +174,8 @@ class BaseTerminal:
         if timeout(2, is_ready):
             raise RuntimeError("Slave didn't report its pid")
         if self.proc.poll() is not None:
-            raise RuntimeError("Xterm closed too quickly. " \
-                               "Do you have it installed?")
+            raise RuntimeError(f"{command.split(' ')[0]!r} closed too" \
+                               "quickly. Do you have it installed?")
 
     def close(self) -> None:
         if self.running():

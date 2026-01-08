@@ -1,6 +1,7 @@
 from __future__ import annotations
 from time import perf_counter
 import tkinter as tk
+from os import name
 
 
 Break = Applies = bool
@@ -8,7 +9,7 @@ DEBUG:bool = False
 
 # tk.Event.state constants
 SHIFT:int = 1
-ALT:int = 8
+ALT:int = 131072 if name == "nt" else 8 # Why OS differences?
 CTRL:int = 4
 
 

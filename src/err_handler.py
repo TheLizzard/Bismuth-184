@@ -1,9 +1,8 @@
 from __future__ import annotations
 from traceback import format_exception, format_exc
-from subprocess import Popen, DEVNULL
+from subprocess import Popen, DEVNULL, PIPE
 from functools import partial
 from threading import Thread
-from sys import executable
 import tkinter as tk
 import sys
 import os
@@ -13,7 +12,7 @@ if os.name == "posix":
     DETACH_PROC_KWARGS:dict = dict(start_new_session=True)
 elif os.name == "nt":
     from subprocess import DETACHED_PROCESS
-    DETACH_PROC_KWARGS:dict = dict(creation_flags=DETACHED_PROCESS)
+    DETACH_PROC_KWARGS:dict = dict(creationflags=DETACHED_PROCESS)
 else:
     DETACH_PROC_KWARGS:dict = dict()
 
@@ -82,28 +81,45 @@ def get_full_traceback(err:Exception) -> Traceback:
 def report_full_exception(widget:tk.Misc, err:BaseException) -> None:
     assert isinstance(widget, tk.Misc), "widget must be a tk.Misc"
     assert isinstance(err, BaseException), "err must be a BaseException"
-    root:tk.Tk = widget._root()
-    root.report_callback_exception(type(err), err, get_full_traceback(err))
+    with IncreasedRecursionLimit(200):
+        root:tk.Tk = widget._root()
+        root.report_callback_exception(type(err), err, get_full_traceback(err))
 tk.Misc.report_full_exception = report_full_exception
 
 
 class ErrorCatcher:
-    __slots__ = "inside", "handler"
+    __slots__ = "_inside", "_handler"
 
     def __init__(self, handler:Callable[None]) -> ErrorCatcher:
-        self.handler:Callable[None] = handler
-        self.inside:bool = False
+        self._handler:Callable[None] = handler
+        self._inside:int = 0
 
     def __enter__(self) -> ErrorCatcher:
-        assert not self.inside, "Already inside this ErrorCatcher"
-        self.inside:bool = True
+        self._inside += 1
         return self
 
     def __exit__(self, exc:type, val:Exception, tb:object) -> bool:
+        self._inside -= 1
         if exc:
-            return self.handler(exc, val, tb)
+            return self._handler(exc, val, tb)
         else:
             return False
+
+
+class IncreasedRecursionLimit:
+    __slots__ = "_old_rec_limit", "_new_rec_limit"
+
+    def __init__(self, recursion_limit_raise:int) -> IncreasedRecursionLimit:
+        self._old_rec_limit:int = sys.getrecursionlimit()
+        self._new_rec_limit:int = self._old_rec_limit + recursion_limit_raise
+
+    def __enter__(self) -> IncreasedRecursionLimit:
+        sys.setrecursionlimit(self._new_rec_limit)
+        return self
+
+    def __exit__(self, exc:type, val:Exception, tb:object) -> bool:
+        sys.setrecursionlimit(self._old_rec_limit)
+        return False
 
 
 class RunManager:
@@ -153,8 +169,10 @@ class RunManager:
             except BaseException as error:
                 if isinstance(error, SystemExit):
                     return None
-                self.report_exc(type(error), error, get_full_traceback(error),
-                                critical=exit_on_error)
+                with IncreasedRecursionLimit(200):
+                    self.report_exc(type(error), error,
+                                    get_full_traceback(error),
+                                    critical=exit_on_error)
                 if not exit_on_error:
                     continue
                 return None
@@ -175,9 +193,12 @@ class RunManager:
             string += msg + "\n"
         string += "="*80
         string:str = string.replace("\x00", "\\x00")
-        proc:Popen = Popen([executable, THIS], shell=False, stdin=DEVNULL,
+
+        proc:Popen = Popen([sys.executable, THIS], shell=False, stdin=PIPE,
                            stdout=DEVNULL, stderr=DEVNULL, **DETACH_PROC_KWARGS,
-                           env=os.environ|{"_display_err":string})
+                           env=os.environ|{"_display_err":"stdin"})
+        proc.stdin.write(string.encode("utf-8", errors="surrogateescape"))
+        proc.stdin.close()
         Thread(target=proc.wait, name="subproc-reaper", daemon=True).start()
 
 
@@ -284,9 +305,9 @@ def _try_set_iconphoto(root:tk.Tk|BetterTk) -> HasErrorer:
 
 
 if __name__ == "__main__":
-    string:str|None = os.environ.get("_display_err", None)
-    if string:
-        _display(string)
+    if os.environ.get("_display_err", None):
+        data:bytes = sys.stdin.buffer.read()
+        _display(data.decode("utf-8", errors="surrogateescape"))
         sys.exit(0)
 
     def start() -> int:

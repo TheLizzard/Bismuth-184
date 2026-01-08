@@ -73,7 +73,7 @@ class LineManager(Rule, LineNumbers, metaclass=SingletonMeta):
     __slots__ = "text", "parent", "prev_end", "sidebar_text"
     REQUESTED_LIBRARIES:list[tuple[str,bool]] = [("reparentmanager",True),
                                                  ("scrollbarmanager",True)]
-    PADX:int = 4
+    PADX:int = 0 # Now handled by BetterText
 
     def __init__(self, plugin:BasePlugin, text:tk.Text) -> BarManager:
         evs:tuple[str] = (
