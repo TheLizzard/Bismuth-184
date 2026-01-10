@@ -13,14 +13,16 @@ DEBUG_FREEZE:bool = False
 DEBUG_SEE:bool = False
 
 """
-0  uses `-lmargin1` on a tag
-   maybe turn on `FIX_CURSOR_LPADX` but not performant
-1  uses `-padx` on the whole widget
-   adds same padding to the right of the widget but
-   unnoticeable for padding<5
+0  Uses `-padx` on the whole widget
+   Adds same padding to the right of the widget but unnoticeable for padding<5
+1  Uses `-lmargin1` on a tag (as well as `-padx` on the whole widget)
+   There is a problem where if the cursor is on the last line and it's
+   empty, the `-padx` isn't respected. This can be fixed by turning on
+   `FIX_CURSOR_LPADX` but it has it's own problems
+2  Uses only `-lmargin1` on a tag. Has the same problem as ^
 """
-LEFT_PADX_FIX:int = 1
-FIX_CURSOR_LPADX:bool = False
+LEFT_PADX_FIX:int = 0
+FIX_CURSOR_LPADX:bool = True
 
 
 # def print_traceback():
@@ -311,8 +313,8 @@ class XViewFix(Delegator):
                 self.line_lengths.pop(low)
 
 
-assert LEFT_PADX_FIX in (0,1), "Invalid option"
-if LEFT_PADX_FIX == 1: FIX_CURSOR_LPADX:bool = False
+assert LEFT_PADX_FIX in (0,1,2), "Invalid option"
+if LEFT_PADX_FIX == 0: FIX_CURSOR_LPADX:bool = False
 
 # On 4.6k lines (cpython's `tkinter/__init__.py`)
 #   0.07 sec (assuming monospaced font)
@@ -390,16 +392,11 @@ class BetterText(tk.Text):
         to work. This is a problem because it means that `lpadx` cannot
         be applied to the last line iff it's empty. To fix this, there
         are 2 options (set using `LEFT_PADX_FIX:int`):
-        0  We use `lmargin1` and we get access to `FIX_CURSOR_LPADX`
-        1  We use `padx` on the widget and pray the user doesn't notice
-           that the same padding is also applied to the right side of the
-           text widget (fine for small values of `lpadx`)
+        <read documentation above LEFT_PADX_FIX definition>
         Turning on `FIX_CURSOR_LPADX`, fixes the problem described above
         by adding an invisible character to the last line iff it's empty.
         But it creates new problems:
-            * Bad performance (~3x slower) (probably because of XViewFix
-                calling `.get` too many times - can be fixed by calling
-                `get` on the renamed widget command using `.delegator`)
+            * Bad performance (~3x slower) (whole text tags seem to be slow)
             * Breaks with undo/redo (can be fixed)
             * Text indices from the end (eg. "end-2c") are broken
         For normal use with small padding, just use `LEFT_PADX_FIX:=1`
@@ -534,12 +531,12 @@ class BetterText(tk.Text):
         if "xscroll_speed" in kwargs:
             xscroll_speed:int = kwargs.pop("xscroll_speed")
             assert isinstance(xscroll_speed, int), "xscroll_speed must be int"
-            self._xscroll_speed:int = self.xscroll_speed
+            self._xscroll_speed:int = xscroll_speed
             should_update_viewport:bool = True
         if "yscroll_speed" in kwargs:
             yscroll_speed:int = kwargs.pop("yscroll_speed")
             assert isinstance(yscroll_speed, int), "yscroll_speed must be int"
-            self._yscroll_speed:int = self.yscroll_speed
+            self._yscroll_speed:int = yscroll_speed
             should_update_viewport:bool = True
         if "cursor_room" in kwargs:
             cursor_room:int = kwargs.pop("cursor_room")
@@ -587,8 +584,7 @@ class BetterText(tk.Text):
         self._disabled:bool = True
         # Reset viewport stuff
         super().config(padx=0)
-        if LEFT_PADX_FIX == 0:
-            super().tag_config("bettertext_text", lmargin1=0)
+        super().tag_config("bettertext_text", lmargin1=0)
         # Remove invisible character
         start, end = self._get_invisible_range()
         if start: super().delete(start, end)
@@ -923,16 +919,24 @@ class BetterText(tk.Text):
             # If we are viewing the left side
             if DEBUG_VIEWPORT: print(end="<")
             if LEFT_PADX_FIX == 0:
+                super().tag_config("bettertext_text", lmargin1=0)
+                super().config(padx=canvasx)
+            elif LEFT_PADX_FIX == 1:
                 super().tag_config("bettertext_text", lmargin1=canvasx)
                 super().config(padx=0)
-            elif LEFT_PADX_FIX == 1:
-                super().config(padx=canvasx)
+            elif LEFT_PADX_FIX == 2:
+                super().tag_config("bettertext_text", lmargin1=canvasx)
         else:
             # If we are viewing the right side
             if DEBUG_VIEWPORT: print(end=">")
             if LEFT_PADX_FIX == 0:
                 super().tag_config("bettertext_text", lmargin1=0)
-            super().config(padx=canvasx)
+                super().config(padx=canvasx)
+            if LEFT_PADX_FIX == 1:
+                super().tag_config("bettertext_text", lmargin1=0)
+                super().config(padx=canvasx)
+            elif LEFT_PADX_FIX == 2:
+                super().tag_config("bettertext_text", lmargin1=canvasx)
 
     def _call_xscrollcmd(self, low:str, high:str) -> None:
         """

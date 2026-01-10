@@ -160,7 +160,12 @@ class App:
         page:NotebookPage = self.notebook.tab_create()
         page.page_frame.config(bg="black") # Less eye burning
         text:tk.Text = BetterText(page.page_frame, highlightthickness=0, bd=0,
-                                  font=settings.editor.font, cursor_room=3)
+                                  font=settings.editor.font,
+                                  cursor_room=settings.editor.cursor_room,
+                                  blockcursor=settings.editor.blockcursor,
+                                  padx=settings.editor.padx,
+                                  xscroll_speed=settings.editor.xscroll_speed,
+                                  yscroll_speed=settings.editor.yscroll_speed)
         text.plugin:Plugin = None
         if isinstance(text, BetterText):
             text.assume_monospaced()
