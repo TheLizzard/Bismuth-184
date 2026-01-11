@@ -82,8 +82,14 @@ class UndoManager(Rule):
 
     def do(self, on:str, shift:bool, data:str|None) -> Break:
         if on == "control-z":
-            if self.paused:
-                return True
+            if self.paused: return True
+            # Remove selection saving it in marks
+            self.text.mark_unset("undo-selection-start")
+            self.text.mark_unset("undo-selection-end")
+            start, end = self.plugin.get_selection()
+            self.text.mark_set("undo-selection-start", start)
+            self.text.mark_set("undo-selection-end", end)
+            # Undo/redo
             if shift:
                 if not self.text.edit("canredo"):
                     if DEBUG_UNDO_REDO: print("[DEBUG]: (canredo) no redo")
@@ -102,9 +108,12 @@ class UndoManager(Rule):
                     self.text.edit_undo()
                 if DEBUG_UNDO_REDO: print("[DEBUG]: undone")
                 self.text.event_generate("<<Undo-Triggered>>")
-
-            _, end = self.plugin.get_selection()
-            self.plugin.move_insert(end)
+            # Set selection back from saved marks
+            self.plugin.remove_selection()
+            self.plugin.set_selection("undo-selection-start",
+                                      "undo-selection-end")
+            self.plugin.move_insert("undo-selection-end")
+            # Generate changed event (and add separation - why?)
             self.text.event_generate("<<Modified-Change>>")
             # self.modified_since_last_sep:bool = True
             self.add_sep(force=True)
@@ -122,8 +131,7 @@ class UndoManager(Rule):
             return False
 
         if on == "<raw-before-insert>":
-            if self.paused:
-                return False
+            if self.paused: return False
             new_char_type:str = self._get_type(data)
             if DEBUG_INSERT: print(f"[DEBUG]: before new {new_char_type=!r}")
             self.add_sep(force=((self.last_char_type != new_char_type) and \
@@ -132,8 +140,7 @@ class UndoManager(Rule):
             return False
         if on == "<raw-after-insert>":
             self.modified_since_last_sep:bool = True
-            if self.paused:
-                return False
+            if self.paused: return False
             if DEBUG_INSERT:
                 if len(data) < 10: print(f"[DEBUG]: after new {data!r}")
                 else: print(f"[DEBUG]: after new {len(data)=}")
@@ -141,23 +148,20 @@ class UndoManager(Rule):
                 self.text.event_generate("<<Modified-Change>>")
             return False
         if on == "<raw-before-delete>":
-            if self.paused:
-                return False
+            if self.paused: return False
             self.add_sep(force=True)
             return False
         if on == "<raw-after-delete>":
             self.modified_since_last_sep:bool = True
             self.last_char_type:str = None
-            if self.paused:
-                return False
+            if self.paused: return False
             with self.plugin.virtual_event_wrapper(anti=True):
                 self.text.event_generate("<<Modified-Change>>")
             self.add_sep(force=True)
             return False
 
         if on == "<add-separator>":
-            if self.paused:
-                return False
+            if self.paused: return False
             self.add_sep(force=True, reason="event")
             return False
 
