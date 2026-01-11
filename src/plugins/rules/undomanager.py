@@ -87,8 +87,9 @@ class UndoManager(Rule):
             self.text.mark_unset("undo-selection-start")
             self.text.mark_unset("undo-selection-end")
             start, end = self.plugin.get_selection()
-            self.text.mark_set("undo-selection-start", start)
-            self.text.mark_set("undo-selection-end", end)
+            if start != end:
+                self.text.mark_set("undo-selection-start", start)
+                self.text.mark_set("undo-selection-end", end)
             # Undo/redo
             if shift:
                 if not self.text.edit("canredo"):
@@ -109,10 +110,11 @@ class UndoManager(Rule):
                 if DEBUG_UNDO_REDO: print("[DEBUG]: undone")
                 self.text.event_generate("<<Undo-Triggered>>")
             # Set selection back from saved marks
-            self.plugin.remove_selection()
-            self.plugin.set_selection("undo-selection-start",
-                                      "undo-selection-end")
-            self.plugin.move_insert("undo-selection-end")
+            if start != end:
+                self.plugin.remove_selection()
+                self.plugin.set_selection("undo-selection-start",
+                                          "undo-selection-end")
+                self.plugin.move_insert("undo-selection-end")
             # Generate changed event (and add separation - why?)
             self.text.event_generate("<<Modified-Change>>")
             # self.modified_since_last_sep:bool = True
