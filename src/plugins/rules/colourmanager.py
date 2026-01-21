@@ -65,7 +65,7 @@ class ColourManager(Rule, ColorDelegator):
         self._keep_tags:set[str] = set(self.tagdefs) | set(self.aliases)
 
     def init(self) -> None:
-        self.prog = re.compile(r"\b(?P<word>\w+)\b|(?P<SYNC>\n)", re.M|re.S)
+        self.prog = re.compile(r"(?P<SYNC>\n)", re.M|re.S)
         self.tagdefs:dict[str,str] = ColourConfig({"word":{}})
 
     def __getattr__(self, key:str) -> object:
@@ -115,20 +115,6 @@ class ColourManager(Rule, ColorDelegator):
         self.notify_range(start, end)
         return False
 
-    def notify_range(self, start:str, end:str|None=None) -> None:
-        end:str = end or "end"
-        if (start == "1.0") and self.text.compare(end, "==", "end"):
-            # Shortcut for colouring in the whole textbox
-            self.text.update_idletasks()
-            super().removecolors()
-            self._add_tags_in_section(self.text.get("1.0","end"), "1.0")
-        else:
-            super().notify_range(start, end)
-
-    def _add_tag(self, start:int, end:int, head:str, tag:str) -> None:
-        start_idx:str = self.text.index(f"{head}+{start:d}c")
-        self.text.tag_add(tag, start_idx, f"{start_idx}+{end-start:d}c")
-
     def _add_tags_in_section(self, chars:str, head:str) -> None:
         if DEBUG:
             s = perf_counter()
@@ -140,13 +126,14 @@ class ColourManager(Rule, ColorDelegator):
             for start, end, name in self.prog.finditer(chars):
                 if name not in self._keep_tags: continue
                 assert head_start <= start < end, "OrderingError"
-                head:str = self.text.index(f"{head} +{start-head_start:d}c")
+                head:str = self.index(f"{head} +{start-head_start:d}c")
                 head_start:int = start
                 self._add_tag(start-head_start, end-head_start, head, name)
                 name:str = self.aliases.get(name, None)
                 if name:
                     self._add_tag(start-head_start, end-head_start, head, name)
         else:
+            head_start:int = 0
             for match in self.prog.finditer(chars):
                 for name, matched_text in match.groupdict().items():
                     if not matched_text: continue
@@ -154,15 +141,83 @@ class ColourManager(Rule, ColorDelegator):
                     start, end = match.span(name)
                     if KEYWORD_GROUPS.fullmatch(tag):
                         tag:str = "keyword"
-                    self._add_tag(start, end, head, tag)
+                    assert head_start <= start < end, "OrderingError"
+                    head:str = self.index(f"{head} +{start-head_start:d}c")
+                    head_start:int = start
+                    self._add_tag(start-head_start, end-head_start, head, tag)
                     if matched_text in ("def", "class"):
-                        if m1 := self.idprog.match(chars, end):
-                            start, end = m1.span(1)
-                            self._add_tag(start, end, head, "definition")
+                        if match := self.idprog.match(chars, end):
+                            start, end = match.span(1)
+                            self._add_tag(start-head_start, end-head_start,
+                                          head, "definition")
 
         if DEBUG:
             self.time = getattr(self, "time", 0) + perf_counter() - s
             print(f"\tTotal time: {self.time:.3f} sec")
+
+    def recolorize_main(self) -> None:
+        """
+        Evaluate text and apply colorizing tags.
+        Copied from idlelib.colorizer.Colorizer.recolorize_main with some
+          changes especially to how `lines_to_get` gets set
+        """
+        # Get the line from a tkinter index (eg. "5.3" => 5)
+        get_line = lambda tk_idx: int(self.index(tk_idx).split(".")[0])
+        next:str = "1.0"
+        # While there are TODO marks:
+        while todo_tag_range := self.tag_nextrange("TODO", next):
+            self.tag_remove("SYNC", todo_tag_range[0], todo_tag_range[1])
+            sync_tag_range = self.tag_prevrange("SYNC", todo_tag_range[0])
+            head:str = sync_tag_range[1] if sync_tag_range else "1.0"
+            chars:str = ""
+            next:str = head
+            ok:bool = False
+            # Main recolouring loop:
+            while not ok:
+                mark:str = next
+                # Only recolorize until the next SYNC tag
+                # In idlelib.colorizer.Colorizer.recolorize_main, it waits
+                # until (by random chance) "mark + lines_to_get lines"
+                # lines up with a SYNC tag
+                sync_tag_range = self.tag_nextrange("SYNC", mark)
+                tail:str = sync_tag_range[0] if sync_tag_range else "end"
+                lines_to_get:int = get_line(tail) - get_line(head) + 1
+                next:str = self.index(f"{mark} +{lines_to_get}lines linestart")
+                # Check if SYNC tag is at `next` before the recolouring
+                sync_before:bool = "SYNC" in self.tag_names(f"{next} -1char")
+                # Get the text
+                line:str = self.get(mark, next)
+                ## print(head, "get", mark, next, "->", repr(line))
+                if not line:
+                    return
+                # Recolour `mark` to `next`
+                for tag in self.tagdefs:
+                    self.tag_remove(tag, mark, next)
+                chars += line
+                self._add_tags_in_section(chars, head)
+                # Check if SYNC tag is at `next` after the recolouring
+                sync_after:bool = "SYNC" in self.tag_names(f"{next} -1char")
+                # If SYNC was at `next` before and after recolouring, that
+                # means that all of the code after `next` is coloured corectly
+                ok:bool = sync_before and sync_after
+                if sync_after:
+                    head:str = next
+                    chars:str = ""
+                if not ok:
+                    # We're in an inconsistent state, and the call to
+                    # update may tell us to stop.  It may also change
+                    # the correct value for "next" (since this is a
+                    # line.col string, not a true mark).  So leave a
+                    # crumb telling the next invocation to resume here
+                    # in case update tells us to leave.
+                    self.tag_add("TODO", next)
+                self.update_idletasks()
+                # We colorizes 31k lines per sec so do we really need to stop
+                # as sson as possible? If not we can remove the TODO tag and
+                # make this even faster
+                if self.stop_colorizing:
+                    if DEBUG: print("colorizing stopped")
+                    return
 
 
 # New method for colorising:

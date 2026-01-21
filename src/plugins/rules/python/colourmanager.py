@@ -463,7 +463,7 @@ class Parser(BaseParser):
 
 
 class ColourManager(BaseColourManager):
-    __slots__ = ()
+    __slots__ = "aliases", "tagdefs", "prog"
 
     def init(self) -> None:
         self.tagdefs:dict[str,str] = ColourConfig()
@@ -475,11 +475,13 @@ class ColourManager(BaseColourManager):
                                        "f-string-format": "string",
                                        "f-string-bracket": "string",
                                      }
-        if True:
+        if PARSER == "parser":
             self.text.parser:Parser = Parser()
             self.prog = Regex(self.text.parser)
-        else:
+        elif PARSER == "regex":
             self.prog = make_pat()
+        else:
+            raise ValueError(f"Invalid value for {PARSER=!r}")
 
     def attach(self) -> None:
         super().attach()
@@ -491,3 +493,4 @@ class ColourManager(BaseColourManager):
 
 
 FSTRINGS_COLOURED:bool = True
+PARSER:str = "parser" # "parser" / "regex"

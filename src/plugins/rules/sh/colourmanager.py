@@ -102,10 +102,10 @@ IDENTIFIER_REGEX:str = (
     r"^" + # Begining of the string
     r"(?:" + # One of
         "|".join([
-            r"[^\W\d]",            # Unicode letter/"_"
+            r"[^\W\d]",  # Unicode letter/"_"
         ]) + r")" +
     r"[" + # Followed by any number of
-        r"\w" +            # Unicode letter/digit/"_"
+        r"\w" +          # Unicode letter/digit/"_"
     r"]*" +
     r"$" # End of string
 )
