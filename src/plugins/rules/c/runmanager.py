@@ -9,7 +9,10 @@ EXE:str = which("gcc")
 WARNINGS:tuple[str] = ("-Wall", "-Wextra", "-Wshadow", "-Warray-bounds",
                        "-Wdangling-else", "-Wnull-dereference",
                        "-Wswitch-enum", "-Wformat-security", "-Wuninitialized",
-                       "-Wconversion", "-Wpointer-arith")
+                       "-Wconversion", "-Wpointer-arith", "-Wdouble-promotion",
+                       "-Wundef", "-Wcast-align", "-Wduplicated-cond",
+                       "-Wduplicated-branches", "-Wlogical-op", "-Walloc-zero",
+                       "-Wfloat-equal")
 DEFAULT_FLAGS:list[str] = [
                        "-flto=5", # Link Time Optimisation
                        "-O3",

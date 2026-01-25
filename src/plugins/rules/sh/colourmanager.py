@@ -57,7 +57,7 @@ PROGRAMS:set[str] = {
     "uname", "uniq", "uptime", "usleep", "uuencode", "vlock", "watch",
     "watchdog", "wc", "which", "who", "whoami", "xargs", "yes",
     "", "", "",
-    "dpkg-deb", "fakeroot",
+    "dpkg-deb", "fakeroot", "getent",
     # Signals and traps
     *SIGNALS_TRAPS,
     # Builtins (compgen -b)

@@ -9,7 +9,11 @@ EXE:str = which("g++")
 WARNINGS:tuple[str] = ("-Wall", "-Wextra", "-Wshadow", "-Warray-bounds",
                        "-Wdangling-else", "-Wnull-dereference",
                        "-Wswitch-enum", "-Wformat-security", "-Wuninitialized",
-                       "-Wconversion", "-Wpointer-arith")
+                       "-Wconversion", "-Wpointer-arith", "-Wdouble-promotion",
+                       "-Wundef", "-Wcast-align", "-Wduplicated-cond", "-Wvla",
+                       "-Wduplicated-branches", "-Wlogical-op", "-Walloc-zero",
+                       "-Wnon-virtual-dtor", "-Woverloaded-virtual",
+                       "-Wfloat-equal", "-Wold-style-cast")
 DEFAULT_FLAGS:list[str] = [
                        "-flto=5", # Link Time Optimisation
                        "-O3",
@@ -29,7 +33,7 @@ if DEBUG_MODE:
                        "-rdynamic",
                        # Detect memoty leaks
                        "-fsanitize=leak",
-                       # Detect user-after-frees
+                       # Detect use-after-frees
                        "-fsanitize=address",
                        # Detect undefined behavior
                        "-fsanitize=undefined",

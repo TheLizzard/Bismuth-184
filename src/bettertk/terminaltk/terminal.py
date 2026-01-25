@@ -19,7 +19,7 @@ from bettertk import IS_WINDOWS, IS_UNIX
 
 
 SLAVE_PATH:str = os.path.join(os.path.dirname(__file__), "slave.py")
-SLAVE_CMD:str = f'{sys.executable} "{SLAVE_PATH}" "{{}}" {{}}'
+SLAVE_CMD:list[str] = [sys.executable, SLAVE_PATH]
 
 
 if IS_WINDOWS:
@@ -40,30 +40,28 @@ elif IS_UNIX:
                               "Ctrl <Key>+: larger-vt-font()",
                               "Ctrl <Key>-: smaller-vt-font()",
                                          ))
-    XTERM_XRMS:str = (
-                       f"VT100.Translations: #override {XTERM_KEY_BINDINGS}",
-                       # Do NOT delete the next line!
-                       #r"VT100.Translations: #override Ctrl Shift <Key>C: copy-selection(CLIPBOARD) \n Ctrl <Key>V: insert-selection(CLIPBOARD) \n Ctrl <Key>W: quit() \n Ctrl <Key>X: copy-selection(CLIPBOARD)",
-                       "curses: true",
-                       "cutNewline: true",
-                       "scrollTtyOutput: false",
-                       "autoScrollLock: true",
-                       "jumpScroll: false",
-                       "scrollKey: true",
-                       "omitTranslation: popup-menu",
-                       "allowWindowOps: true",
-                       "bellOnReset: false",
-                       "eightBitInput: false",
-                       "metaSendsEscape: true",
-                       # "ScrollBar: on",
-                       # "xterm*sixelScrolling: on",
-                       # f"xterm*scrollbar.thumb: {THUMB_SPRITE}",
-                     )
-    XTERM_ARGS:str = "-b 0 -bw 0 -bc +ai -bg black -fg white -fa Monospace " \
-                     "-fs 12 -cu -sb -rightbar -sl 100000 -ti 340 "
+    XTERM_XRMS:list[str] = [
+        f"VT100.Translations: #override {XTERM_KEY_BINDINGS}",
+        # Do NOT delete the next line!
+        #r"VT100.Translations: #override Ctrl Shift <Key>C: copy-selection(CLIPBOARD) \n Ctrl <Key>V: insert-selection(CLIPBOARD) \n Ctrl <Key>W: quit() \n Ctrl <Key>X: copy-selection(CLIPBOARD)",
+        "curses: true",
+        "cutNewline: true",
+        "scrollTtyOutput: false",
+        "autoScrollLock: true",
+        "jumpScroll: false",
+        "scrollKey: true",
+        "omitTranslation: popup-menu",
+        "allowWindowOps: true",
+        "bellOnReset: false",
+        "eightBitInput: false",
+        "metaSendsEscape: true",
+        # "ScrollBar: on",
+        # "xterm*sixelScrolling: on",
+        # f"xterm*scrollbar.thumb: {THUMB_SPRITE}",
+    ]
+    XTERM_ARGS:list[str] = ["-b", "0", "-bw", "0", "-bc", "+ai", "-bg", "black", "-fg", "white", "-fa", "Monospace", "-fs", "12", "-cu", "-sb", "-rightbar", "-sl", "100000", "-ti", "340"]
     for XTERM_XRM in XTERM_XRMS:
-        XTERM_ARGS += f"-xrm 'xterm*{XTERM_XRM}' "
-    XTERM_ARGS:str = XTERM_ARGS.removesuffix(" ")
+        XTERM_ARGS += ["-xrm", f"xterm*{XTERM_XRM}"]
 else:
     ...
 
@@ -162,11 +160,10 @@ class BaseTerminal:
                 return False
         return not pid_exists(pid)
 
-    def run(self, command:str, *, env:dict[str,str]=os.environ) -> None:
-        slave_cmd:str = SLAVE_CMD.format(self.ipc.name, SELF_PID)
-        command:str = self.str_rreplace_once(command, "%command%", slave_cmd)
-        self.proc:Popen = Popen(command, env=env, shell=True, stdout=PIPE,
-                                stderr=PIPE, stdin=DEVNULL)
+    def run(self, command:list[str], *, env:dict=os.environ) -> None:
+        command:list[str] = command + SLAVE_CMD + [self.ipc.name, SELF_PID]
+        self.proc:Popen = Popen(list(map(str,command)), env=env, shell=False,
+                                stdout=PIPE, stderr=PIPE, stdin=DEVNULL)
         self._running:bool = True
         def is_ready() -> bool:
             return (self.slave_pid is not None) or \
@@ -174,8 +171,8 @@ class BaseTerminal:
         if timeout(2, is_ready):
             raise RuntimeError("Slave didn't report its pid")
         if self.proc.poll() is not None:
-            raise RuntimeError(f"{command.split(' ')[0]!r} closed too" \
-                               "quickly. Do you have it installed?")
+            raise RuntimeError(f"{command[0]!r} closed too quickly. " \
+                               "Do you have it installed?")
 
     def close(self) -> None:
         if self.running():
@@ -213,10 +210,8 @@ class XTermTerminal(BaseTerminal):
 
     def start(self, *, into:tk.Misc=None) -> None:
         self.sep_window:bool = False
-        into_arg:str = ""
-        if into is not None:
-            into_arg:str = f"-into {into.winfo_id()}"
-        command:str = f"xterm {into_arg} {XTERM_ARGS} -e %command%"
+        into_arg:list[str] = ["-into", into.winfo_id()] if into else []
+        command:list[str] = ["xterm", *into_arg, *XTERM_ARGS, "-e"]
         self.run(command, env=os.environ|dict(force_color_prompt="yes"))
 
     def resize(self, *, width:int, height:int) -> None:
@@ -246,16 +241,18 @@ class GnomeTermTerminal(BaseTerminal):
     __slots__ = ()
 
     def start(self, *, into:tk.Misc=None) -> None:
-        self.run("gnome-terminal -- %command%")
+        command:list[str] = ["gnome-terminal", "--"]
         self.sep_window:bool = True
+        self.run(command)
 
 
 class ConhostTerminal(BaseTerminal):
     __slots__ = ()
 
     def start(self, *, into:tk.Misc=None) -> None:
-        self.run("conhost -- %command%")
+        command:list[str] = ["conhost", "--"]
         self.sep_window:bool = True
+        self.run(command)
 
 
 class KonsoleTerminal(BaseTerminal):
@@ -263,7 +260,7 @@ class KonsoleTerminal(BaseTerminal):
 
     def start(self, *, into:tk.Misc=None) -> None:
         raise NotImplementedError("Not implemented yet.")
-        command:str = f"konsole -e %command%"
+        command:list[str] = ["konsole", "-e"]
         self.sep_window:bool = True
         self.run(command)
         # `NoTitlebarTk._reparent_window()` and `echo $WINDOWID`
