@@ -109,8 +109,11 @@ class UndoManager(Rule):
                     self.text.edit_undo()
                 if DEBUG_UNDO_REDO: print("[DEBUG]: undone")
                 self.text.event_generate("<<Undo-Triggered>>")
-            # Set selection back from saved marks
-            if start != end:
+            if start == end:
+                # See insert
+                self.plugin.move_insert("insert")
+            else:
+                # Set selection back from saved marks
                 self.plugin.remove_selection()
                 self.plugin.set_selection("undo-selection-start",
                                           "undo-selection-end")

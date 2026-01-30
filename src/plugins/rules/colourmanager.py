@@ -301,19 +301,16 @@ def isidentifier(token:Token) -> bool:
 
 
 class Tokeniser:
-    __slots__ = "isidentifier", "isnumber", "_under"
+    __slots__ = "regexs", "_under"
 
-    def __init__(self, *, isidentifier:Callable[str,bool],
-                 isnumber:Callable[str,bool]) -> Tokeniser:
+    def __init__(self) -> Tokeniser:
         """
-        `isidentifier` function is used to recognise/test for identifiers
-        `isnumber` function is used to recognise/test for numbers
-        This module provides an `isidentifier` that is more relaxed than
-          Python's `str.isidentifier` (allowing non-ascii-non-alpha
-          characters)
+        The array `self.regex` holds compiled regexs that tokenise the
+          input. Matches of size 0 are discarded. If no regex matches,
+          a single character is read as a single token
+        Depricated: Regex that match an empty string.
         """
-        self.isidentifier:Callable[str,bool] = isidentifier
-        self.isnumber:Callable[str,bool] = isnumber
+        self.regexs:list[re.Pattern] = []
 
     def __bool__(self) -> bool:
         """
@@ -395,27 +392,17 @@ class Tokeniser:
             self.set("line-continuation") # Skip the "\n"
 
     def _pure_read_token(self) -> Token:
-        output:Token = self._under.read(1)
-        if output:
-            # Indentation
-            if output in " \t":
-                while True:
-                    if self._under.peek(1) not in " \t": break
-                    output += self._under.read(1)
-                return output
-            # Identifier
-            elif self.isidentifier(output):
-                while self.isidentifier(output + self._under.peek(1)):
-                    output += self._under.read(1)
-                return output
-            # Numbers
-            elif self.isnumber(output):
-                # Note that leading -/+ signs aren't part of the token
-                while self.isnumber(output + self._under.peek(1)):
-                    output += self._under.read(1)
-                return output
+        token:Token = self._under.peek(1)
+        # All others set
+        for regex in self.regexs:
+            # Try to match regex
+            match:re.Match = regex.match(self._under.total_data,
+                                         self._under.tell())
+            if not match: continue
+            size:int = match.end() - match.start()
+            if size: return self._under.read(size)
         # Default:
-        return output
+        return self._under.read(1)
 
 
 class Parser(Tokeniser):
@@ -449,9 +436,7 @@ class Parser(Tokeniser):
             * add_extra_pass(func:Callable[None]) -> None
 
         Tokens returned from `peek_token` are:
-            * Indentation (spaces/tabs concatenated)
-            * Identifiers (see `isidentifier` arg in `__init__`)
-            * Numbers (see `isnumber` arg in `__init__`)
+            * TODO
             * All other characters are returned as separate tokens
         Note:
             If you peek a newline and don't `self.set(···)` with it
@@ -546,12 +531,12 @@ class Parser(Tokeniser):
         #   figure out the end which is the start for the next token
         return sum(self._start_size_map[idx])
 
-    def prev_start(self, start:Location) -> Location|None:
+    def prev_start(self, start:Location) -> Location:
         """
-        Returns the location where the last token started. Returns `None`
+        Returns the location where the last token started. Returns `-1`
           if `start` is already at the start of the data
         """
-        if start == 0: return None
+        if start <= 0: return -1
         idx:int = bisect.bisect_left(self._start_size_map, (start,))
         if self._start_size_map[idx][0] != start:
             raise IndexError("Invalid token start location")

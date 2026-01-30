@@ -31,7 +31,7 @@ Editor:
 [Sh/RunManager]
 * When running, "$0" is wrong since we only `source` the file
 [Sh/ColourManager]
-* `<(...)` isn't colorized at all
+* In `var=value echo` the token "echo" should be coloured as a known program
 [TerminalTk]
 * TerminalTk very broken on Windows (conhost always return immediately, slave doesn't behave correctly)
 
@@ -83,6 +83,8 @@ Minor things/Low priority/Impossible to fix:
 LSP:
 * Look into language server protocols again (there are more and more official)
 [C/C++]
-    https://github.com/llvm/llvm-project/tree/main/clang-tools-extra/clangd
+    clangd
 [Python]
-    https://github.com/python-lsp/python-lsp-server
+    python3-pylsp + python3-pyflakes
+[Java]
+    elipse java lsp

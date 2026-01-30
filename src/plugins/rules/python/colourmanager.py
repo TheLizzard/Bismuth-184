@@ -14,35 +14,6 @@ except:
     from colourmanager import Regex, Parser as BaseParser
 
 
-NUMBER_REGEX:re.Pattern = re.compile((
-    r"(?:"
-        r"0|" # The number zero or
-        r"(?:"
-            r"[1-9]" # Any non-zero integer
-            r"\d*"   # Followed by any number of integers
-        r")"
-    r")"
-    r"(?:" # Followed by 0 or 1 fractional parts
-        r"\."  # A fractional part starts with a "."
-        r"\d*" # Followed by any number of integers
-    r")?"
-    r"(?:" # Followed by 0 or 1 exponential parts
-        r"[eE]" # A fractional part starts with an "e"
-        r"\d*"  # Followed by any number of integers
-    r")?"
-))
-VALID_NUMBER_ENDERS:set[str] = set("0123456789.eE")
-
-
-def isnumber(data:str) -> bool:
-    if data[-1:] not in VALID_NUMBER_ENDERS: return False
-    try:
-        float(data)
-        return True
-    except:
-        return False
-
-
 class ColourConfig(BaseColourConfig):
     __slots__ = ()
 
@@ -103,11 +74,6 @@ CHECK_IDENTIFIERS:bool = "identifier" in config
 CHECK_DECORATORS:bool = "decorator" in config
 CHECK_NUMBERS:bool = "number" in config
 
-
-if (not CHECK_NUMBERS) and (not CHECK_IDENTIFIERS):
-    # Faster to just call str.isdigit
-    isnumber:Callable[str,bool] = str.isdigit
-
 FSTRING_BARCKET_TOKENTYPE:str = "string"
 if CHECK_FSTRING_BRACKETS:
     FSTRING_BARCKET_TOKENTYPE:str = "f-string-bracket"
@@ -121,6 +87,49 @@ BUILTINS:set[str] = {i
 
 STRING_PREFIXES:set[str] = {"r","u","f","t","b",
                             "fr","rf","tr","rt","br","rb"}
+
+
+NUMBER_REGEX:str = "|".join([
+    r"(?:0x[0-9a-fA-F]*)", # hex
+    r"(?:0o[0-7]*)",       # oct
+    r"(?:0b[01]*)",        # bin
+    (r"(?:" # decimal
+        r"(?:[1-9](?:[0-9]*))?"    # A leading non-zero number
+        r"(?:\.(?:[0-9]+|(?!e)))?" # Maybe followed by a "." with numbers
+                                   #   if no digits after ".", don't
+                                   #   match "e"
+        r"(?:e[0-9]*)?)"           # Maybe followed by a "e" with numbers
+    )
+])
+if (not CHECK_NUMBERS) and (not CHECK_IDENTIFIERS):
+    NUMBER_REGEX:str = "[0-9]+"
+NUMBER_REGEX:re.Pattern = re.compile(NUMBER_REGEX, flags=re.IGNORECASE)
+
+IDENTIFIER_REGEX:str = r"\w+"
+IDENTIFIER_REGEX:re.Pattern = re.compile(IDENTIFIER_REGEX)
+
+INDENTATION_REGEX:str = r"[ \t]+"
+INDENTATION_REGEX:re.Pattern = re.compile(INDENTATION_REGEX)
+
+# This has a major problem where in "f'xxx'yyy", the "'yyy"
+#   is considered a whole token and not just "'" on its own
+_string_prefix_regex:str = r"(?<!f)(?<!fr|rf)"
+_string_single_regex:str = r"(?<!')'[^'\\\n]*(\\.[^'\\\n]*)*'?"
+_string_triple_regex:str = r"(?<!')'''[^'\\]*((\\.|'(?!''))[^'\\]*)*(?:''')?"
+STRINGS_REGEX:str = (
+    _string_prefix_regex +
+    "(" + "|".join([
+        # _string_triple_regex,
+        _string_triple_regex.replace("'", '"'),
+        # _string_single_regex,
+        _string_single_regex.replace("'", '"'),
+    ]) + ")"
+)
+flags:int = re.IGNORECASE | re.DOTALL | re.MULTILINE
+STRINGS_REGEX:re.Pattern = re.compile(STRINGS_REGEX, flags=flags)
+
+COMMENT_REGEX:str = "#[^\\n\"'{]*" # Comment regex must end on string end
+COMMENT_REGEX:re.Pattern = re.compile(COMMENT_REGEX)
 
 
 """ # TODO
@@ -142,7 +151,19 @@ class Parser(BaseParser):
     __slots__ = ()
 
     def __init__(self) -> Parser:
-        super().__init__(isidentifier=str.isidentifier, isnumber=isnumber)
+        super().__init__()
+        self.regexs.append(INDENTATION_REGEX)
+        self.regexs.append(IDENTIFIER_REGEX)
+        self.regexs.append(NUMBER_REGEX)
+        self.regexs.append(COMMENT_REGEX)
+
+    @staticmethod
+    def isidentifier(data:str) -> bool:
+        return bool(IDENTIFIER_REGEX.fullmatch(data))
+
+    @staticmethod
+    def isnumber(data:str) -> bool:
+        return bool(NUMBER_REGEX.fullmatch(data))
 
     def read(self) -> None:
         # If we use nows_peek_token here, `read_wait_for` will break
@@ -224,7 +245,8 @@ class Parser(BaseParser):
             if self.read_wait_for("}") == "}":
                 self.skip()
         # Comment
-        elif token == "#":
+        elif token.startswith("#"):
+            self.set("comment") # Read the "#(.*)?"
             while self.peek_token() != "\n": # Newline not in comment
                 self.set("comment")
         # Strings:
@@ -232,11 +254,18 @@ class Parser(BaseParser):
             start:Location = self.tell()
             self.set("identifier") # Jump over the string prefix
             new_token:Token = self.peek_token()
-            if new_token in "'\"":
+            if not new_token: return None
+            if (new_token[0] in "'\"") and (new_token[0] == new_token[-1]):
                 self.set("string", start) # String prefix
-                self.read_string(token)
-        elif token in "'\"":
-            self.read_string()
+                if len(new_token) == 1:
+                    self.read_string(token)
+                else:
+                    self.set("string")
+        elif token[0] in "'\"":
+            if len(token) == 1:
+                self.read_string()
+            else:
+                self.set("string")
         # Match soft-keyword (MATCH_SOFTKW)
         elif token == "match":
             if self.curr_line_seen(respect_slashes=True).rstrip(" \t"):
@@ -336,7 +365,7 @@ class Parser(BaseParser):
         # Read the first token
         token:Token = self.nows_peek_token()
         if (not self.isidentifier(token)) or (token in CMD_KWS):
-            if not (self.isnumber(token) or (token in "'\"")):
+            if token not in "'\"":
                 return None
         self.read()
         # Forever
@@ -347,7 +376,7 @@ class Parser(BaseParser):
                 self.skip()
                 token:Token = self.nows_peek_token()
                 if (not self.isidentifier(token)) or (token in CMD_KWS):
-                    if not (self.isnumber(token) or (token in "'\"")):
+                    if token not in "'\"":
                         break
                 self.read()
             elif token == "[":

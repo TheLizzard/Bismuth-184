@@ -273,7 +273,11 @@ class FindReplaceManager(Rule):
             self.clear_hits()
             self.find_cache:tuple[str,int] = (find, flags)
             a, b = self._find_all(find, flags, start)
+        # Move cursor to the start of hit
+        self.plugin.move_insert(f"{a} linestart")
+        # Slect full hit
         self.plugin.set_selection(a, b)
+        # Move cursor to the end of hit
         self.plugin.move_insert(b)
 
     def _find_all(self, find:str, flags:int, start:str) -> tuple[str,str]:
