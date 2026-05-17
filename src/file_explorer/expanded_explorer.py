@@ -399,16 +399,14 @@ class ExpandedExplorer(Explorer):
         msg:str = f'Are you sure you want to delete "{item.purename}"?'
         result:bool = askyesno(self.changing, title="Delete file?", message=msg,
                                icon="warning", center=True)
+        self.changing:tk.Frame = None
         if result and (self.bin_folder is not None):
-            # Tell BaseExplorer about the deletion so that we can use
-            #   update(soft=True)
-            item.delete(apply_filesystem=False)
             # Move item to bin
             target:str = self.root.filesystem.join(self.bin_folder,
                                                    item.purename)
             result = self.root.filesystem.move(item.fullpath, target)
+            item.delete(apply_filesystem=False)
             if DEBUG: print("[DEBUG]: Delete result:", result)
-        self.changing:tk.Frame = None
         super().update(soft=True)
 
     # New file/folder

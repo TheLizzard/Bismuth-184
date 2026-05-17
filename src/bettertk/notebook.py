@@ -30,15 +30,12 @@ DEFAULT_NOTCH_BG:str = "#444444"
 NOT_DRAG_DIST:int = 10
 BUTTON1_TK_STATE:int = 256
 TAB_NOTCH_OPTIONS:list[str] = [
-                                "font", "text", "can_drag", "bg", "fg",
-                                "focused_fg", "focused_bg", "min_width",
-                                "padx",
-                              ]
-ALL_TAB_NOTCH_OPTIONS:list[str] = TAB_NOTCH_OPTIONS + \
-                              [
-                                "background", "foreground",
-                                "focused_background", "focused_foreground",
-                              ]
+    "font", "text", "can_drag", "bg", "fg", "focused_fg", "focused_bg",
+    "min_width", "padx",
+]
+ALL_TAB_NOTCH_OPTIONS:list[str] = TAB_NOTCH_OPTIONS + [
+    "background", "foreground", "focused_background", "focused_foreground",
+]
 
 
 class TabNotch(tk.Canvas):
@@ -231,6 +228,7 @@ class TabNotches(BetterFrame):
         self._notches_kwargs:dict[str:object] = kwargs
         self.pages:list[NotebookPage|TabNotch] = []
         self.notebook:Notebook = notebook
+        self._tmp_notch:TabNotch = None
         self.add_notch:TabNotch = None
         super().__init__(notebook, bg=DEFAULT_NOTCH_BG, hscroll=scrolled,
                          HScrollBarClass=BetterScrollBarHorizontal,
@@ -270,6 +268,8 @@ class TabNotches(BetterFrame):
         notches:list[TabNotch] = self.pages.copy()
         if self.add_notch:
             notches.append(self.add_notch)
+        if self._tmp_notch:
+            notches.append(self._tmp_notch)
         # Return config if no kwargs
         if not kwargs:
             if notches:

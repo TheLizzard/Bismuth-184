@@ -220,25 +220,19 @@ class Parser(BaseParser):
                 self._read_dollar()
         elif token == "<": # here-doc
             start:Location = self.tell()
-            self.skip() # Skip first ">"
+            self.skip() # Skip first "<"
             token:Token = self.peek_token()
             # Parse "<<"
             if token == "<":
                 self.skip() # Skip second "<"
                 self._read_here_doc(start)
-            # Parse "< <(...)"
-            elif not token.lstrip(" \t"):
-                self.skip() # Skip indentation
-                if self.peek_token() == "<":
-                    start2:Location = self.tell()
-                    self.skip() # Skip "<"
-                    if self.peek_token() == "(":
-                        self.set("process-substitution", start)  # Set 1st "<"
-                        self.set("process-substitution", start2) # Set 2nd "<"
-                        self.set("process-substitution")         # Set "("
-                        token:Token = self.read_wait_for({")",*CMD_KWS})
-                        if token == ")":
-                            self.set("process-substitution")
+            # Parse "<(...)"
+            elif token == "(":
+                self.set("process-substitution", start)  # Set "<"
+                self.set("process-substitution")         # Set "("
+                token:Token = self.read_wait_for({")",*CMD_KWS})
+                if token == ")":
+                    self.set("process-substitution")
         elif token == "-": # Flag
             if self.curr_line_seen()[-1:] in " \t-":
                 self.read_flag()

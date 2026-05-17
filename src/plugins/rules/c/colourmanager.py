@@ -33,7 +33,8 @@ def get_builtins() -> Iterable[str]:
              "vfprintf", "vprintf", "vsprintf", "fopen", "getc",
              "EOF", "malloc", "calloc", "realloc", "alloca", "free", "BUFSIZ",
              "STDERR_FILENO", "STDOUT_FILENO", "STDIN_FILENO", "stderr",
-             "stdout", "stdin", "time", "srand", "memcpy", "tolower", "strcmp",
+             "stdout", "stdin", "time", "srand", "memcpy", "memset", "tolower",
+             "strcmp",
            }
 
 def get_keywords() -> Iterable[str]:

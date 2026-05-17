@@ -34,7 +34,7 @@ notebook.CONTROL_NUMBERS_RESTRICT:bool = False
 notebook.HIDE_SCROLLBAR:bool = False
 
 
-def FakeBetterText(master:tk.Misc=None, **kwargs:dict):
+def FakeBetterText(master:tk.Misc=None, **kwargs:dict) -> tk.Text:
     kwargs.pop("cursor_room")
     kwargs.pop("xscroll_speed")
     kwargs.pop("yscroll_speed")

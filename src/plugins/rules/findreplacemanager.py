@@ -218,9 +218,10 @@ class FindReplaceManager(Rule):
         start, end = self.plugin.get_selection()
         if start != end:
             text:str = self.text.get(start, end).strip("\n")
-            if text.find("\n") == -1:
-                self.find.delete("1.0", "end")
-                self.find.insert("1.0", text)
+            if self.find.get("1.0", "end-1c") != text:
+                if text.find("\n") == -1:
+                    self.find.delete("1.0", "end")
+                    self.find.insert("1.0", text)
         # Select everything in the find box
         self.find.plugin.set_selection("1.0", "end -1c")
         self.find.focus_set()
