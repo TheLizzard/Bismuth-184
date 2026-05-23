@@ -15,7 +15,7 @@ NO_SAVE:bool = False # For debug only
 
 def realpath(path:str) -> str:
     if not path: return ""
-    return os.path.realpath(path)
+    return os.path.realpath(os.path.expanduser(path))
 
 
 class SaveLoadManager(Rule):

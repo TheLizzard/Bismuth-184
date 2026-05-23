@@ -585,9 +585,10 @@ class BetterText(tk.Text):
         # Reset viewport stuff
         super().config(padx=0)
         super().tag_config("bettertext_text", lmargin1=0)
-        # Remove invisible character
-        start, end = self._get_invisible_range()
-        if start: super().delete(start, end)
+        if FIX_CURSOR_LPADX:
+            # Remove invisible character
+            start, end = self._get_invisible_range()
+            if start: super().delete(start, end)
 
     def assume_monospaced(self) -> None:
         self._xviewfix.assume_monospaced()
@@ -803,14 +804,13 @@ class BetterText(tk.Text):
         raise NotImplementedError(f"Implement {args!r}")
 
     # tk.text.see reimplementation
-    def see(self, idx:str, *, no_xscroll:bool=False) -> str:
+    def see(self, idx:str, *, no_xscroll:bool=False) -> str|None:
         """
         This acts like `tkinter.Text.see` with a hidden `no_xscroll`
           parameter only used in `DLineInfoWrapper.get_width`
         """
         if no_xscroll or self._disabled:
-            super().see(idx)
-            return BREAK
+            return None
 
         # Get info from text widget
         idx:str = super().index(idx)

@@ -312,6 +312,7 @@ class App:
 
     def explorer_add_folder(self) -> None:
         path:str = askdirectory(master=self.root)
+        path:str = os.path.realpath(os.path.expanduser(path))
         if not path:
             return None
         if path in self._get_explorer_added():
