@@ -272,7 +272,7 @@ class Parser(BaseParser):
                 self.set("identifier")
             else:
                 start:Location = self.tell()
-                self.skip() # `match` but we aren't sure if keyword
+                self.skip() # "match" but we aren't sure if keyword
                 new_token:Token = self.nows_peek_token()
                 if new_token in NOT_AFTER_SOFT_KW:
                     self.set("identifier", start)
@@ -286,7 +286,7 @@ class Parser(BaseParser):
                 self.set("identifier")
             else:
                 start:Location = self.tell()
-                self.skip() # `case` but we aren't sure if keyword
+                self.skip() # "case" but we aren't sure if keyword
                 new_token:Token = self.nows_peek_token()
                 if new_token in NOT_AFTER_SOFT_KW:
                     self.set("identifier", start)
@@ -297,6 +297,28 @@ class Parser(BaseParser):
                     self.set("keyword") # "_"
                 else:
                     self.set("keyword", start)
+        elif token == "lazy":
+            start:Location = self.tell()
+            self.skip() # "lazy" but we aren't sure if keyword
+            # Look at if there are any tokens before last newline/start
+            loc:Location = start
+            while loc != -1:
+                loc:Location = self.prev_start(loc)
+                prev_token:Token = self.token_at(loc)
+                if prev_token.rstrip(SPACES):
+                    if prev_token == "\n":
+                        break
+                    return None
+            # Look at next token
+            new_token:Token = self.nows_peek_token()
+            lazy_from:bool = new_token == "from"
+            if lazy_from:
+                self.set("keyword") # "from"
+                new_token:Token = self.nows_peek_token()
+                if new_token == "__future__":
+                    return None
+            if lazy_from or (new_token == "import"):
+                self.set("keyword", start)
         # Identifiers
         elif CHECK_IDENTIFIERS and self.isidentifier(token):
             self.set("identifier")
