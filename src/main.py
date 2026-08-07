@@ -455,5 +455,5 @@ if __name__ == "__main__":
     manager.register(init)
     manager.register(run)
     manager.exec()
-    with manager.error_chatcher():
+    with manager.error_catcher():
         close_all_ipcs()

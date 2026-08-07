@@ -19,21 +19,17 @@ import bettertk
 if IS_UNIX:
     OPEN_IN_EXPLORER:list[str] = ["nautilus", "{path}"]
     OPEN_DEFAULT:list[str] = ["xdg-open", "{path}"]
-    SAFE_GIT:list[str] = ["git", "config", "--global", "--add",
-                          "safe.directory", "{path}"]
-    OPEN_GIT:list[str] = ["git", "gui"]
+    OPEN_GIT:list[str] = ["git", "-c", "safe.directory={path}", "gui"]
     DETACH_PROC_KWARGS:dict = dict(start_new_session=True)
 elif IS_WINDOWS:
     OPEN_IN_EXPLORER:list[str] = ["explorer", "{path}"]
     OPEN_DEFAULT:list[str] = None
-    SAFE_GIT:list[str] = None
     OPEN_GIT:list[str] = None
     from subprocess import DETACHED_PROCESS
     DETACH_PROC_KWARGS:dict = dict(creationflags=DETACHED_PROCESS)
 else:
     OPEN_IN_EXPLORER:list[str] = None
     OPEN_DEFAULT:list[str] = None
-    SAFE_GIT:list[str] = None
     OPEN_GIT:list[str] = None
     DETACH_PROC_KWARGS:dict = dict()
     sys.stderr.write("Unknown OS, can't open files/folders in real explorer.\n")
@@ -462,10 +458,8 @@ class ExpandedExplorer(Explorer):
             fs:FileSystem = self.changing.item.root.filesystem
             git_path:str = fs.join(self.changing.item.fullpath, ".git")
             if fs.exists(git_path) and fs.isfolder(git_path):
-                # This creates duplicates which can make .gitconfig very big
-                #   and prob slow down git quite a bit
-                # self._start_proc(SAFE_GIT, path=self.selected.item.fullpath)
-                self._start_proc(OPEN_GIT, _cwd=fs.dirname(git_path))
+                path:str = self.changing.item.fullpath
+                self._start_proc(OPEN_GIT, _cwd=path, path=path)
         self.changing:tk.Frame = None
 
     # Copy path

@@ -70,7 +70,7 @@ def get_full_traceback(err:Exception) -> Traceback:
         raw_traceback = raw_traceback.tb_next
 
     raw_traceback = sys._getframe().f_back.f_back
-    main_traceback = err_traceback.reverse(None)
+    main_traceback = err_traceback.reverse(None) if err_traceback else None
     while raw_traceback:
         main_traceback = FakeTraceback(raw_traceback, raw_traceback.f_lasti,
                                        raw_traceback.f_lineno, main_traceback)
@@ -131,6 +131,22 @@ class RunManager:
         self.funcs:list[tuple[Callable,bool]] = []
         self.started_exec:bool = False
 
+    def report_full_exception(self, error:BaseException,
+                              critical:bool=False) -> None:
+        with IncreasedRecursionLimit(200):
+            self.report_exc(type(error), error, get_full_traceback(error),
+                            critical=critical)
+
+    def safe_call(self, func:Callable, critical:bool, *args:tuple,
+                  **kwargs:dict) -> tuple[object,bool]:
+        try:
+            return func(*args, **kwargs), True
+        except SystemExit as error:
+            raise error
+        except BaseException as error:
+            this.report_full_exception(error, critical=critical)
+            return error, False
+
     # This is a singleton because of how `tk.Tk.report_callback_exception` works
     def __new__(Class:type, *args:tuple, **kwargs:dict) -> RunManager:
         singleton:Class|None = getattr(Class, "singleton", None)
@@ -142,8 +158,8 @@ class RunManager:
         return Class.singleton
     _init, __init__ = __init__, lambda self: None
 
-    def error_chatcher(self, critical:bool=True, *,
-                       ign_err:bool=True) -> ErrorCatcher:
+    def error_catcher(self, critical:bool=True, *,
+                      ign_err:bool=True) -> ErrorCatcher:
         def inner(exc:type, val:Exception, tb:object) -> None:
             self.report_exc(exc, val, tb, critical=critical,
                             msg="Exception caught by ErrorCatcher")
@@ -165,17 +181,11 @@ class RunManager:
         args:object = ()
         for func, exit_on_error in self.funcs:
             try:
-                args:object = func(*_format_args(args))
-            except BaseException as error:
-                if isinstance(error, SystemExit):
-                    return None
-                with IncreasedRecursionLimit(200):
-                    self.report_exc(type(error), error,
-                                    get_full_traceback(error),
-                                    critical=exit_on_error)
-                if not exit_on_error:
-                    continue
+                args, success = self.safe_call(func, exit_on_error,
+                                               *_format_args(args))
+            except SystemExit:
                 return None
+            if (not success) and exit_on_error: break
 
     def report_exc(self, *exc:tuple, critical:bool, msg:str="") -> None:
         assert len(exc) == 3, "exc must be a tuple of (type, err, tb)"
@@ -314,6 +324,7 @@ if __name__ == "__main__":
         root = tk.Tk()
         root.after(2000, lambda: 1/0) # Raise error
         root.bind("<Delete>", lambda e: 1/0)
+        manager.report_full_exception(RuntimeError())
         return 100
 
     def init(arg:int) -> tuple[str,bool]:
