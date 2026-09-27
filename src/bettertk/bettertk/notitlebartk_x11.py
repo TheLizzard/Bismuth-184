@@ -86,13 +86,13 @@ class XCLIENT_MESSAGE_EVENT(ctypes.Structure):
 def errcheck_not_zero(value, func, args):
     if value in (0, None):
         args_str = ", ".join(map(str, args))
-        raise OSError(f"{func.__qualname__}({args_str}) => {value}")
+        raise OSError(f"{func.__name__}({args_str}) => {value}")
     return args
 
 def errcheck_zero(value, func, args):
     if value != 0:
         args_str = ", ".join(map(str, args))
-        raise OSError(f"{func.__qualname__}({args_str}) => {value}")
+        raise OSError(f"{func.__name__}({args_str}) => {value}")
     return args
 
 def string_to_c(data:str) -> CHAR_PTR:
@@ -302,27 +302,26 @@ class NoTitlebarTk:
         self._maximised:bool = False
         self._cleanedup:bool = False
 
-        dir_self:set[str] = set(dir(self))
-        for attribute_name in dir(self.root):
-            if (attribute_name[-2:] == "__") or (attribute_name in dir_self):
-                continue
-            attribute = getattr(self.root, attribute_name)
-            setattr(self, attribute_name, attribute)
-
         self.display:DISPLAY = self._get_display(master)
-        self.wait_for_func(True, self.root.winfo_ismapped)
+        self.root.withdraw()
+        self.root.update_idletasks()
         self.window:WINDOW = self._get_parent(self.root.winfo_id())
         self._overrideredirect()
+        self.root.deiconify()
         self.wait_for_func(True, self.root.winfo_ismapped)
 
-    @property
-    def report_callback_exception(self) -> object:
-        return self.root.report_callback_exception
+    def __getattr__(self, name:str) -> object:
+        if name == "root":
+            raise AttributeError(name)
+        return getattr(self.root, name)
 
-    @report_callback_exception.setter
-    def report_callback_exception(self, new:object) -> None:
-        raise RuntimeError("Only set report_callback_exception using " \
-                           "tk.Tk.report_callback_exception = ···")
+    def __setattr__(self, name:str, value:object) -> None:
+        if name == "root":
+            super().__setattr__(name, value)
+        elif (not hasattr(type(self), name)) and hasattr(self.root, name):
+            setattr(self.root, name, value)
+        else:
+            super().__setattr__(name, value)
 
     def make_non_clickable(self, topmost:bool=True, notaskbar:bool=True):
         # https://stackoverflow.com/a/50806584/11106801

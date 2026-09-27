@@ -327,10 +327,10 @@ class BetterTk(tk.Frame):
                  withdraw:bool=False, **kwargs):
         self.settings = settings
         self.settings.started_using()
-        self.allow_ctrl_w:bool = True
         self._overrideredirect:bool = False
 
         self.root = NoTitlebarTk(master, **kwargs)
+        self.allow_ctrl_w:bool = True
         if withdraw:
             self.root.withdraw()
         self.protocols = {"WM_DELETE_WINDOW": self.destroy}
@@ -481,13 +481,17 @@ class BetterTk(tk.Frame):
             # If the widget was already destroyed by something
             # Don't know when/why this happens?
             return None
-        while (not isinstance(widget, BetterTk)) and (widget.master is not None):
-            widget:tk.Misc = widget.master
+        toplevel:tk.Tk|tk.Toplevel = widget.winfo_toplevel()
+        if getattr(toplevel, "allow_ctrl_w", False):
+            toplevel.tk.call(toplevel.protocol("WM_DELETE_WINDOW"))
 
-        if widget == self.root:
-            widget:tk.Misc = self
-        if getattr(widget, "allow_ctrl_w", False):
-            widget.generate_destroy()
+    @property
+    def allow_ctrl_w(self) -> bool:
+        return self.root.root.allow_ctrl_w
+
+    @allow_ctrl_w.setter
+    def allow_ctrl_w(self, value:bool) -> None:
+        self.root.root.allow_ctrl_w:bool = value
 
     def generate_destroy(self) -> None:
         self.protocol_generate("WM_DELETE_WINDOW")
@@ -672,7 +676,7 @@ class BetterTk(tk.Frame):
 
     def focus_force(self) -> None:
         self.root.deiconify()
-        self.root.focus_force()
+        super().focus_force()
 
     def destroy(self) -> None:
         self.settings.stopped_using()

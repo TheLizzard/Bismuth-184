@@ -1,14 +1,15 @@
 from __future__ import annotations
+from traceback import format_exc
 from threading import Thread
 from typing import Callable
 import tkinter as tk
 
 try:
-    from .terminaltk.sprites.creator import TkSpriteCache
+    from .terminaltk.sprites.creator import TkSpriteCache, GifDisplay
     from .bettertk import BetterTk
     from .messagebox import tell
 except ImportError:
-    from terminaltk.sprites.creator import TkSpriteCache
+    from terminaltk.sprites.creator import TkSpriteCache, GifDisplay
     from bettertk import BetterTk
     from messagebox import tell
 
@@ -16,6 +17,30 @@ except ImportError:
 ESuccess:type = bool|None # Optional[bool]
 Task:type = Callable[[], ESuccess|tuple[ESuccess,str]]
 DisplayText:type = Callable[str,None]
+OnDone:type = Callable[[int,ESuccess,str],None]
+
+ESUCCESS_RANK:Callable[[ESuccess],int] = (False, None, True).index
+
+
+def worst(*esuccesses:ESuccess) -> ESuccess:
+    return min(esuccesses, key=ESUCCESS_RANK)
+
+
+class Result:
+    __slots__ = "done", "esuccess", "text"
+
+    def __init__(self) -> None:
+        self.done:bool = False
+        self.esuccess:ESuccess = False
+        self.text:str|None = None
+
+    def __repr__(self) -> str:
+        esuccess, text = self.esuccess, self.text
+        if self.done:
+            return f"Result(done=True, self.{esuccess=}, self.{text=!r})"
+        else:
+            return f"Result(done=False)"
+
 
 class TaskList(tk.Frame):
     """
@@ -31,18 +56,24 @@ class TaskList(tk.Frame):
         wait_sprite, tick_sprite, warn_sprite, cross_sprite, sprite_size
         continue_on_fail grab_set
 
+    A task may be given a `cleanup`, which is a `Task` as well. Every
+    cleanup of a task that was started is called once the list is done,
+    in reverse, whether the list succeeded or failed. One that doesn't
+    return true marks its own task's row.
+
     Methods:
-        add(name:str, func:Task)
+        add(name:str, func:Task, *, threaded:bool=True, cleanup:Task=None)
         start()
 
     Properties:
-        idx:int # The index of the next task to be run
+        idx:int # 1-indexed index of the task being run or cleaned up.
+                # Only valid from inside a task's callback.
     """
 
     __slots__ = "_sprites", "_fg", "_font", \
                 "_spinner", "_correct", "_wrong", "_sprite_size", \
                 "_continue_on_fail", "_display_text", \
-                "_idx", "_widgets", "_tasks", \
+                "_idx", "_widgets", "_tasks", "_results", \
                 "_done_setup", "_waiting", "esuccess"
 
     def __init__(self, master:tk.Misc=None, **kwargs:dict) -> None:
@@ -63,7 +94,8 @@ class TaskList(tk.Frame):
         self._waiting:bool = False
         self.esuccess:ESuccess = True
         self._widgets:list[tuple[tk.Misc,tk.Misc]] = []
-        self._tasks:list[tuple[str,Task,bool]] = []
+        self._tasks:list[tuple[str,Task,bool,Task|None]] = []
+        self._results:list[tuple[ESuccess,str]] = []
         # Create self and configure
         super().__init__(master, bg="black")
         self.config(**{"grab_set":True, **kwargs})
@@ -144,7 +176,8 @@ class TaskList(tk.Frame):
     def _redraw(self) -> None:
         pass # TODO
 
-    def add(self, task_name:str, func:Task, *, threaded:bool=True) -> None:
+    def add(self, task_name:str, func:Task, *, threaded:bool=True,
+            cleanup:Task=None) -> None:
         assert self._state == 0, "RuntimeError"
         idx:int = len(self._widgets)
         bg:str = self.cget("bg")
@@ -169,7 +202,59 @@ class TaskList(tk.Frame):
                                     sticky="ew")
         # Update state
         self._widgets.append((label, spinner))
-        self._tasks.append((task_name, func, threaded))
+        self._tasks.append((task_name, func, threaded, cleanup))
+        self._results.append((True, ""))
+
+    def _mark(self, idx:int, esuccess:ESuccess, text:str) -> None:
+        row_esuccess, row_text = self._results[idx]
+        row_esuccess:ESuccess = worst(row_esuccess, esuccess)
+        if text:
+            row_text += "\n\n"*bool(row_text) + text.strip("\n")
+        self._results[idx] = (row_esuccess, row_text)
+        self.esuccess:ESuccess = worst(self.esuccess, esuccess)
+        if row_esuccess:
+            sprite:str = self._correct
+        elif row_esuccess is None:
+            sprite:str = self._zero
+        else:
+            sprite:str = self._wrong
+        _, spinner = self._widgets[idx]
+        spinner.config(image=self._sprites[sprite])
+        if row_text:
+            spinner.config(command=lambda: self._display_text(row_text))
+
+    def _call(self, func:Task, result:Result) -> None:
+        try:
+            returned:tuple[ESuccess,str]|ESuccess = func()
+            if isinstance(returned, ESuccess):
+                returned:tuple[ESuccess,str] = returned, ""
+            result.esuccess, result.text = returned
+        except Exception:
+            result.text = format_exc()
+        except BaseException:
+            result.text = format_exc()
+            raise
+        finally:
+            result.done = True
+
+    def _run(self, idx:int, func:Task, threaded:bool, on_done:OnDone) -> None:
+        _, spinner = self._widgets[idx]
+        gif:GifDisplay = self._sprites.display_gif(self._spinner, 300,
+                                        lambda img: spinner.config(image=img))
+        gif.start()
+        result:Result = Result()
+        thread:Thread = Thread(target=self._call, args=(func,result),
+                               daemon=True)
+        getattr(thread, "start" if threaded else "run")()
+        self._wait(idx, gif, result, on_done)
+
+    def _wait(self, idx:int, gif:GifDisplay, result:Result,
+              on_done:OnDone) -> None:
+        if not result.done:
+            self.after(100, self._wait, idx, gif, result, on_done)
+            return None
+        gif.stop()
+        on_done(idx, result.esuccess, result.text)
 
     def start(self) -> None:
         assert self._state == 0, "RuntimeError"
@@ -178,56 +263,36 @@ class TaskList(tk.Frame):
 
     def _next(self) -> None:
         assert self._state == 1, "RuntimeError"
-        esuccess, text = True, None
-
-        def call() -> None:
-            nonlocal esuccess, text, _state
-            result:object = func()
-            if isinstance(result, ESuccess):
-                result:tuple[ESuccess,str] = (result, "")
-            esuccess, text = result
-            _state = 1 # Done
-
-        def wait_done() -> None:
-            nonlocal esuccess, text, name, _state
-            if _state == 0:
-                self.after(100, wait_done)
-                return None
-            # Update spinner
-            gif.stop()
-            if esuccess:
-                sprite:str = self._correct
-            elif esuccess is None:
-                sprite:str = self._zero
-            else:
-                sprite:str = self._wrong
-            spinner.config(image=self._sprites[sprite])
-            if text:
-                spinner.config(command=lambda: self._display_text(text))
-            # Update self.esuccess
-            if self.esuccess:
-                self.esuccess:ESuccess = esuccess
-            # Check if we should continue or not
-            _continue:bool = ((esuccess in (True,None)) or \
-                              self._continue_on_fail) and \
-                             (self._idx < len(self._tasks))
-            if _continue:
-                self._next()
-            else:
-                if self._waiting: self.quit()
-                self._state:int = 2
-                self.on_finished()
-
         idx, self._idx = self._idx, self._idx+1
-        _state:int = 0 # Waiting
-        name, func, threaded = self._tasks[idx]
-        label, spinner = self._widgets[idx]
-        gif = self._sprites.display_gif(self._spinner, 300,
-                                        lambda img: spinner.config(image=img))
-        gif.start()
-        thread:Thread = Thread(target=call, daemon=True)
-        (thread.start if threaded else thread.run)()
-        wait_done()
+        _, func, threaded, _ = self._tasks[idx]
+        self._run(idx, func, threaded, self._task_done)
+
+    def _task_done(self, idx:int, esuccess:ESuccess, text:str) -> None:
+        self._mark(idx, esuccess, text)
+        # Check if we should continue or not
+        _continue:bool = ((esuccess in (True,None)) or \
+                          self._continue_on_fail) and \
+                         (self._idx < len(self._tasks))
+        if _continue:
+            self._next()
+        else:
+            self._cleanup(self._idx)
+
+    def _cleanup(self, end:int) -> None:
+        has_cleanup:Callable[[int],object] = lambda i: self._tasks[i][3]
+        idx:int|None = next(filter(has_cleanup, reversed(range(end))), None)
+        if idx is None:
+            if self._waiting: self.quit()
+            self._state:int = 2
+            self.on_finished()
+            return None
+        self._idx:int = idx + 1
+        *_, threaded, cleanup = self._tasks[idx]
+        self._run(idx, cleanup, threaded, self._cleanup_done)
+
+    def _cleanup_done(self, idx:int, esuccess:ESuccess, text:str) -> None:
+        self._mark(idx, esuccess, text)
+        super().after(100, self._cleanup, idx)
 
     def destroy(self) -> None:
         super().destroy()
@@ -276,9 +341,10 @@ class TaskListWindow(BetterTk):
         if self.autoclose and self.tasklist.esuccess:
             super().destroy()
 
-    def add(self, task_name:str, func:Task, *, threaded:bool=True) -> None:
+    def add(self, task_name:str, func:Task, *, threaded:bool=True,
+            cleanup:Task=None) -> None:
         assert self.tasklist._state == 0, "RuntimeError"
-        self.tasklist.add(task_name, func, threaded=threaded)
+        self.tasklist.add(task_name, func, threaded=threaded, cleanup=cleanup)
 
     def start(self) -> None:
         assert self.tasklist._state == 0, "RuntimeError"
@@ -295,22 +361,15 @@ class TaskListWindow(BetterTk):
 if __name__ == "__main__":
     from time import sleep
 
-    def task_sleep(sleep_time:float, tkinter:bool) -> Task:
+    def task_sleep(sleep_time:float, cleanup:bool=False) -> Task:
         def inner() -> ESuccess|tuple[ESuccess,str]:
-            print(f"Starting {tl.idx-1}")
-            if tkinter:
-                tl.after(int(sleep_time*1000), tl.quit)
-                tl.mainloop()
-            else:
-                sleep(sleep_time)
-            print(f"Ending {tl.idx-1}")
-            return True if sleep_time > 1 else None, str(sleep_time)
+            print(f"Starting {tl.idx-1} {cleanup=}")
+            sleep(sleep_time)
+            return [False, None, True][sleep_time], str(sleep_time)
         return inner
 
-    master:tk.Tk = tk.Tk()
-    tk.Button(master, text="Button", command=lambda:print("Hi\r")).pack()
-    tl:TaskList = TaskListWindow(master, autoclose=True)
-    tl.add("Sleep 2", task_sleep(2, True), threaded=False)
-    tl.add("Sleep 2", task_sleep(2, False))
-    tl.add("Sleep 1", task_sleep(1, False))
+    tl:TaskList = TaskListWindow(autoclose=True)
+    tl.add("Sleep 2", task_sleep(2), cleanup=task_sleep(1, True))
+    tl.add("Sleep 2", task_sleep(2), cleanup=task_sleep(2, True))
+    tl.add("Sleep 1", task_sleep(0), cleanup=task_sleep(1, True))
     print(tl.wait())

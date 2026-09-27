@@ -109,26 +109,21 @@ class NoTitlebarTk:
         else:
             raise ValueError("Invalid `master` argument. It must be " \
                              "`None` or a tkinter widget")
-
         self._fullscreen:bool = False
-
-        dir_self:set[str] = set(dir(self))
-        for attribute_name in dir(self.root):
-            if (attribute_name[-2:] == "__") or (attribute_name in dir_self):
-                continue
-            attribute = getattr(self.root, attribute_name)
-            setattr(self, attribute_name, attribute)
-
         self._overrideredirect()
 
-    @property
-    def report_callback_exception(self) -> object:
-        return self.root.report_callback_exception
+    def __getattr__(self, name:str) -> object:
+        if name == "root":
+            raise AttributeError(name)
+        return getattr(self.root, name)
 
-    @report_callback_exception.setter
-    def report_callback_exception(self, new:object) -> None:
-        raise RuntimeError("Only set report_callback_exception using " \
-                           "tk.Tk.report_callback_exception = ···")
+    def __setattr__(self, name:str, value:object) -> None:
+        if name == "root":
+            super().__setattr__(name, value)
+        elif (not hasattr(type(self), name)) and hasattr(self.root, name):
+            setattr(self.root, name, value)
+        else:
+            super().__setattr__(name, value)
 
     def _overrideredirect(self) -> None:
         self.hwnd:int = get_handle(self.root)
@@ -282,7 +277,8 @@ if __name__ == "__main__a":
     button = tk.Button(child, text="Minimise", command=child.iconify)
     button.pack(fill="x")
 
-    button = tk.Button(child, text="Fullscreen", command=child.toggle_fullscreen)
+    button = tk.Button(child, text="Fullscreen",
+                       command=child.toggle_fullscreen)
     button.pack(fill="x")
 
     root.mainloop()
