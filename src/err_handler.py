@@ -144,7 +144,7 @@ class RunManager:
         except SystemExit as error:
             raise error
         except BaseException as error:
-            this.report_full_exception(error, critical=critical)
+            self.report_full_exception(error, critical=critical)
             return error, False
 
     # This is a singleton because of how `tk.Tk.report_callback_exception` works
@@ -243,6 +243,7 @@ def _display0(string:str) -> None:
 
 def _display1(string:str) -> None:
     root:tk.Tk = tk.Tk(className="Error")
+    root.tk.call("rename", "send", "")
     frame, text = _setup_window(root, string)
     text.pack(fill="both", expand=True)
     root.mainloop()

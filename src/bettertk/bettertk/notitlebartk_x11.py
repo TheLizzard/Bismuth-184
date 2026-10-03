@@ -290,6 +290,7 @@ class NoTitlebarTk:
         # Figure out the master.
         if master is None:
             self.root = tk.Tk(**kwargs)
+            self.root.tk.call("rename", "send", "")
         elif isinstance(master, (tk.Misc, NoTitlebarTk)):
             master.update_idletasks() # This should be equivalent to the bellow
             # self.wait_for_func(True, master.winfo_ismapped, tcl=master)
